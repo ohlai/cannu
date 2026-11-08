@@ -580,11 +580,11 @@ function notifyChanges(features) {
       const n = new Notification(`${f.title} ${what}`, { body: (f.st?.lastReply || "").replace(/[#*`>]/g, "").trim().slice(0, 160), tag: f.slug });
       n.onclick = () => { window.focus(); n.close(); };
     }
-    if (document.hidden) { unseen++; document.title = `(${unseen}) Feature agents`; }
+    if (document.hidden) { unseen++; document.title = `(${unseen}) Cannu`; }
   }
   seenOnce = true;
 }
-document.addEventListener("visibilitychange", () => { if (!document.hidden) { unseen = 0; document.title = "Feature agents"; } });
+document.addEventListener("visibilitychange", () => { if (!document.hidden) { unseen = 0; document.title = "Cannu"; } });
 
 function showMode() {
   const btns = [...document.querySelectorAll("#notify button")];
