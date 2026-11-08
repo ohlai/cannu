@@ -53,6 +53,12 @@
   .hint { color: var(--mute); font-size:12px; }
   .msg { margin-top:8px; font-size:13px; white-space:pre-wrap; }
   .msg.bad { color: var(--bad); } .msg.good { color: var(--idle); }
+  /* Errors: a box about 3 lines tall. Scroll it, or drag its corner to see more
+     (dragging sets an inline height, which lifts the cap). */
+  .err { position:relative; margin-top:8px; border:1px solid var(--bad); border-radius:7px; background:var(--bg); }
+  .err pre { margin:0; padding:8px 70px 8px 10px; font-size:12px; line-height:1.45; color:var(--bad); white-space:pre-wrap; word-break:break-word; max-height:calc(3 * 1.45em + 16px); overflow:auto; resize:vertical; }
+  .err pre[style*="height"] { max-height:none; }
+  .err button { position:absolute; top:6px; right:18px; font-size:12px; padding:3px 8px; }
   a { color: inherit; }
   details summary { cursor:pointer; color:var(--mute); font-size:13px; }
   .empty { color: var(--mute); text-align:center; padding: 30px; }
@@ -291,6 +297,13 @@ let filter = store.get("filter", "all");
 if (filter !== "all" && !KINDS.includes(filter)) filter = "all";
 let all = [];
 
+// One line of feedback under a card. Errors get a short scrolling box with a Copy button.
+function msgBlock(s) {
+  if (!s.msg) return "";
+  if (s.cls !== "bad") return `<div class="msg ${s.cls}">${esc(s.msg)}</div>`;
+  return `<div class="err"><pre>${esc(s.msg)}</pre><button data-act="copy" title="Copy the error">Copy</button></div>`;
+}
+
 // [status, detail]. The detail (needs you, background…) shows after it.
 function kind(f) {
   if (!f.worktree) return f.status === "building" ? ["waiting", ""] : [f.status, ""];
@@ -382,7 +395,7 @@ function card(f) {
     </div>
     ${c ? "" : body}
     ${s.fb && !c ? chatBox(f, s, cls) : ""}
-    ${s.msg ? `<div class="msg ${s.cls}">${esc(s.msg)}</div>` : ""}
+    ${msgBlock(s)}
     ${actions(`<span class="split"><button data-act="${f.appUp ? "app" : "appstart"}" title="${f.appUp ? "Open this feature's app" : "Start this feature's app and open it"}">Preview ↗</button><button data-act="appstop" title="Stop this feature's app" ${f.appUp ? "" : "disabled"}>✕</button></span>
       <button data-act="open">Open session</button>
       <button data-act="fb">${s.fb ? "Hide chat" : "Chat"}${st.queue?.length ? ` (${st.queue.length} waiting)` : ""}</button>
@@ -430,7 +443,7 @@ function simpleCard(f) {
       ${MENTION_HINT}
       <div class="row"><button data-act="reopen-plan" title="Records it on main without a branch or agent. Start it later from its card.">Save as planned</button><button class="primary" data-act="reopen-go">Start agent</button></div>
     </div>` : ""}
-    ${s.msg ? `<div class="msg ${s.cls}">${esc(s.msg)}</div>` : ""}
+    ${msgBlock(s)}
   </div>`;
 }
 
@@ -607,6 +620,7 @@ async function onClick(e) {
   const slug = b.closest("[data-slug]").dataset.slug; const s = u(slug); const act = b.dataset.act;
   const say = (msg, cls = "") => { s.msg = msg; s.cls = cls; render(all); refresh(); };
   const base = `/api/features/${slug}`;
+  if (act === "copy") { try { await navigator.clipboard.writeText(s.msg); b.textContent = "Copied"; } catch { b.textContent = "Couldn't copy"; } setTimeout(() => { b.textContent = "Copy"; }, 1500); return; }
   if (act === "expand") { s.full = !s.full; return render(all); }
   if (act === "collapse") { collapsed.has(slug) ? collapsed.delete(slug) : collapsed.add(slug); store.set("collapsed", [...collapsed]); turned = slug; render(all); turned = null; return; }
   // Chat opens a folded card back up.
@@ -669,7 +683,7 @@ async function onClick(e) {
     const r = await api(`${base}/drop`, {}); return say(r.ok ? "" : r.msg, r.ok ? "" : "bad");
   }
   if (act === "merge") {
-    if (!(await ask("Check and merge?", "Runs pnpm check on the branch and merges it into main if it passes. Nothing is pushed.", "Check and merge"))) return;
+    if (!(await ask(`Check and merge “${all.find((x) => x.slug === slug).title}”?`,"Runs pnpm check on the branch and merges it into main if it passes. Nothing is pushed.", "Check and merge"))) return;
     say("Checking (starts the branch's server and runs pnpm check)…");
     const r = await api(`${base}/merge`, {});
     if (r.ok) return say(r.msg, "good");
