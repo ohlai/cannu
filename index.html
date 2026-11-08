@@ -1026,9 +1026,9 @@ async function onClick(e) {
     const r = await api(`${base}/drop`, {}); return say(r.ok ? "" : r.msg, r.ok ? "" : "bad");
   }
   if (act === "merge") {
-    // Back to the board straight away: the card shows Checking, then how it went.
-    if (popSlug === slug) closeModal($("#popDlg"));
     if (!(await ask(`Check and merge “${all.find((x) => x.slug === slug).title}”?`,"Runs pnpm check on the branch and merges it into main if it passes. Nothing is pushed.", "Check and merge"))) return;
+    // Yes: back to the board, where the card shows Checking, then how it went.
+    if (popSlug === slug) closeModal($("#popDlg"));
     say("Checking (starts the branch's server and runs pnpm check)…");
     const r = await api(`${base}/merge`, {});
     if (r.ok) return say(r.msg, "good");
