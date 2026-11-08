@@ -196,6 +196,7 @@
   .col.newcol .colhead { color:var(--mute); font-weight:500; }
   .col.newcol.drop { outline:0; border-color:var(--mute); }
   .col .namecol { margin-bottom:6px; }
+  .col .namego { width:100%; margin-bottom:6px; }
   .colhead { display:flex; align-items:center; gap:8px; padding:2px 4px 10px; font-weight:600; font-size:13px; }
   .colhead .n { color:var(--mute); font-weight:500; }
   .col .none { color:var(--mute); font-size:12.5px; padding:4px 4px 8px; }
@@ -485,7 +486,7 @@ function card(f, inPop) {
   }
   else if (cls === "not-started") banner = `<div class="banner">The terminal tab for this feature never started a session. <button data-act="resume-term">Start it now</button></div>`;
   const c = !inPop && collapsed.has(f.slug);
-  const details = `<div class="meta">created ${day(f.created)} · ${esc(f.branch)}${f.model ? " · " + esc(MODELS[f.model] || f.model) : ""} · ${git}${f.lastCommit ? ` · <span style="display:inline-block">last: ${esc(f.lastCommit)}</span>` : ""}</div>
+  const details = `<div class="meta">created ${day(f.created)} · ${esc(f.branch)}${f.model ? " · " + esc(MODELS[f.model] || f.model) : ""} · ${git}</div>
         ${spent(f.usage) ? `<div class="meta">${spent(f.usage)}</div>` : ""}
         ${prev ? `<div class="meta">Continues “${esc(prev.title)}”</div>` : ""}`;
   const body = `${st.activity && cls === "working" ? `<div class="activity" style="margin-top:6px">${esc(st.activity)}</div>` : ""}
@@ -602,7 +603,8 @@ function render(features) {
   notifyChanges(features);
   const live = features.filter((f) => f.usage);
   const ms = live.reduce((a, f) => a + f.usage.ms, 0), cost = live.reduce((a, f) => a + f.usage.cost, 0);
-  $("#totals").textContent = `One branch, folder and Claude session per feature.${ms || cost ? ` All features: ${dur(ms)} agent time, ≈$${cost.toFixed(2)} at API prices.` : ""}`;
+  // The totals go on their own line under the tagline.
+  $("#totals").innerHTML = `One branch, folder and Claude session per feature.${ms || cost ? `<br>All features: ${dur(ms)} agent time, ≈$${cost.toFixed(2)} at API prices.` : ""}`;
   const typing = document.activeElement?.closest?.("#list") && document.activeElement.matches("textarea, input[type=text]");
   // Filter chips, with how many features each would show.
   const inGroup = (f, g) => g === "all" || kind(f)[0] === g;
@@ -820,11 +822,13 @@ let naming = null;
 function nameNewCol(c, slug) {
   const f = all.find((x) => x.slug === slug);
   naming = slug;
-  c.innerHTML = `<div class="colhead">New label</div><input type="text" class="namecol" maxlength="40" placeholder="Name it, then Enter" aria-label="New label name"><div class="none">For “${esc(f?.title || slug)}”</div>`;
+  c.innerHTML = `<div class="colhead">New label</div><input type="text" class="namecol" maxlength="40" placeholder="Label name" aria-label="New label name"><button class="primary namego" data-namego>Create board</button><div class="none">For “${esc(f?.title || slug)}”</div>`;
   const box = c.querySelector("input"); box.focus();
   const done = (v) => { if (naming !== slug) return; naming = null; $("#board")._html = ""; if (v) setLabel(slug, v); else render(all); };
   box.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); done(box.value.trim()); } else if (e.key === "Escape") { e.preventDefault(); done(""); } });
-  box.addEventListener("blur", () => done(box.value.trim()));
+  c.querySelector("[data-namego]").addEventListener("click", () => done(box.value.trim()));
+  // Clicking away with a name keeps it; with none, cancels. Clicking Create label is handled above.
+  box.addEventListener("blur", (e) => { if (!c.contains(e.relatedTarget)) done(box.value.trim()); });
 }
 
 // ---------- feature popup ----------
