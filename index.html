@@ -205,6 +205,8 @@
   .tile.attn { border-left:3px solid var(--you); }
   .tile .t { font-weight:600; font-size:13.5px; line-height:1.3; }
   .tile .activity { margin-top:6px; font-size:11.5px; }
+  /* The card's last message (Checking…, Merged…, an error), two lines at most. Open the card for all of it. */
+  .tile .msg { margin-top:6px; font-size:12.5px; white-space:normal; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
   .tile .snip { margin-top:6px; font-size:12.5px; color:var(--mute); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
   .tile .foot { display:flex; gap:6px; align-items:center; margin-top:8px; flex-wrap:wrap; }
   .tile .when { margin-left:auto; font-size:11.5px; color:var(--mute); white-space:nowrap; }
@@ -759,7 +761,8 @@ function tile(f) {
     <div class="t">${esc(f.title)}</div>
     ${st.activity && cls === "working" ? `<div class="activity">${esc(st.activity)}</div>` : ""}
     ${k === "waiting" && st.lastReply ? `<div class="snip">${esc(st.lastReply.replace(/[#*`>|]/g, "").trim().slice(0, 240))}</div>` : ""}
-    <div class="foot">${view === "label" ? pill : f.label ? tagHtml(f.label) : ""}<span class="when">${when}</span></div></div>`;
+    ${u(f.slug).msg ? `<div class="msg ${u(f.slug).cls}">${esc(u(f.slug).msg)}</div>` : ""}
+    <div class="foot">${view === "label" ? pill : f.label ? tagHtml(f.label) : ""}${f.merged && k !== "merged" ? `<span class="meta">merged</span>` : ""}<span class="when">${when}</span></div></div>`;
 }
 
 function renderBoard(features) {
