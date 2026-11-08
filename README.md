@@ -59,8 +59,9 @@ were imported on 2026-11-08, with their notes copied word for word into each
   kept for the browser tab if I close the popup to look at something else.
   **Start agent** commits its `feature.md` on main,
   makes `../worktrees/<slug>` on branch `feat/<slug>`, copies my local
-  database into it, runs `pnpm install`, starts the feature's app, and starts
-  the agent on my prompt in the background. **Save as planned** only commits
+  database into it, runs `pnpm install`, starts the feature's app, seeds Jack
+  and the demo logins into it (`scripts/seed-jack.js`, which skips what's
+  already there), and starts the agent on my prompt in the background. **Save as planned** only commits
   the `feature.md`.
 - **Start agent / Edit / Drop** (planned features): start it as above, change
   what it says, or mark it dropped.

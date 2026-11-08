@@ -222,9 +222,15 @@ async function setup(f) {
   const inst = await mise(f.dir, ["pnpm", "install", "--frozen-lockfile"], { timeout: 300000 });
   if (inst.code !== 0) throw new Error("pnpm install failed: " + tail(inst.out, 400));
 
+  // Jack and the demo logins (oli@ / jack@, demo1234), whatever main's
+  // database had. The tables come from the app's server.js, so start it
+  // first. The seed is idempotent, so a retry or an already-seeded copy is fine.
+  step("seeding demo data");
+  await startApp(f);
+  const seed = await run(process.execPath, ["scripts/seed-jack.js"], { cwd: f.dir, env: { ...process.env, DATA_DIR: path.join(f.dir, "data") }, timeout: 60000 });
+  if (seed.code !== 0) throw new Error("seeding demo data failed: " + tail(seed.out, 400));
+
   step("ready");
-  // The dashboard runs the app, so the agent doesn't spend turns on it.
-  startApp(f).catch(() => {});
   // Start the agent in the background. Open session shows it in a terminal.
   if (!readState(f.slug).started) {
     writeState(f.slug, { state: "starting", session_id: f.sessionId });
