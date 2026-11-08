@@ -1012,7 +1012,13 @@ async function onClick(e) {
     if (r.msg) { bubble?.remove(); s.draft = text; if (box) { box.value = text; fitCompose(box); } return after(r.msg, "bad"); }
     return after(r.sent ? "" : { "busy-terminal": "Waiting: the agent is mid-turn in its terminal. Your message goes as soon as it finishes.", busy: "Waiting: the agent is mid-turn. Your message goes as soon as it finishes.", "not-started": "Waiting: the agent hasn't started yet. Your message goes once it has." }[r.why] || "");
   }
-  if (act === "start") { say("Starting: making its branch and folder…"); const r = await api(`${base}/start`, {}); return say(r.msg || "Started. The agent begins in the background once setup finishes.", r.msg ? "bad" : "good"); }
+  if (act === "start") {
+    // Back to the board: the card moves to Working and shows setup. A failure keeps the popup, with the error.
+    say("Starting: making its branch and folder…");
+    const r = await api(`${base}/start`, {});
+    if (!r.msg && popSlug === slug) closeModal($("#popDlg"));
+    return say(r.msg || "Started. The agent begins in the background once setup finishes.", r.msg ? "bad" : "good");
+  }
   if (act === "edit") { s.edit = !s.edit; s.etitle = null; s.eprompt = null; return render(all); }
   if (act === "edit-save") {
     const f = all.find((x) => x.slug === slug);
@@ -1046,6 +1052,7 @@ async function onClick(e) {
     const r = await api(`${base}/reopen`, { title, prompt, plan });
     if (r.msg) return say(r.msg, "bad");
     Object.assign(s, { reopen: false, rtitle: "", rprompt: "" });
+    if (!plan && popSlug === slug) closeModal($("#popDlg")); // started: back to the board
     return say(plan ? `Saved "${r.title}" as planned.` : `Started ${r.branch}.`, "good");
   }
 }
