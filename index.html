@@ -1013,6 +1013,13 @@ async function onClick(e) {
     return after(r.sent ? "" : { "busy-terminal": "Waiting: the agent is mid-turn in its terminal. Your message goes as soon as it finishes.", busy: "Waiting: the agent is mid-turn. Your message goes as soon as it finishes.", "not-started": "Waiting: the agent hasn't started yet. Your message goes once it has." }[r.why] || "");
   }
   if (act === "start") {
+    // Mid-edit: save what's in the boxes first, so the agent starts on what you just wrote.
+    if (s.edit) {
+      const f = all.find((x) => x.slug === slug);
+      const saved = await api(`${base}/edit`, { title: s.etitle ?? f.title, prompt: s.eprompt ?? f.prompt ?? "" });
+      if (saved.msg) return say(saved.msg, "bad");
+      Object.assign(s, { edit: false, etitle: null, eprompt: null });
+    }
     // Back to the board: the card moves to Working and shows setup. A failure keeps the popup, with the error.
     say("Starting: making its branch and folder…");
     const r = await api(`${base}/start`, {});
