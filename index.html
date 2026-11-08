@@ -180,10 +180,22 @@
   .switch input:focus-visible { outline:2px solid var(--work); outline-offset:2px; }
   @media (prefers-reduced-motion: reduce) { .switch input, .switch input::after { transition:none; } }
   /* ---------- board ---------- */
-  body.boarding main { max-width:none; padding-left:24px; padding-right:24px; }
+  /* Everything but the board keeps the page's width, so switching views moves nothing above it. */
+  main { max-width:none; }
+  main > *:not(#board) { max-width:1068px; margin-left:auto; margin-right:auto; }
+  /* The view switcher, colours flipped: a black box, the picked view on a white square. */
+  #viewSeg { background:var(--fg); border-color:var(--fg); }
+  #viewSeg .thumb { background:var(--bg); }
+  #viewSeg button { color:var(--bg); opacity:.6; }
+  #viewSeg button:hover { opacity:.9; }
+  #viewSeg button.on { color:var(--fg); opacity:1; }
   .board { display:grid; grid-auto-flow:column; grid-auto-columns:minmax(240px, 1fr); gap:14px; overflow-x:auto; align-items:start; padding-bottom:8px; }
   .col { background:color-mix(in srgb, var(--line) 35%, transparent); border-radius:12px; padding:10px; min-height:110px; }
   .col.drop { outline:2px dashed var(--mute); outline-offset:-2px; }
+  .col.newcol { background:none; border:1.5px dashed var(--line); }
+  .col.newcol .colhead { color:var(--mute); font-weight:500; }
+  .col.newcol.drop { outline:0; border-color:var(--mute); }
+  .col .namecol { margin-bottom:6px; }
   .colhead { display:flex; align-items:center; gap:8px; padding:2px 4px 10px; font-weight:600; font-size:13px; }
   .colhead .n { color:var(--mute); font-weight:500; }
   .col .none { color:var(--mute); font-size:12.5px; padding:4px 4px 8px; }
@@ -210,7 +222,8 @@
   /* + that slides open into a box you type in, the + staying at its left. */
   .newlabel { display:inline-flex; align-items:center; width:28px; height:26px; overflow:hidden; border:1px dashed var(--line); border-radius:7px; cursor:pointer; color:var(--mute); transition:width .3s cubic-bezier(.16,1,.3,1), border-color .2s; }
   .newlabel:hover, .newlabel:focus-within { border-color:var(--mute); }
-  .newlabel .plus { flex:none; width:26px; text-align:center; font-size:15px; line-height:1; }
+  .newlabel .plus { flex:none; width:26px; height:100%; display:grid; place-items:center; }
+  .newlabel .plus svg { width:10px; height:10px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; }
   .newlabel input { flex:none; width:130px; padding:0 8px 0 0; border:0; background:none; font-size:12px; color:var(--fg); outline:none; }
   .newlabel.open { width:162px; border-style:solid; cursor:text; color:var(--fg); }
   @media (prefers-reduced-motion: reduce) { .newlabel { transition:none; } }
@@ -246,13 +259,13 @@
     </div>
     <button class="primary" id="newOpen">+ New feature</button>
   </div>
-  <div class="msg bad" id="notifyMsg" hidden style="margin:-12px 0 12px"></div>
+  <div class="msg bad" id="notifyMsg" hidden style="margin-top:-12px; margin-bottom:12px"></div>
 
   <div class="filters">
     <div class="seg text" id="viewSeg"><span class="thumb"></span>
-      <button data-val="status" title="A column per status. Cards move as their agents change">By status</button>
-      <button data-val="label" title="A column per label. Drag a card to another column to relabel it">By label</button>
       <button data-val="list" title="The full list, with a filter per status">List</button>
+      <button data-val="status" title="A board with a column per status. Cards move as their agents change">Status</button>
+      <button data-val="label" title="A board with a column per label. Drag a card to another column to relabel it">Labels</button>
     </div>
     <div class="seg text" id="densSeg"><span class="thumb"></span>
       <button data-val="detailed" title="Status, label, what the agent is doing and its last reply on every card">Detailed</button>
@@ -750,14 +763,15 @@ function tile(f) {
 }
 
 function renderBoard(features) {
-  if (mouseDown || dragging) return; // don't move cards under the pointer
+  if (mouseDown || dragging || naming) return; // don't move cards under the pointer, or the box you're naming in
   const q = $("#search").value.trim().toLowerCase(), hide = $("#hideDone").checked;
   const shown = features.filter((f) => (!q || (f.title + " " + (f.prompt || "") + " " + (f.label || "")).toLowerCase().includes(q)) && !(hide && ["merged", "dropped"].includes(kind(f)[0]))).sort(byUrgency);
   const cols = view === "status"
-    ? KINDS.filter((k) => !(hide && ["merged", "dropped"].includes(k))).map((k) => ({ key: k, head: `<span class="pill ${k}"><span class="dot"></span></span>${cap(k)}`, items: shown.filter((f) => kind(f)[0] === k) }))
+    ? CHIPS.filter((k) => !(hide && ["merged", "dropped"].includes(k))).map((k) => ({ key: k, head: `<span class="pill ${k}"><span class="dot"></span></span>${cap(k)}`, items: shown.filter((f) => kind(f)[0] === k) }))
     : [...labels(), ""].map((l) => ({ key: l, head: l ? tagHtml(l) : "Unlabelled", items: shown.filter((f) => (f.label || "") === l) }));
   const empty = view === "label" ? "Drag a card here to label it" : "Nothing here";
-  const html = `<div class="board ${dens}">${cols.map((c) => `<div class="col" data-col="${esc(c.key)}"><div class="colhead">${c.head}<span class="n">${c.items.length}</span></div>${c.items.map(tile).join("") || `<div class="none">${empty}</div>`}</div>`).join("")}</div>`;
+  const add = view === "label" ? `<div class="col newcol" data-newcol title="Drop a feature here to give it a new label"><div class="colhead">+ New label</div><div class="none">Drag a feature here, then name the label.</div></div>` : "";
+  const html = `<div class="board ${dens}">${cols.map((c) => `<div class="col" data-col="${esc(c.key)}"><div class="colhead">${c.head}<span class="n">${c.items.length}</span></div>${c.items.map(tile).join("") || `<div class="none">${empty}</div>`}</div>`).join("")}${add}</div>`;
   const host = $("#board");
   if (host._html === html) return;
   const left = host.firstElementChild?.scrollLeft || 0;
@@ -783,6 +797,7 @@ $("#board").addEventListener("drop", (e) => {
   e.preventDefault();
   const slug = dragging; dragging = null; mouseDown = false;
   c.classList.remove("drop");
+  if (c.matches("[data-newcol]")) return nameNewCol(c, slug);
   if ((all.find((f) => f.slug === slug)?.label || "") !== c.dataset.col) setLabel(slug, c.dataset.col);
   else render(all);
 });
@@ -794,6 +809,19 @@ async function setLabel(slug, label) {
   const r = await api(`/api/features/${slug}/label`, { label });
   if (r.msg) { f.label = was; u(slug).msg = r.msg; u(slug).cls = "bad"; render(all); }
   refresh();
+}
+
+// Dropped on the new label column: it asks for the name right there. Enter
+// makes the label and gives it to that feature; Escape cancels.
+let naming = null;
+function nameNewCol(c, slug) {
+  const f = all.find((x) => x.slug === slug);
+  naming = slug;
+  c.innerHTML = `<div class="colhead">New label</div><input type="text" class="namecol" maxlength="40" placeholder="Name it, then Enter" aria-label="New label name"><div class="none">For “${esc(f?.title || slug)}”</div>`;
+  const box = c.querySelector("input"); box.focus();
+  const done = (v) => { if (naming !== slug) return; naming = null; $("#board")._html = ""; if (v) setLabel(slug, v); else render(all); };
+  box.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); done(box.value.trim()); } else if (e.key === "Escape") { e.preventDefault(); done(""); } });
+  box.addEventListener("blur", () => done(box.value.trim()));
 }
 
 // ---------- feature popup ----------
@@ -814,8 +842,11 @@ function renderPop() {
   const f = all.find((x) => x.slug === popSlug); if (!f) return closeModal($("#popDlg"));
   const s = u(f.slug);
   const lab = `<div class="labels" data-slug="${f.slug}">${labels().map((l) => `<button class="tag ${l === f.label ? "" : "off"}" style="--h:${hue(l)}" data-act="label" data-label="${esc(l)}" title="${l === f.label ? "Click to remove this label" : "Label it " + esc(l) + " (a feature has one label)"}">${esc(l)}</button>`).join("")}
-    <span class="newlabel" data-act="newlabel" title="New label"><span class="plus">+</span><input type="text" data-newlabel placeholder="New label" maxlength="40" aria-label="New label"></span></div>`;
+    <span class="newlabel" data-act="newlabel" title="New label"><span class="plus"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M5 1v8M1 5h8"/></svg></span><input type="text" data-newlabel placeholder="New label" maxlength="40" aria-label="New label"></span></div>`;
+  // Built without the draft: what you type isn't a change to redraw for.
+  const draft = s.draft; s.draft = "";
   const html = (f.worktree ? card(f, true) : simpleCard(f)) + "\u0000" + lab;
+  s.draft = draft;
   const top = $("#popTop");
   const thread = top.querySelector("[data-chat][data-loaded]");
   // Typing a new label: leave it be until Enter or Escape.
@@ -836,7 +867,8 @@ function renderPop() {
   $("#popFoot").dataset.slug = f.slug;
   $("#popActs").replaceChildren(...(acts ? [acts] : []));
   const slot = top.querySelector("[data-chat]");
-  if (slot && thread) { slot.replaceWith(thread); }
+  // Taking the thread out of the page resets its scroll, so put it back.
+  if (slot && thread) { const y = thread.scrollTop; slot.replaceWith(thread); thread.scrollTop = y; }
   if (slot && (!thread || thread.dataset.at !== String(f.st?.at) + (f.st?.queue?.length || 0))) loadChat(f.slug);
   const ta = top.querySelector(".compose textarea");
   if (ta) { ta.value = s.draft; fitCompose(ta, true); }
