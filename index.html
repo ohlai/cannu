@@ -1,0 +1,846 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cannu</title>
+<link rel="icon" type="image/png" href="/logo.png?v=2">
+<style>
+  :root { --bg:#fafafa; --card:#fff; --fg:#111; --mute:#666; --line:#e3e3e3; --work:#2563eb; --you:#d97706; --idle:#16a34a; --bad:#dc2626; --merged:#7c3aed; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0f0f10; --card:#18181b; --fg:#eee; --mute:#9a9a9a; --line:#2a2a2e; --merged:#a78bfa; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.45 system-ui, sans-serif; }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 80px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 28px 0 10px; color: var(--mute); font-weight: 600; }
+  .sub { color: var(--mute); margin: 0 0 20px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px 16px; margin-bottom:12px; }
+  .card.past { padding: 10px 16px; }
+  .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+  .grow { flex:1; min-width: 200px; }
+  .title { font-weight:600; font-size:15px; }
+  .meta { color:var(--mute); font-size:12.5px; }
+  .pill .detail { font-weight:400; color:var(--mute); }
+  .pill { display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600; padding:3px 9px; border-radius:99px; border:1px solid var(--line); white-space:nowrap; }
+  .dot { width:8px; height:8px; border-radius:50%; background:var(--mute); }
+  .working .dot { background:var(--work); animation: pulse 1.2s infinite; }
+  .needs-you .dot, .interrupted .dot, .not-started .dot, .stuck .dot { background:var(--you); }
+  .needs-you, .interrupted, .not-started, .stuck { border-color: var(--you); }
+  .idle .dot { background:var(--idle); } .merged .dot { background:var(--merged); } .error .dot, .failed .dot { background:var(--bad); }
+  .pill.waiting { border-color:var(--you); } .pill.waiting .dot { background:var(--you); }
+  .pill.error .dot, .pill.failed .dot { background:var(--bad); }
+  @keyframes pulse { 50% { opacity:.3 } }
+  .activity { font-family: ui-monospace, monospace; font-size:12px; color:var(--mute); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width: 100%; }
+  .reply { margin-top:10px; padding:2px 12px; border-left:3px solid var(--line); max-height: 40em; overflow:auto; font-size:13px; cursor:pointer; }
+  .md > :first-child { margin-top: 6px; } .md > :last-child { margin-bottom: 6px; }
+  .md p, .md ul, .md ol, .md pre, .md blockquote { margin: 6px 0; }
+  .md ul, .md ol { padding-left: 20px; } .md li { margin: 2px 0; }
+  .md h1, .md h2, .md h3, .md h4 { font-size: 13.5px; margin: 10px 0 4px; }
+  .md code { font-family: ui-monospace, monospace; font-size: 12px; background: var(--bg); padding: 1px 4px; border-radius: 4px; }
+  .md pre { background: var(--bg); padding: 8px 10px; border-radius: 6px; overflow-x: auto; }
+  .md pre code { padding: 0; background: none; }
+  .md blockquote { border-left: 2px solid var(--line); padding-left: 10px; color: var(--mute); }
+  .md table { border-collapse: collapse; margin: 6px 0; } .md td, .md th { border: 1px solid var(--line); padding: 3px 8px; text-align: left; }
+  .md hr { border: 0; border-top: 1px solid var(--line); }
+  [hidden] { display: none !important; }
+  .reply.full { max-height:none; }
+  .banner { margin-top:10px; padding:10px 12px; border-radius:7px; border:1px solid var(--you); font-size:13px; }
+  button { font:inherit; font-size:13px; padding:6px 12px; border-radius:7px; border:1px solid var(--line); background:var(--card); color:var(--fg); cursor:pointer; }
+  button:hover { border-color: var(--mute); }
+  button.primary { background:var(--fg); color:var(--bg); border-color:var(--fg); }
+  textarea, input[type=text], input[type=search] { font:inherit; width:100%; padding:8px 10px; border-radius:7px; border:1px solid var(--line); background:var(--bg); color:var(--fg); }
+  textarea { min-height: 70px; resize: vertical; }
+  .hint { color: var(--mute); font-size:12px; }
+  .msg { margin-top:8px; font-size:13px; white-space:pre-wrap; }
+  .msg.bad { color: var(--bad); } .msg.good { color: var(--idle); }
+  a { color: inherit; }
+  details summary { cursor:pointer; color:var(--mute); font-size:13px; }
+  .empty { color: var(--mute); text-align:center; padding: 30px; }
+  code { font-size: 12px; }
+  svg.i { width:18px; height:18px; fill:currentColor; display:block; }
+  svg.i .w { fill:none; stroke:currentColor; stroke-width:2.2; stroke-linecap:round; }
+  /* Like the app's pill nav: a white box, the selected icon on a black square
+     that slides to whichever one you pick. */
+  .seg { position:relative; display:inline-flex; padding:3px; background:var(--card); border:1px solid var(--line); border-radius:8px; --i:0; }
+  .seg .thumb { position:absolute; top:3px; left:3px; width:30px; height:30px; border-radius:6px; background:var(--fg); transform:translateX(calc(var(--i) * 30px)); transition:transform .25s cubic-bezier(.4,0,.2,1); }
+  .seg button { position:relative; width:30px; height:30px; padding:0; display:grid; place-items:center; border:0; border-radius:6px; background:none; color:var(--fg); opacity:.45; transition:color .25s, opacity .25s; }
+  .seg button:hover { opacity:.85; }
+  .seg button.on { color:var(--bg); opacity:1; }
+  @media (prefers-reduced-motion: reduce) { .seg .thumb, .seg button { transition:none; } }
+  button.sq.on { background:var(--fg); color:var(--bg); }
+  .head { cursor:pointer; user-select:none; }
+  /* Fold arrow: drawn like the other icons, faint until you hover, and it turns
+     when you fold or unfold the card. */
+  .chev { display:inline-block; width:14px; height:14px; margin:0 4px -2px -2px; color:var(--mute); opacity:.55; transition:opacity .2s; }
+  .chev path { fill:none; stroke:currentColor; stroke-width:2.2; stroke-linecap:round; stroke-linejoin:round; }
+  .chev.open { transform:rotate(90deg); }
+  .head:hover .chev { opacity:1; }
+  .chev.turn { animation:unfold .25s cubic-bezier(.16,1,.3,1); } .chev.turn:not(.open) { animation-name:fold; }
+  @keyframes unfold { from { transform:rotate(0); } } @keyframes fold { from { transform:rotate(90deg); } }
+  @media (prefers-reduced-motion: reduce) { .chev.turn { animation:none; } }
+  .filters { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:16px; }
+  .chips { display:flex; gap:6px; flex-wrap:wrap; flex:1; }
+  .chips button { border-radius:8px; padding:4px 11px; font-size:12.5px; }
+  .chips button.on { background:var(--fg); color:var(--bg); border-color:var(--fg); }
+  .chips .n { opacity:.6; margin-left:4px; }
+  #search { width:200px; }
+  .planned .dot { background:var(--work); opacity:.5; } .dropped .dot { background:var(--mute); }
+  .dropped { opacity:.75; }
+  .plan { margin-top:8px; padding:2px 12px; border-left:3px solid var(--line); font-size:13px; }
+  .chat { margin-top:10px; border:1px solid var(--line); border-radius:8px; }
+  .thread { max-height:440px; overflow:auto; padding:8px 12px; display:flex; flex-direction:column; gap:10px; }
+  .bubble { max-width:85%; padding:6px 12px; border-radius:10px; font-size:13px; background:var(--bg); }
+  .bubble.me { align-self:flex-end; background:var(--fg); color:var(--bg); }
+  .bubble.me code, .bubble.me pre { background:transparent; }
+  .bubble.dashboard { align-self:flex-end; background:none; border:1px dashed var(--line); color:var(--mute); }
+  .bubble .who { font-size:11px; opacity:.65; margin-top:4px; }
+  /* Message box: its own rounded box with Send on its right. Once the text
+     wraps, the box widens into Send's place and Send drops below it. */
+  .compose { position:relative; margin:4px 10px 0; transition:padding-bottom .28s cubic-bezier(.16,1,.3,1) .08s; }
+  .compose textarea { display:block; min-height:0; resize:none; line-height:20px; padding:7px 12px; border-radius:10px; width:calc(100% - 72px); max-height:262px; overflow-y:auto;
+    transition:width .28s cubic-bezier(.16,1,.3,1), height .18s ease; }
+  .compose .send { position:absolute; right:0; bottom:0; width:62px; height:36px; padding:0; }
+  .compose.multi { padding-bottom:44px; transition-delay:0s; }
+  .compose.multi textarea { width:100%; transition-delay:.08s, 0s; }
+  .chat .hint { padding:6px 10px 10px; }
+  @media (prefers-reduced-motion: reduce) { .compose, .compose textarea { transition:none; } }
+  /* The title row looks the same folded or not: everything sits at the top, and the
+     details wrap under the title, left of the time and status. */
+  .row.top { align-items:flex-start; }
+  .row.top .title { line-height:26px; }
+  .row.top .right { display:flex; gap:12px; align-items:center; height:26px; }
+  #askDlg { max-width:min(440px, calc(100vw - 32px)); }
+  #askDlg .body { font-size:14px; }
+  /* Preview and its stop button share one outline, so nothing shifts when the app starts or stops. */
+  .split { display:inline-flex; border:1px solid var(--line); border-radius:7px; }
+  .split:hover { border-color:var(--mute); }
+  .split button { border:0; border-radius:0; background:none; }
+  .split button + button { border-left:1px solid var(--line); padding:6px 9px; }
+  .split button:disabled { opacity:.3; cursor:default; }
+  .actions { margin-top:10px; }
+  /* @ mentions: the list of matching features under the box you are typing in. */
+  #mention { position:absolute; z-index:10; background:var(--card); border:1px solid var(--line); border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,.12); padding:4px; min-width:260px; max-width:420px; }
+  #mention div { padding:5px 9px; border-radius:6px; cursor:pointer; font-size:13px; }
+  #mention div.on { background:var(--fg); color:var(--bg); }
+  #mention small { opacity:.6; margin-left:6px; }
+  button.sq { width:30px; height:30px; padding:0; display:inline-grid; place-items:center; }
+  button.bell { width:26px; height:26px; align-self:flex-start; margin-right:-4px; }
+  button.bell svg.i { width:15px; height:15px; }
+  button.bell.off { opacity:.35; cursor:default; } button.bell.off:hover { border-color:var(--line); }
+  button.bell.off.on { opacity:.45; }
+  .brand { display:flex; align-items:center; gap:12px; }
+  .brand img { width:44px; height:44px; }
+  @media (prefers-color-scheme: dark) { .brand img { filter:invert(1); } }
+  .brand h1 { margin:0; font-size:24px; }
+  /* While a popup is open the page behind it stays put. */
+  html.locked { overflow:hidden; }
+  .brand h1 span { color:var(--mute); font-weight:500; }
+  /* Popups: the page dims and blurs, the panel rises and settles. */
+  dialog.modal { border:0; padding:0; background:none; color:var(--fg); max-width:min(680px, calc(100vw - 32px)); width:100%; overflow:visible; }
+  dialog.modal::backdrop { background:rgba(10,10,12,.35); backdrop-filter:blur(0); opacity:0; transition:opacity .28s ease, backdrop-filter .28s ease; }
+  dialog.modal.in::backdrop { opacity:1; backdrop-filter:blur(6px); }
+  .panel { background:var(--card); border:1px solid var(--line); border-radius:14px; box-shadow:0 24px 64px rgba(0,0,0,.22), 0 2px 8px rgba(0,0,0,.08);
+    max-height:calc(100vh - 64px); display:flex; flex-direction:column;
+    opacity:0; transform:translateY(14px) scale(.97); transition:opacity .2s ease, transform .2s ease; }
+  dialog.modal.in .panel { opacity:1; transform:none; transition:opacity .32s cubic-bezier(.16,1,.3,1), transform .42s cubic-bezier(.16,1,.3,1); }
+  @media (prefers-reduced-motion: reduce) { dialog.modal .panel, dialog.modal::backdrop { transition:none; } }
+  .panel header { padding:16px 20px 0; } .panel header h2 { margin:0; color:var(--fg); font-size:16px; }
+  .panel .body { padding:14px 20px; overflow:auto; display:grid; gap:10px; }
+  .panel footer { padding:12px 20px 16px; border-top:1px solid var(--line); }
+  .field { display:grid; gap:5px; } .field > label { font-weight:600; font-size:13px; }
+  .field .row { gap:8px; }
+  select { font:inherit; font-size:13px; padding:7px 10px; border-radius:7px; border:1px solid var(--line); background:var(--bg); color:var(--fg); }
+  .reset { font-size:12px; color:var(--mute); background:none; border:0; padding:0; text-decoration:underline; }
+  .fixed { font-size:12.5px; color:var(--mute); } .fixed li { margin:3px 0; }
+  .panel textarea.tall { min-height:110px; }
+</style>
+</head>
+<body>
+<main>
+  <div class="row" style="margin-bottom:36px">
+    <div class="grow">
+      <div class="brand"><img src="/logo.png?v=2" alt=""><h1>Cannu <span>- Parallel agent management</span></h1></div>
+      <p class="sub" style="margin:0" id="totals">One branch, folder and Claude session per feature.</p>
+    </div>
+    <button id="defaultsOpen" title="Model, system prompt and everything else every agent is given">Agent defaults</button>
+    <div class="seg" id="notify">
+      <span class="thumb"></span>
+      <button data-mode="silent" title="No notifications"></button>
+      <button data-mode="select" title="Notify me about features with their bell on"></button>
+      <button data-mode="all" title="Notify me about every feature"></button>
+    </div>
+    <button class="primary" id="newOpen">+ New feature</button>
+  </div>
+  <div class="msg bad" id="notifyMsg" hidden style="margin:-12px 0 12px"></div>
+
+  <div class="filters">
+    <div class="chips" id="chips"></div>
+    <input type="search" id="search" placeholder="Search features">
+  </div>
+  <div id="list"></div>
+</main>
+<div id="mention" hidden></div>
+
+<dialog class="modal" id="newDlg">
+  <div class="panel">
+    <header><h2>New feature</h2></header>
+    <div class="body">
+      <input type="text" id="title" placeholder="Feature name, e.g. Client can hide Training now">
+      <textarea id="prompt" class="tall" data-mention placeholder="What you want and why. Saved word for word in the feature's notes. Optional if you're only planning it."></textarea>
+      <div class="hint">@ to tag a related feature. The agent reads their notes first.</div>
+      <div class="field"><label for="newModel">Model</label><select id="newModel"></select></div>
+    </div>
+    <footer class="row"><button data-close>Close</button><span class="msg" id="addMsg"></span><span class="grow" style="min-width:0"></span>
+      <button id="addPlan" title="Records it on main without a branch or agent. Start it later from its card.">Save as planned</button><button class="primary" id="add">Start agent</button></footer>
+  </div>
+</dialog>
+
+<dialog class="modal" id="askDlg">
+  <div class="panel">
+    <header><h2 id="askTitle"></h2></header>
+    <div class="body" id="askText"></div>
+    <footer class="row"><span class="grow" style="min-width:0"></span><button data-close>Cancel</button><button class="primary" id="askOk"></button></footer>
+  </div>
+</dialog>
+
+<dialog class="modal" id="defaultsDlg">
+  <div class="panel">
+    <header><h2>Agent defaults</h2><div class="hint">What every feature agent is given. Saved in <code>tools/cannu/agent-defaults.json</code> and committed on main. Agents that already started get changes from their next run.</div></header>
+    <div class="body" id="defaultsBody"></div>
+    <footer class="row"><button data-close>Close</button><span class="msg" id="defaultsMsg"></span><span class="grow" style="min-width:0"></span><button class="primary" id="defaultsSave">Save</button></footer>
+  </div>
+</dialog>
+<script>
+const $ = (s, el = document) => el.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
+
+// Small markdown renderer for agent replies: headings, lists, code, quotes,
+// tables, bold, italics, links. Everything is escaped first.
+function md(src) {
+  const inline = (t) => esc(t)
+    .replace(/`([^`]+)`/g, (_, c) => `<code>${c}</code>`)
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/(^|[^*\w])\*([^*\n]+)\*(?!\w)/g, "$1<em>$2</em>")
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+  const lines = String(src ?? "").replace(/\r\n/g, "\n").split("\n");
+  const out = [];
+  for (let i = 0; i < lines.length; ) {
+    const l = lines[i];
+    if (/^```/.test(l)) {
+      const code = []; i++;
+      while (i < lines.length && !/^```/.test(lines[i])) code.push(lines[i++]);
+      i++; out.push(`<pre><code>${esc(code.join("\n"))}</code></pre>`); continue;
+    }
+    if (/^#{1,6}\s/.test(l)) { const n = Math.min(4, l.match(/^#+/)[0].length); out.push(`<h${n}>${inline(l.replace(/^#+\s*/, ""))}</h${n}>`); i++; continue; }
+    if (/^\s*(---|\*\*\*)\s*$/.test(l)) { out.push("<hr>"); i++; continue; }
+    if (/^\s*\|.*\|\s*$/.test(l) && /^\s*\|[\s:|-]+\|\s*$/.test(lines[i + 1] || "")) {
+      const cells = (r) => r.trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
+      const head = cells(l); i += 2; const rows = [];
+      while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) rows.push(cells(lines[i++]));
+      out.push(`<table><tr>${head.map((c) => `<th>${inline(c)}</th>`).join("")}</tr>${rows.map((r) => `<tr>${r.map((c) => `<td>${inline(c)}</td>`).join("")}</tr>`).join("")}</table>`); continue;
+    }
+    if (/^\s*([-*+]|\d+[.)])\s+/.test(l)) {
+      const ordered = /^\s*\d/.test(l); const items = [];
+      while (i < lines.length && (/^\s*([-*+]|\d+[.)])\s+/.test(lines[i]) || (/^\s{2,}\S/.test(lines[i]) && items.length))) {
+        if (/^\s*([-*+]|\d+[.)])\s+/.test(lines[i])) items.push(lines[i].replace(/^\s*([-*+]|\d+[.)])\s+/, ""));
+        else items[items.length - 1] += " " + lines[i].trim();
+        i++;
+      }
+      out.push(`<${ordered ? "ol" : "ul"}>${items.map((t) => `<li>${inline(t)}</li>`).join("")}</${ordered ? "ol" : "ul"}>`); continue;
+    }
+    if (/^>\s?/.test(l)) { const q = []; while (i < lines.length && /^>\s?/.test(lines[i])) q.push(lines[i++].replace(/^>\s?/, "")); out.push(`<blockquote>${inline(q.join(" "))}</blockquote>`); continue; }
+    if (!l.trim()) { i++; continue; }
+    const p = []; while (i < lines.length && lines[i].trim() && !/^(```|#{1,6}\s|>|\s*([-*+]|\d+[.)])\s+|\s*\|)/.test(lines[i])) p.push(lines[i++]);
+    if (!p.length) p.push(lines[i++]);
+    out.push(`<p>${p.map(inline).join("<br>")}</p>`);
+  }
+  return out.join("");
+}
+// Filled bell: stem, body, clapper. Waves for "all", a slash for "silent".
+const bell = '<rect x="11.1" y="1.5" width="1.8" height="3.5" rx=".9"/><path d="M12 4c-3.6 0-6 2.9-6 6.4v3.4l-1.8 2.3c-.5.7-.1 1.4.7 1.4h14.2c.8 0 1.2-.7.7-1.4L18 13.8v-3.4C18 6.9 15.6 4 12 4z"/><path d="M9.3 19h5.4a2.7 2.7 0 0 1-5.4 0z"/>';
+const svg = (p) => `<svg class="i" viewBox="0 0 24 24">${p}</svg>`;
+const ICON = {
+  off: svg(`<mask id="cut"><rect width="24" height="24" fill="#fff"/><path d="M3 2l19 19" stroke="#000" stroke-width="5"/></mask><g mask="url(#cut)">${bell}</g><path class="w" d="M3 2l19 19"/>`),
+  some: svg(bell),
+  all: svg(`${bell}<path class="w" d="M3.9 3.4A8.5 8.5 0 0 0 1.4 9.6"/><path class="w" d="M20.1 3.4A8.5 8.5 0 0 1 22.6 9.6"/>`),
+  bell: svg(bell),
+};
+const dur = (ms) => { const m = Math.round(ms / 60000); return m < 1 ? "<1m" : m < 60 ? m + "m" : Math.floor(m / 60) + "h " + String(m % 60).padStart(2, "0") + "m"; };
+const spent = (u) => (u && (u.ms || u.cost) ? `${dur(u.ms)} agent time · ≈$${u.cost.toFixed(2)}` : "");
+
+// Per-browser settings: notification mode and which features have their bell on.
+const store = { get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} } };
+let mode = store.get("notifyMode", "silent");
+const bells = new Set(store.get("notifyBells", []));
+const collapsed = new Set(store.get("collapsed", []));
+let turned = null; // the card just folded or unfolded, so only its arrow animates
+const ago = (iso) => { if (!iso) return ""; const s = (Date.now() - new Date(iso)) / 1000; return s < 60 ? "just now" : s < 3600 ? Math.round(s/60) + "m ago" : s < 86400 ? Math.round(s/3600) + "h ago" : Math.round(s/86400) + "d ago"; };
+const day = (iso) => (iso ? iso.slice(0, 10) : "");
+const api = async (url, body) => { const r = await fetch(url, body === undefined ? {} : { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }); return r.json(); };
+
+// UI state kept across re-renders: open boxes, drafts, messages.
+const ui = {};
+const u = (slug) => (ui[slug] ??= { fb: false, draft: "", msg: "", cls: "", full: false, notes: false, reopen: false, rtitle: "", rprompt: "", edit: false, etitle: null, eprompt: null });
+// Every feature has one status, and there's one filter per status, in order
+// of how much it needs looking at: waiting on you first, dropped last.
+const KINDS = ["waiting", "working", "planned", "merged", "dropped"]; // by urgency: sorts the cards
+const CHIPS = ["planned", "working", "waiting", "merged", "dropped"]; // by timeline: orders the filter chips
+const KIND_TIPS = { all: "Every feature", waiting: "An agent has stopped and it's your turn: it finished, needs you, or was cut off", working: "An agent is working on it", planned: "No branch or agent yet", merged: "In main, finished", dropped: "Kept on record, not doing it" };
+const cap = (s) => s[0].toUpperCase() + s.slice(1);
+let filter = store.get("filter", "all");
+if (filter !== "all" && !KINDS.includes(filter)) filter = "all";
+let all = [];
+
+// [status, detail]. The detail (needs you, background…) shows after it.
+function kind(f) {
+  if (!f.worktree) return f.status === "building" ? ["waiting", ""] : [f.status, ""];
+  const [cls, label] = status(f);
+  if (cls === "merged") return ["merged", ""];
+  if (cls === "working") return ["working", f.settingUp ? label : f.live?.background ? "background" : ""];
+  return ["waiting", { closed: "", idle: "terminal open" }[cls] ?? label];
+}
+
+// The agent's state in detail, for banners and the waiting/working split.
+function status(f) {
+  if (!f.worktree) return [f.status, f.status];
+  if (f.setup && f.setup !== "ready") {
+    if (f.setup.startsWith("failed")) return ["failed", "setup failed"];
+    return f.settingUp ? ["working", "setting up: " + f.setup] : ["interrupted", "setup stopped at: " + f.setup];
+  }
+  const s = f.live?.state;
+  // Once merged, that's the news, unless the agent is busy or needs you again.
+  if (f.merged && !["working", "needs-you", "interrupted", "error", "stuck"].includes(s)) return ["merged", "merged"];
+  return [s, { working: f.live.background ? "working (background)" : "working", stuck: "stuck", "needs-you": "needs you", idle: "idle, open", closed: "idle", error: "error", interrupted: "interrupted", "not-started": "never started" }[s] || "no session"];
+}
+
+const MENTION_HINT = `<div class="hint">@ to tag a related feature. The agent reads their notes first.</div>`;
+const port = (slug) => all.find((x) => x.slug === slug).port;
+// Time, status, then the bell, in that order on every card.
+const head = (f, cls, label, when) => { const [k, detail] = kind(f); return `<span class="meta">${when}</span>
+      <span class="pill ${k} ${cls}"><span class="dot"></span>${k}${detail ? `<span class="detail">· ${esc(detail)}</span>` : ""}</span>`; };
+// The bell sits before the name: it's a setting on the feature, not an
+// action like the buttons at the bottom. It's on every card and always says
+// whether you'll hear about this feature: struck through (no) or ringing
+// (yes), never a plain bell. Muted and "all" decide it for every card, so the
+// bells are greyed out and can't be clicked. In "select" each one is off
+// until clicked, and greyed out while the feature has no agent to hear from.
+function bellBtn(f) {
+  const on = mode === "all" || (mode === "select" && bells.has(f.slug));
+  const can = mode === "select" && !!f.worktree;
+  const noAgent = { planned: "No agent yet. You can turn this on once it's started.", merged: "Its agent has finished and its folder is removed, so there's nothing to notify you about.", dropped: "Dropped, so there's nothing to notify you about." }[f.status] || "No agent running for it right now.";
+  const title = mode === "silent" ? "Notifications are muted. Change it with the bells at the top."
+    : mode === "all" ? "Notifying you about every feature. Pick the middle option at the top to choose which."
+    : !f.worktree ? noAgent : on ? "Notifying you about this feature. Click to stop." : "Not notifying you about this feature. Click to turn it on.";
+  return `<button class="sq bell ${on ? "on" : ""} ${can ? "" : "off"}" data-act="bell" ${can ? "" : 'aria-disabled="true"'} title="${title}">${on ? ICON.all : ICON.off}</button>`;
+}
+// Every card ends with the same row: everyday buttons on the left, the one
+// that moves the feature on (in black) on the right.
+const actions = (left, right) => `<div class="row actions">${left}<span class="grow" style="min-width:0"></span>${right}</div>`;
+
+function chatBox(f, s, cls) {
+  return `<div class="chat">
+      <div class="thread" data-chat></div>
+      <div class="compose ${s.multi ? "multi" : ""}">
+        <textarea data-field="draft" data-mention rows="1" placeholder="Message the agent. Ctrl+Enter sends.">${esc(s.draft)}</textarea>
+        <button class="primary send" data-act="send">Send</button>
+      </div>
+      <div class="hint">${f.live?.open ? "Its terminal is open. Sending closes that terminal session and carries on here (the conversation is kept). " : f.live?.background || cls === "working" ? "It's mid-turn. Your message waits and goes as soon as this turn ends. " : ""}Saved word for word in its prompts.md. @ to tag a related feature. The agent reads their notes first.</div>
+    </div>`;
+}
+
+function card(f) {
+  const st = f.st || {}; const [cls, label] = status(f); const s = u(f.slug);
+  const git = [f.ahead ? `${f.ahead} commit${f.ahead > 1 ? "s" : ""} ahead` : "no commits yet", f.behind ? `${f.behind} behind main` : "", f.dirty ? `${f.dirty} uncommitted` : ""].filter(Boolean).join(" · ");
+  const setupStuck = f.setup !== "ready" && !f.settingUp;
+  const prev = f.continues && all.find((x) => x.slug === f.continues);
+  let banner = "";
+  if (setupStuck) banner = `<div class="banner">${f.setup.startsWith("failed") ? esc(f.setup) : "Setup was cut off (the dashboard or PC restarted)."} Retry picks up from the step it stopped at. <button data-act="retry">Retry setup</button></div>`;
+  else if (cls === "interrupted" || cls === "error") banner = `<div class="banner">${cls === "error" ? "The last background run failed or was stopped. Its output is below." : "This agent stopped mid-turn: the dashboard, the PC or its terminal closed before it finished."} Anything it changed is still there, but may not be committed.<div class="row" style="margin-top:8px"><button class="primary" data-act="resume-bg">Carry on in the background</button><button data-act="resume-term">Carry on in a terminal</button></div></div>`;
+  else if (cls === "stuck") {
+    const w = f.stuck.waitingOn, quiet = ago(f.stuck.since).replace(" ago", "");
+    banner = `<div class="banner">No activity from this agent for ${quiet}${f.stuck.on ? `. Last thing it did: ${esc(f.stuck.on)}` : ""}.
+      ${w ? `It's still waiting on this, which has probably hung:<div class="meta" style="word-break:break-all; margin-top:4px"><code>${esc(w.cmd)}</code></div>`
+        : f.live.background ? "Nothing is running under it." : `It may be waiting for you to approve something in its terminal tab ("${esc(f.slug)}").`}
+      <div class="row" style="margin-top:8px">${w ? `<button class="primary" data-act="unstick" data-pid="${w.pid}">End that step</button>` : ""}${f.live.background ? `<button data-act="stopturn">Stop the turn</button>` : ""}</div></div>`;
+  }
+  else if (cls === "not-started") banner = `<div class="banner">The terminal tab for this feature never started a session. <button data-act="resume-term">Start it now</button></div>`;
+  const c = collapsed.has(f.slug);
+  const details = `<div class="meta">created ${day(f.created)} · ${esc(f.branch)}${f.model ? " · " + esc(MODELS[f.model] || f.model) : ""} · ${git}${f.lastCommit ? ` · <span style="display:inline-block">last: ${esc(f.lastCommit)}</span>` : ""}</div>
+        ${spent(f.usage) ? `<div class="meta">${spent(f.usage)}</div>` : ""}
+        ${prev ? `<div class="meta">Continues “${esc(prev.title)}”</div>` : ""}`;
+  const body = `${st.activity && cls === "working" ? `<div class="activity" style="margin-top:6px">${esc(st.activity)}</div>` : ""}
+    ${banner}
+    ${st.lastReply && !s.fb ? `<div class="reply md ${s.full ? "full" : ""}" data-act="expand" title="Click to show all of it">${md(st.lastReply)}</div>` : ""}
+    ${st.denied?.length ? `<div class="msg bad">Blocked in the background run (open the session to allow):\n${esc(st.denied.join("\n"))}</div>` : ""}`;
+  return `<div class="card" data-slug="${f.slug}">
+    <div class="row top">
+      ${bellBtn(f)}
+      <div class="grow"><div class="head" data-act="collapse" title="${c ? "Show details" : "Fold to title, status and buttons"}">
+        <div class="title"><svg class="chev ${c ? "" : "open"} ${turned === f.slug ? "turn" : ""}" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>${esc(f.title)}${f.merged && cls !== "merged" ? " <span class='meta'>· merged</span>" : ""}</div>
+      </div>${c ? "" : details}</div>
+      <div class="right">${head(f, cls, label, ago(st.at))}</div>
+    </div>
+    ${c ? "" : body}
+    ${s.fb && !c ? chatBox(f, s, cls) : ""}
+    ${s.msg ? `<div class="msg ${s.cls}">${esc(s.msg)}</div>` : ""}
+    ${actions(`<span class="split"><button data-act="${f.appUp ? "app" : "appstart"}" title="${f.appUp ? "Open this feature's app" : "Start this feature's app and open it"}">Preview ↗</button><button data-act="appstop" title="Stop this feature's app" ${f.appUp ? "" : "disabled"}>✕</button></span>
+      <button data-act="open">Open session</button>
+      <button data-act="fb">${s.fb ? "Hide chat" : "Chat"}${st.queue?.length ? ` (${st.queue.length} waiting)` : ""}</button>
+      ${!f.merged ? `<button data-act="drop" title="A bad idea: stop it and keep it on record as dropped">Drop</button>` : ""}`,
+      !f.merged ? `<button class="primary" data-act="merge">Check and merge</button>` : `<button class="primary" data-act="remove">Remove worktree</button>`)}
+  </div>`;
+}
+
+// A feature with no branch or agent: planned, dropped, imported from the old
+// board, or merged and its worktree removed.
+function simpleCard(f) {
+  const s = u(f.slug);
+  const [cls, label] = status(f);
+  const later = all.filter((x) => x.continues === f.slug);
+  const prev = f.continues && all.find((x) => x.slug === f.continues);
+  const when = ["created " + day(f.created), f.merged && "merged " + day(f.merged), f.dropped && "dropped " + day(f.dropped)].filter(Boolean).join(" · ");
+  const planned = f.status === "planned";
+  // A feature dropped part way through still has its folder until removed.
+  const leftover = f.status === "dropped" && f.dir && !f.removed;
+  return `<div class="card past ${cls}" data-slug="${f.slug}">
+    <div class="row">
+      ${bellBtn(f)}
+      <div class="grow">
+        <div class="title">${esc(f.title)}</div>
+        <div class="meta">${when}${spent(f.usage) ? " · " + spent(f.usage) : ""}${prev ? ` · continues “${esc(prev.title)}”` : ""}${later.length ? " · continued in " + later.map((x) => "“" + esc(x.title) + "”").join(", ") : ""}</div>
+      </div>
+      ${head(f, cls, label, "")}
+    </div>
+    ${planned && !s.edit && f.prompt ? `<div class="plan md">${md(f.prompt)}</div>` : ""}
+    ${actions(planned
+      ? `<button data-act="edit">${s.edit ? "Cancel edit" : "Edit"}</button><button data-act="drop" title="Keep it on record as dropped">Drop</button>`
+      : `<button data-act="reopen">${s.reopen ? "Cancel reopen" : "Reopen"}</button>`,
+      planned ? `<button class="primary" data-act="start" title="Make its branch and start an agent on what it says">Start agent</button>`
+      : leftover ? `<button class="primary" data-act="remove" title="Delete its folder. The unmerged branch is kept, so the work is still in git.">Remove worktree</button>` : "")}
+    ${s.edit ? `<div style="margin-top:10px; display:grid; gap:8px">
+      <input type="text" data-field="etitle" value="${esc(s.etitle ?? f.title)}">
+      <textarea data-field="eprompt" data-mention data-self="${f.slug}" placeholder="What you want and why. This is what the agent starts on.">${esc(s.eprompt ?? f.prompt ?? "")}</textarea>
+      ${MENTION_HINT}
+      <div class="row"><button class="primary" data-act="edit-save">Save</button></div>
+    </div>` : ""}
+    ${s.reopen ? `<div style="margin-top:10px; display:grid; gap:8px">
+      <div class="hint">A new feature that continues this one. Start agent makes a new branch from current main with a new session, and the agent reads this feature's notes first. Save as planned records it to start later.</div>
+      <input type="text" data-field="rtitle" value="${esc(s.rtitle || f.title + " (continued)")}">
+      <textarea data-field="rprompt" data-mention data-self="${f.slug}" placeholder="What you want changed this time, and why.">${esc(s.rprompt)}</textarea>
+      ${MENTION_HINT}
+      <div class="row"><button data-act="reopen-plan" title="Records it on main without a branch or agent. Start it later from its card.">Save as planned</button><button class="primary" data-act="reopen-go">Start agent</button></div>
+    </div>` : ""}
+    ${s.msg ? `<div class="msg ${s.cls}">${esc(s.msg)}</div>` : ""}
+  </div>`;
+}
+
+// ---------- notifications ----------
+
+const lastState = {}; let seenOnce = false, unseen = 0;
+function notifyChanges(features) {
+  for (const f of features) {
+    if (f.removed) continue;
+    const now = f.live?.state, was = lastState[f.slug];
+    lastState[f.slug] = now;
+    if (!seenOnce || !was || was === now) continue;
+    const what = now === "needs-you" ? "needs you"
+      : now === "stuck" ? "looks stuck"
+      : was === "working" && (now === "idle" || now === "closed") ? "finished its turn"
+      : now === "error" ? "background run failed"
+      : now === "interrupted" && was !== "not-started" ? "was interrupted" : "";
+    if (!what || !(mode === "all" || (mode === "select" && bells.has(f.slug)))) continue;
+    if (window.Notification?.permission === "granted") {
+      const n = new Notification(`${f.title} ${what}`, { body: (f.st?.lastReply || "").replace(/[#*`>]/g, "").trim().slice(0, 160), tag: f.slug });
+      n.onclick = () => { window.focus(); n.close(); };
+    }
+    if (document.hidden) { unseen++; document.title = `(${unseen}) Feature agents`; }
+  }
+  seenOnce = true;
+}
+document.addEventListener("visibilitychange", () => { if (!document.hidden) { unseen = 0; document.title = "Feature agents"; } });
+
+function showMode() {
+  const btns = [...document.querySelectorAll("#notify button")];
+  btns.forEach((b) => b.classList.toggle("on", b.dataset.mode === mode));
+  $("#notify").style.setProperty("--i", Math.max(0, btns.findIndex((b) => b.dataset.mode === mode)));
+  const denied = mode !== "silent" && window.Notification?.permission === "denied";
+  $("#notifyMsg").hidden = !denied;
+  $("#notifyMsg").textContent = denied ? "Notifications are blocked for this page. Allow them in the browser's site settings (the icon left of the address)." : "";
+}
+for (const b of document.querySelectorAll("#notify button")) {
+  b.innerHTML = ICON[{ silent: "off", select: "some", all: "all" }[b.dataset.mode]];
+  b.onclick = async () => {
+    mode = b.dataset.mode; store.set("notifyMode", mode);
+    if (mode !== "silent" && window.Notification?.permission === "default") await Notification.requestPermission();
+    showMode(); render(all);
+  };
+}
+showMode();
+
+function render(features) {
+  all = features;
+  notifyChanges(features);
+  const live = features.filter((f) => f.usage);
+  const ms = live.reduce((a, f) => a + f.usage.ms, 0), cost = live.reduce((a, f) => a + f.usage.cost, 0);
+  $("#totals").textContent = `One branch, folder and Claude session per feature.${ms || cost ? ` All features: ${dur(ms)} agent time, ≈$${cost.toFixed(2)} at API prices.` : ""}`;
+  const typing = document.activeElement?.closest?.("#list") && document.activeElement.matches("textarea, input[type=text]");
+  // Filter chips, with how many features each would show.
+  const inGroup = (f, g) => g === "all" || kind(f)[0] === g;
+  $("#chips").innerHTML = ["all", ...CHIPS].map((g) => `<button data-filter="${g}" title="${KIND_TIPS[g]}" class="${g === filter ? "on" : ""}">${cap(g)}<span class="n">${features.filter((f) => inGroup(f, g)).length}</span></button>`).join("");
+  if (typing) { // don't wipe what you're typing, but keep open chats up to date
+    for (const f of features) {
+      const el = u(f.slug).fb && $(`[data-slug="${f.slug}"] [data-chat][data-loaded]`);
+      if (el && el.dataset.at !== String(f.st?.at) + (f.st?.queue?.length || 0)) loadChat(f.slug);
+    }
+    return;
+  }
+  // Keep open chats as they are (scroll position) instead of rebuilding them on every refresh.
+  const keep = {};
+  // Taking it out of the page resets its scroll, so note where it was.
+  for (const el of document.querySelectorAll("[data-chat][data-loaded]")) { el.dataset.top = el.scrollTop; keep[el.closest("[data-slug]").dataset.slug] = el; }
+  const q = $("#search").value.trim().toLowerCase();
+  const shown = features.filter((f) => inGroup(f, filter) && (!q || (f.title + " " + (f.prompt || "")).toLowerCase().includes(q)));
+  // By status (waiting first, dropped last). Among waiting ones, needing you
+  // comes before being cut off, then finished. Then newest first.
+  const urgent = { "needs-you": 0, stuck: 0, interrupted: 1, "not-started": 1, failed: 1, error: 2 };
+  const rank = (f) => KINDS.indexOf(kind(f)[0]) * 10 + (urgent[status(f)[0]] ?? 5);
+  shown.sort((a, b) => rank(a) - rank(b) || String(b.merged || b.dropped || b.started || b.created || "").localeCompare(String(a.merged || a.dropped || a.started || a.created || "")));
+  $("#list").innerHTML = shown.length ? shown.map((f) => (f.worktree ? card(f) : simpleCard(f))).join("")
+    : `<div class="card empty">${q ? "Nothing matches that search." : filter === "all" ? "No features yet. Add one with + New feature." : `Nothing is ${filter} right now.`}</div>`;
+  for (const f of shown) {
+    const s = u(f.slug);
+    const slot = s.fb && $(`[data-slug="${f.slug}"] [data-chat]`);
+    if (!slot) continue;
+    const old = keep[f.slug];
+    if (old) { slot.replaceWith(old); old.scrollTop = +old.dataset.top; }
+    if (!old || old.dataset.at !== String(f.st?.at) + (f.st?.queue?.length || 0)) loadChat(f.slug);
+  }
+  for (const ta of document.querySelectorAll(".compose textarea")) fitCompose(ta, true);
+}
+
+// The conversation, newest at the bottom. Reloaded when the agent's state
+// changes; stays scrolled to the bottom unless you've scrolled up.
+async function loadChat(slug) {
+  const r = await api(`/api/features/${slug}/chat`);
+  const el = $(`[data-slug="${slug}"] [data-chat]`); if (!el) return;
+  const f = all.find((x) => x.slug === slug);
+  const atBottom = !el.dataset.loaded || el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+  el.innerHTML = r.messages?.length ? r.messages.map((m) => `<div class="bubble ${m.who}">
+      <div class="md">${md(m.who === "dashboard" ? m.text.replace(/^\[Added by the dashboard, not my words\]\s*/, "") : m.text)}</div>
+      <div class="who">${{ me: "You", agent: "Agent", dashboard: "Sent by the dashboard" }[m.who]}${m.queued ? " · waiting to send" : m.at ? " · " + new Date(m.at).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : ""}</div>
+    </div>`).join("") : `<div class="hint">${r.saved === false ? "This session has no saved conversation yet." : "No messages yet."}</div>`;
+  el.dataset.loaded = "1";
+  el.dataset.at = String(f?.st?.at) + (f?.st?.queue?.length || 0);
+  if (atBottom) el.scrollTop = el.scrollHeight;
+}
+
+// One line: Send sits to the right. Once the text wraps (measured at the
+// one-line width, so it doesn't flick back and forth), the box takes the full
+// width and Send drops below. The CSS transitions animate the change.
+function fitCompose(ta, instant) {
+  const c = ta.closest(".compose"), s = u(ta.closest("[data-slug]").dataset.slug);
+  const was = ta.style.height;
+  ta.style.transition = c.style.transition = "none";
+  const at = (w) => { ta.style.width = w; ta.style.height = "auto"; return ta.scrollHeight; };
+  const narrow = "calc(100% - 72px)";
+  s.multi = ta.value.includes("\n") || at(narrow) > 36;
+  const h = Math.min(at(s.multi ? "100%" : narrow), 260) + 2;
+  ta.style.width = ""; ta.style.height = was;
+  void ta.offsetWidth; // settle the old size before animating to the new one
+  if (!instant) ta.style.transition = c.style.transition = "";
+  c.classList.toggle("multi", s.multi);
+  ta.style.height = h + "px";
+  if (instant) { void ta.offsetWidth; ta.style.transition = c.style.transition = ""; }
+}
+
+async function refresh() { try { render(await api("/api/features")); } catch {} }
+
+$("#list").addEventListener("input", (e) => {
+  const c = e.target.closest("[data-slug]"); if (!c) return; const s = u(c.dataset.slug);
+  if (e.target.dataset.field) s[e.target.dataset.field] = e.target.value;
+  if (e.target.closest(".compose")) fitCompose(e.target);
+});
+$("#list").addEventListener("click", onClick);
+// Ctrl+Enter (or Cmd+Enter) in a chat box sends.
+$("#list").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && e.target.dataset.field === "draft") { e.preventDefault(); e.target.closest(".chat").querySelector('[data-act="send"]').click(); }
+});
+$("#chips").addEventListener("click", (e) => { const b = e.target.closest("[data-filter]"); if (!b) return; filter = b.dataset.filter; store.set("filter", filter); render(all); });
+$("#search").addEventListener("input", () => render(all));
+
+async function onClick(e) {
+  const b = e.target.closest("[data-act]"); if (!b) return;
+  const slug = b.closest("[data-slug]").dataset.slug; const s = u(slug); const act = b.dataset.act;
+  const say = (msg, cls = "") => { s.msg = msg; s.cls = cls; render(all); refresh(); };
+  const base = `/api/features/${slug}`;
+  if (act === "expand") { s.full = !s.full; return render(all); }
+  if (act === "collapse") { collapsed.has(slug) ? collapsed.delete(slug) : collapsed.add(slug); store.set("collapsed", [...collapsed]); turned = slug; render(all); turned = null; return; }
+  // Chat opens a folded card back up.
+  if (act === "fb" && collapsed.has(slug)) {
+    collapsed.delete(slug); store.set("collapsed", [...collapsed]);
+    if (s.fb) return render(all); // already open underneath, just show it
+  }
+  if (act === "fb") { s.fb = !s.fb; return render(all); }
+  if (act === "reopen") { s.reopen = !s.reopen; return render(all); }
+  if (act === "bell" && b.getAttribute("aria-disabled")) return; // greyed out: no agent to hear from
+  if (act === "bell") { bells.has(slug) ? bells.delete(slug) : bells.add(slug); store.set("notifyBells", [...bells]); return render(all); }
+  if (act === "app") { window.open(`http://localhost:${port(slug)}`, "_blank"); return; }
+  if (act === "appstop") { const r = await api(`${base}/appstop`, {}); return say(r.msg, r.ok ? "" : "bad"); }
+  if (act === "appstart") {
+    // Open the tab now (a tab opened after waiting gets blocked as a popup), then point it at the app once it's up.
+    const w = window.open("", "_blank");
+    w?.document.write("<p style='font:14px system-ui;padding:20px'>Starting the app…</p>");
+    say("Starting the app…");
+    const r = await api(`${base}/appstart`, {});
+    if (r.ok) { if (w) w.location = `http://localhost:${all.find((x) => x.slug === slug).port}`; return say(""); }
+    w?.close(); return say(r.msg, "bad");
+  }
+  if (act === "open") { const r = await api(`${base}/open`, {}); return say(r.msg || "Opened a new terminal tab.", r.ok === false ? "bad" : ""); }
+  if (act === "retry") { await api(`${base}/retry`, {}); return say("Retrying setup."); }
+  if (act === "unstick" || act === "stopturn") { const r = await api(`${base}/${act}`, { pid: b.dataset.pid }); return say(r.msg, r.ok ? "good" : "bad"); }
+  if (act === "resume-bg" || act === "resume-term") { const r = await api(`${base}/resume`, { where: act === "resume-bg" ? "background" : "terminal" }); return say(r.msg, r.ok ? "good" : "bad"); }
+  if (act === "send") {
+    const text = s.draft.trim(); if (!text) return;
+    s.draft = "";
+    // Ctrl+Enter sends with the cursor still in the box, which stops the card
+    // redrawing. Step out, let it redraw, then put the cursor back.
+    const inBox = document.activeElement?.closest?.(".compose");
+    if (inBox) document.activeElement.blur();
+    const after = (msg, cls) => { say(msg, cls); if (inBox) $(`[data-slug="${slug}"] .compose textarea`)?.focus(); };
+    // Show the message now instead of after the server answers and the chat
+    // reloads. The reload replaces this bubble; a failure removes it.
+    const chat = $(`[data-slug="${slug}"] [data-chat]`), box = $(`[data-slug="${slug}"] .compose textarea`);
+    let bubble;
+    if (chat) {
+      chat.querySelector(".hint")?.remove();
+      chat.insertAdjacentHTML("beforeend", `<div class="bubble me"><div class="md">${md(text)}</div><div class="who">You · sending…</div></div>`);
+      bubble = chat.lastElementChild; chat.scrollTop = chat.scrollHeight;
+    }
+    if (box) { box.value = ""; fitCompose(box); }
+    const r = await api(`${base}/feedback`, { text });
+    if (r.msg) { bubble?.remove(); s.draft = text; if (box) { box.value = text; fitCompose(box); } return after(r.msg, "bad"); }
+    return after(r.sent ? "" : { "busy-terminal": "Waiting: the agent is mid-turn in its terminal. Your message goes as soon as it finishes.", busy: "Waiting: the agent is mid-turn. Your message goes as soon as it finishes.", "not-started": "Waiting: the agent hasn't started yet. Your message goes once it has." }[r.why] || "");
+  }
+  if (act === "start") { say("Starting: making its branch and folder…"); const r = await api(`${base}/start`, {}); return say(r.msg || "Started. The agent begins in the background once setup finishes.", r.msg ? "bad" : "good"); }
+  if (act === "edit") { s.edit = !s.edit; s.etitle = null; s.eprompt = null; return render(all); }
+  if (act === "edit-save") {
+    const f = all.find((x) => x.slug === slug);
+    const r = await api(`${base}/edit`, { title: s.etitle ?? f.title, prompt: s.eprompt ?? f.prompt ?? "" });
+    if (r.msg) return say(r.msg, "bad");
+    s.edit = false; return say("Saved and committed on main.", "good");
+  }
+  if (act === "drop") {
+    const f = all.find((x) => x.slug === slug);
+    if (!(await ask(`Drop “${f.title}”?`, f.worktree ? "Its app stops and it stays on record under Dropped. Its folder and branch are kept until you remove the worktree, and the branch stays in git." : "It stays on record under Dropped.", "Drop"))) return;
+    const r = await api(`${base}/drop`, {}); return say(r.ok ? "" : r.msg, r.ok ? "" : "bad");
+  }
+  if (act === "merge") {
+    if (!(await ask("Check and merge?", "Runs pnpm check on the branch and merges it into main if it passes. Nothing is pushed.", "Check and merge"))) return;
+    say("Checking (starts the branch's server and runs pnpm check)…");
+    const r = await api(`${base}/merge`, {});
+    if (r.ok) return say(r.msg, "good");
+    let m = r.msg; if (r.files) m += "\nConflicting files:\n  " + r.files.join("\n  ") + "\n\nI've filled in a message asking the agent to fix it. Check it and press Send."; if (r.out) m += "\n\n" + r.out;
+    if (r.files) { s.draft = r.draft; s.fb = true; }
+    return say(m, "bad");
+  }
+  if (act === "remove") { if (!(await (all.find((x) => x.slug === slug).status === "dropped" ? ask("Remove the worktree?", "Deletes this dropped feature's folder. Its branch is kept in git.", "Remove") : ask("Remove the worktree?", "Deletes this feature's folder and branch. The feature and its notes stay in the list.", "Remove")))) return; const r = await api(`${base}/remove`, {}); return say(r.msg, r.ok ? "good" : "bad"); }
+  if (act === "reopen-go" || act === "reopen-plan") {
+    const f = all.find((x) => x.slug === slug), plan = act === "reopen-plan";
+    const title = (s.rtitle || f.title + " (continued)").trim(), prompt = s.rprompt.trim();
+    if (!prompt && !plan) return say("Say what you want changed this time.", "bad");
+    say("Creating…");
+    const r = await api(`${base}/reopen`, { title, prompt, plan });
+    if (r.msg) return say(r.msg, "bad");
+    Object.assign(s, { reopen: false, rtitle: "", rprompt: "" });
+    return say(plan ? `Saved "${r.title}" as planned.` : `Started ${r.branch}.`, "good");
+  }
+}
+
+// ---------- popups ----------
+// Open: the page dims and blurs, the panel rises and settles. Close (Close,
+// Escape, or a click outside the panel) plays it backwards, then closes.
+function openModal(d) {
+  // Lock the page without it jumping sideways when its scrollbar goes.
+  document.documentElement.style.paddingRight = innerWidth - document.documentElement.clientWidth + "px";
+  document.documentElement.classList.add("locked");
+  d.showModal(); requestAnimationFrame(() => requestAnimationFrame(() => d.classList.add("in")));
+}
+function closeModal(d) {
+  if (!d.open || !d.classList.contains("in")) return;
+  d.classList.remove("in");
+  setTimeout(() => { d.close(); document.documentElement.classList.remove("locked"); document.documentElement.style.paddingRight = ""; }, 200);
+}
+for (const d of document.querySelectorAll("dialog.modal")) {
+  d.addEventListener("cancel", (e) => { e.preventDefault(); closeModal(d); });
+  d.addEventListener("mousedown", (e) => { if (e.target === d) closeModal(d); }); // the backdrop
+  d.querySelector("[data-close]").onclick = () => closeModal(d);
+}
+// "Are you sure?" as a popup. Resolves true only if you press the button.
+let askDone = null;
+function ask(title, text, ok) {
+  $("#askTitle").textContent = title; $("#askText").textContent = text; $("#askOk").textContent = ok;
+  openModal($("#askDlg"));
+  return new Promise((res) => (askDone = res));
+}
+$("#askOk").onclick = () => { askDone?.(true); askDone = null; closeModal($("#askDlg")); };
+$("#askDlg").addEventListener("close", () => { askDone?.(false); askDone = null; });
+// Scrolling anywhere while a popup is open scrolls the popup, even with the
+// pointer over the dimmed page.
+document.addEventListener("wheel", (e) => {
+  const d = document.querySelector("dialog.modal[open]"); if (!d) return;
+  const body = d.querySelector(".body");
+  if (body.contains(e.target)) return; // already scrolling it, or a box inside it
+  e.preventDefault();
+  body.scrollTop += e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
+}, { passive: false });
+let MODELS = {}, DEF = null;
+function modelOptions(sel, withDefault) {
+  const opts = Object.entries(MODELS).filter(([id]) => id || !withDefault);
+  return (withDefault ? `<option value="">Agent default</option>` : "")
+    + opts.map(([id, name]) => `<option value="${id}" ${id === sel ? "selected" : ""}>${esc(name)}</option>`).join("");
+}
+// "Claude Code's default" also says which model that is, when it's known.
+function setModels(r) {
+  MODELS = { ...r.models };
+  const id = r.claudeDefault, name = id && (Object.entries(r.models).find(([k]) => k && id.startsWith(k))?.[1] || id);
+  if (name) MODELS[""] += ` (${name})`;
+  DEF = r.values;
+}
+async function loadDefaults() { const r = await api("/api/defaults"); setModels(r); return r; }
+
+// New feature: what you've typed is kept for this browser tab, so closing the
+// popup to look at another feature doesn't lose it. Cleared once it's created.
+const NEW_KEY = "newFeature";
+const saveNew = () => { try { sessionStorage.setItem(NEW_KEY, JSON.stringify({ title: $("#title").value, prompt: $("#prompt").value, model: $("#newModel").value })); } catch {} };
+let newDraft = {}; try { newDraft = JSON.parse(sessionStorage.getItem(NEW_KEY)) || {}; } catch {}
+$("#title").value = newDraft.title || ""; $("#prompt").value = newDraft.prompt || "";
+for (const id of ["#title", "#prompt", "#newModel"]) $(id).addEventListener("input", saveNew);
+$("#newOpen").onclick = async () => {
+  const keep = $("#newModel").value || newDraft.model || "";
+  await loadDefaults();
+  $("#newModel").innerHTML = modelOptions(keep, true);
+  $("#addMsg").textContent = "";
+  openModal($("#newDlg")); $("#title").focus();
+};
+async function addFeature(plan) {
+  const title = $("#title").value.trim(), prompt = $("#prompt").value.trim();
+  if (!title || (!plan && !prompt)) { $("#addMsg").textContent = plan ? "Needs a name." : "Needs a name and what you want. Or save it as planned."; return; }
+  $("#addMsg").textContent = "Creating…";
+  const r = await api("/api/features", { title, prompt, plan, model: $("#newModel").value });
+  if (r.msg) { $("#addMsg").textContent = r.msg; return; }
+  $("#title").value = ""; $("#prompt").value = ""; $("#newModel").value = ""; newDraft = {};
+  try { sessionStorage.removeItem(NEW_KEY); } catch {}
+  $("#addMsg").textContent = plan ? "Saved as planned." : `Started ${r.branch}.`;
+  setTimeout(() => closeModal($("#newDlg")), 700);
+  refresh();
+}
+$("#add").onclick = () => addFeature(false);
+$("#addPlan").onclick = () => addFeature(true);
+
+// Agent defaults. Everything the dashboard sends an agent is listed: what you
+// can change, then (at the bottom) what's fixed because the dashboard relies on it.
+let defaultsDirty = false, builtIn = {};
+const TEXTS = [
+  ["resumeText", "Carry on message", "Sent when you press Carry on after an agent was cut off mid-turn."],
+  ["freshText", "New session message", "Sent when a feature's saved conversation is gone and a new session starts. {title} and {slug} are filled in."],
+  ["conflictText", "Merge conflict message", "Filled into the chat box when Check and merge hits a conflict, for you to check and send. {files} is filled in."],
+];
+const FIELD_EL = { systemPrompt: "#dSystem", env: "#dEnv", allowedTools: "#dAllow", disallowedTools: "#dDeny" };
+function defaultsForm(r) {
+  const v = r.values, b = r.builtIn;
+  const reset = (k) => (JSON.stringify(v[k]) !== JSON.stringify(b[k]) ? ` <button class="reset" data-reset="${k}">reset to built-in</button>` : "");
+  const env = Object.entries(v.env).map(([k, x]) => `${k}=${x}`).join("\n");
+  const plugins = r.plugins.length ? r.plugins.map((p) => `<code>${esc(p)}</code>`).join(", ") : "none";
+  const pony = r.plugins.includes("ponytail") ? ` Ponytail switches itself on at the start of every session, at its own default level, which is <b>${esc(r.ponytailLevel)}</b> on this machine. That's why it isn't in the system prompt. ${v.env.PONYTAIL_DEFAULT_MODE ? `Agents run it at <b>${esc(v.env.PONYTAIL_DEFAULT_MODE)}</b>, from <code>PONYTAIL_DEFAULT_MODE</code> below.` : `To pick a level for agents only, add <code>PONYTAIL_DEFAULT_MODE=full</code> (or <code>off</code>, <code>lite</code>, <code>ultra</code>) under Environment variables.`}` : "";
+  return `
+    <div class="field"><label for="dModel">Model</label><select id="dModel">${modelOptions(v.model, false)}</select>
+      <div class="hint">Used by every feature that doesn't pick its own in New feature.</div></div>
+    <div class="field"><label for="dSystem">System prompt${reset("systemPrompt")}</label>
+      <textarea id="dSystem" class="tall" placeholder="Empty: agents get Claude Code's own system prompt, plus CLAUDE.md.">${esc(v.systemPrompt)}</textarea>
+      <div class="hint">Added to every agent's system prompt on every run. Slash commands don't run from here, so ask for a skill in words.</div></div>
+    <div class="field"><label>Already in every session</label>
+      <div class="hint">The repo's <code>CLAUDE.md</code> (its "Feature sessions" part is written for these agents), and your Claude Code plugins: ${plugins}.${pony}</div></div>
+    <div class="field"><label for="dEnv">Environment variables${reset("env")}</label>
+      <textarea id="dEnv" placeholder="NAME=value, one per line">${esc(env)}</textarea></div>
+    ${TEXTS.map(([k, name, hint]) => `<div class="field"><label for="d_${k}">${name}${reset(k)}</label><textarea id="d_${k}">${esc(v[k])}</textarea><div class="hint">${hint}</div></div>`).join("")}
+    <div class="field"><label for="dAllow">Background turns can, without asking${reset("allowedTools")}</label>
+      <textarea id="dAllow" class="tall">${esc(v.allowedTools.join("\n"))}</textarea>
+      <div class="hint">One Claude Code permission rule per line. Anything else a background turn tries is refused and listed in red on its card, and you can approve it with Open session.</div></div>
+    <div class="field"><label for="dDeny">Background turns can never${reset("disallowedTools")}</label>
+      <textarea id="dDeny">${esc(v.disallowedTools.join("\n"))}</textarea></div>
+    <details class="fixed"><summary>Also sent, and fixed because the dashboard relies on it</summary><ul>
+      <li>The first message: your words, then a marked block naming the feature and where to find the notes of continued and @tagged features.</li>
+      <li>Environment: <code>FEATURE_SLUG</code>, <code>PORT</code>, <code>DATA_DIR</code>, <code>APP_URL</code> and the git author. These win over yours if the names clash.</li>
+      <li>Hooks that report what the agent is doing and write <code>prompts.md</code>.</li>
+      <li>Background turns run with edits allowed (<code>--permission-mode acceptEdits</code>), resume the feature's own session, and are named after the feature.</li>
+      <li>The credentials file from <code>config.json</code> (<code>--settings</code>), so the dashboard never reads the key.</li>
+    </ul></details>`;
+}
+function fillDefaults(r) { $("#defaultsBody").innerHTML = defaultsForm(r); builtIn = r.builtIn; defaultsDirty = false; }
+$("#defaultsOpen").onclick = async () => {
+  if (!defaultsDirty) { fillDefaults(await loadDefaults()); $("#defaultsMsg").textContent = ""; }
+  openModal($("#defaultsDlg"));
+};
+const notSaved = () => { defaultsDirty = true; $("#defaultsMsg").textContent = "Not saved yet."; };
+$("#defaultsBody").addEventListener("input", notSaved);
+$("#defaultsBody").addEventListener("click", (e) => {
+  const k = e.target.dataset?.reset; if (!k) return;
+  const b = builtIn[k];
+  $(FIELD_EL[k] || "#d_" + k).value = Array.isArray(b) ? b.join("\n") : typeof b === "object" ? "" : b;
+  e.target.remove(); notSaved();
+});
+$("#defaultsSave").onclick = async () => {
+  const list = (id) => $(id).value.split("\n").map((x) => x.trim()).filter(Boolean);
+  const env = Object.fromEntries(list("#dEnv").filter((l) => l.includes("=")).map((l) => [l.slice(0, l.indexOf("=")).trim(), l.slice(l.indexOf("=") + 1).trim()]));
+  const body = { model: $("#dModel").value, systemPrompt: $("#dSystem").value.trim(), env, allowedTools: list("#dAllow"), disallowedTools: list("#dDeny") };
+  for (const [k] of TEXTS) body[k] = $("#d_" + k).value.trim();
+  const r = await api("/api/defaults", body);
+  if (r.msg) { $("#defaultsMsg").textContent = r.msg; return; }
+  setModels(r); fillDefaults(r);
+  $("#defaultsMsg").textContent = "Saved and committed on main.";
+};
+
+// ---------- @ mentions ----------
+// Typing @ in a description or message lists the features whose name or slug
+// matches what follows. Picking one writes @slug, which the server reads to
+// point the agent at that feature's notes.
+const menu = $("#mention"); let mTarget = null, mStart = 0, mItems = [], mOn = 0;
+function mentionCheck(t) {
+  const m = t.value.slice(0, t.selectionStart).match(/(^|\s)@([\w-]*)$/);
+  if (!m) return closeMention();
+  const q = m[2].toLowerCase();
+  mItems = all.filter((x) => x.slug !== t.dataset.self && (x.slug.includes(q) || x.title.toLowerCase().includes(q))).slice(0, 8);
+  if (!mItems.length) return closeMention();
+  if (mTarget !== t) mOn = 0;
+  mTarget = t; mStart = t.selectionStart - m[2].length - 1; mOn = Math.min(mOn, mItems.length - 1);
+  menu.innerHTML = mItems.map((x, i) => `<div data-i="${i}" class="${i === mOn ? "on" : ""}">${esc(x.title)}<small>@${esc(x.slug)} · ${esc(x.status)}</small></div>`).join("");
+  const r = t.getBoundingClientRect();
+  // A popup sits above the page, so the list has to live inside it to show.
+  const host = t.closest("dialog") || document.body;
+  if (menu.parentElement !== host) host.appendChild(menu);
+  const o = host === document.body ? { left: -scrollX, top: -scrollY } : host.getBoundingClientRect();
+  menu.style.left = r.left - o.left + "px"; menu.style.top = r.bottom - o.top + 4 + "px"; menu.hidden = false;
+}
+function closeMention() { menu.hidden = true; mTarget = null; mOn = 0; }
+function pickMention(i) {
+  const t = mTarget, x = mItems[i]; if (!t || !x) return;
+  const ins = "@" + x.slug + " ";
+  t.value = t.value.slice(0, mStart) + ins + t.value.slice(t.selectionStart);
+  t.selectionStart = t.selectionEnd = mStart + ins.length;
+  closeMention(); t.focus();
+  t.dispatchEvent(new Event("input", { bubbles: true })); // keeps the saved draft in step
+}
+document.addEventListener("input", (e) => { if (e.target.matches?.("[data-mention]")) mentionCheck(e.target); });
+document.addEventListener("keydown", (e) => {
+  if (menu.hidden || e.target !== mTarget) return;
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); mOn = (mOn + (e.key === "ArrowDown" ? 1 : mItems.length - 1)) % mItems.length; mentionCheck(e.target); }
+  else if ((e.key === "Enter" && !e.ctrlKey && !e.metaKey) || e.key === "Tab") { e.preventDefault(); e.stopPropagation(); pickMention(mOn); }
+  else if (e.key === "Escape") closeMention();
+}, true);
+document.addEventListener("focusout", (e) => { if (e.target === mTarget) setTimeout(() => { if (document.activeElement !== mTarget) closeMention(); }, 0); });
+menu.addEventListener("mousedown", (e) => { e.preventDefault(); const d = e.target.closest("[data-i]"); if (d) pickMention(Number(d.dataset.i)); });
+
+loadDefaults().catch(() => {}); refresh(); setInterval(refresh, 2000);
+</script>
+</body>
+</html>
