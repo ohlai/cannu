@@ -137,10 +137,13 @@ export function claudePids() {
 
 // What the card should say, from the last hook report plus whether the
 // processes are alive. open = a terminal session is running right now.
-export function liveStatus(st) {
+export function liveStatus(st, running = false) {
   const pids = claudePids();
   const term = !!st.pid && pids.has(st.pid);
-  const bg = !!st.headlessPid && pids.has(st.headlessPid);
+  // running: the dashboard just started a background turn whose PID may not
+  // be in the cached process list yet. Without it a sent message briefly read
+  // as "interrupted" and fired a notification.
+  const bg = running || (!!st.headlessPid && pids.has(st.headlessPid));
   // With a known PID we trust it. Without one (a session started by hand,
   // not from the dashboard) fall back to "a hook fired in the last 90s".
   const recent = !st.pid && !st.headlessPid && st.at && Date.now() - new Date(st.at) < 90e3;

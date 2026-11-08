@@ -562,7 +562,7 @@ async function overview() {
     const behind = exists ? Number(tryGit(APP, "rev-list", "--count", `${f.branch}..main`).out) || 0 : 0;
     const dirty = g("status", "--porcelain").split("\n").filter(Boolean).length;
     const lastCommit = g("log", "-1", "--format=%s (%cr)");
-    let live = liveStatus(st);
+    let live = liveStatus(st, running.has(f.slug));
     const stuckInfo = stuck(f, st, live);
     if (stuckInfo) live = { ...live, state: "stuck" };
     return { ...f, st, live, stuck: stuckInfo, settingUp: settingUp.has(f.slug), ahead, behind, dirty, lastCommit, worktree: true, appUp: exists && (await portUp(f.port)), usage: usage(f) };
