@@ -54,9 +54,9 @@
   .msg { margin-top:8px; font-size:13px; white-space:pre-wrap; }
   .msg.bad { color: var(--bad); } .msg.good { color: var(--idle); }
   /* Errors: a box about 3 lines tall that scrolls for the rest. */
-  .err { position:relative; margin-top:8px; border:2px solid color-mix(in srgb, var(--bad) 30%, transparent); border-radius:7px; background:var(--bg); }
+  .err { position:relative; margin-top:8px; border:2px solid color-mix(in srgb, var(--bad) 30%, transparent); border-radius:7px; background:color-mix(in srgb, var(--bad) 5%, var(--card)); }
   .err { cursor:pointer; } .err.full pre { max-height:calc(6 * 1.45em + 16px); }
-  .err pre { margin:0; padding:8px 70px 8px 10px; font-size:12px; line-height:1.45; color:var(--bad); white-space:pre-wrap; word-break:break-word; max-height:calc(3 * 1.45em + 16px); overflow:auto; }
+  .err pre { margin:0; padding:8px 110px 8px 10px; overflow-wrap:anywhere; font-size:12px; line-height:1.45; color:var(--bad); white-space:pre-wrap; word-break:break-word; max-height:calc(3 * 1.45em + 16px); overflow:auto; }
   .err button { position:absolute; top:50%; transform:translateY(-50%); right:18px; font-size:12px; padding:3px 8px; color:var(--bad); background:color-mix(in srgb, var(--bad) 12%, transparent); border:2px solid color-mix(in srgb, var(--bad) 30%, transparent); display:inline-flex; align-items:center; gap:5px; }
   .err button:hover { background:color-mix(in srgb, var(--bad) 22%, transparent); border-color:color-mix(in srgb, var(--bad) 45%, transparent); }
   /* An open box keeps Copy where it sat in the 3 line box: half of that box's height. */
@@ -206,7 +206,7 @@
   .tile .t { font-weight:600; font-size:13.5px; line-height:1.3; }
   .tile .activity { margin-top:6px; font-size:11.5px; }
   /* The card's last message (Checking…, Merged…, an error), two lines at most. Open the card for all of it. */
-  .tile .msg { margin-top:6px; font-size:12.5px; white-space:normal; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .tile .msg { margin-top:8px; padding-top:7px; border-top:1px solid var(--line); font-size:12.5px; white-space:normal; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
   .tile .snip { margin-top:6px; font-size:12.5px; color:var(--mute); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
   .tile .foot { display:flex; gap:6px; align-items:center; margin-top:8px; flex-wrap:wrap; }
   .tile .when { margin-left:auto; font-size:11.5px; color:var(--mute); white-space:nowrap; }
@@ -761,8 +761,8 @@ function tile(f) {
     <div class="t">${esc(f.title)}</div>
     ${st.activity && cls === "working" ? `<div class="activity">${esc(st.activity)}</div>` : ""}
     ${k === "waiting" && st.lastReply ? `<div class="snip">${esc(st.lastReply.replace(/[#*`>|]/g, "").trim().slice(0, 240))}</div>` : ""}
-    ${u(f.slug).msg ? `<div class="msg ${u(f.slug).cls}">${esc(u(f.slug).msg)}</div>` : ""}
-    <div class="foot">${view === "label" ? pill : f.label ? tagHtml(f.label) : ""}${f.merged && k !== "merged" ? `<span class="meta">merged</span>` : ""}<span class="when">${when}</span></div></div>`;
+    <div class="foot">${view === "label" ? pill : f.label ? tagHtml(f.label) : ""}${f.merged && k !== "merged" ? `<span class="meta">merged</span>` : ""}<span class="when">${when}</span></div>
+    ${u(f.slug).msg ? `<div class="msg ${u(f.slug).cls}">${esc(u(f.slug).msg)}</div>` : ""}</div>`;
 }
 
 function renderBoard(features) {
@@ -862,6 +862,10 @@ function renderPop() {
   const ta0 = document.activeElement?.matches?.("#popDlg .compose textarea") && document.activeElement;
   const sel0 = ta0 && [ta0.selectionStart, ta0.selectionEnd, ta0.scrollTop];
   const [cardHtml] = html.split("\u0000");
+  // A redraw resets every scrolled box, the popup itself included. Note each
+  // one's scroll (matched by position; the chat is moved over whole) and put it back after.
+  const boxes = () => [top, ...top.querySelectorAll(".err pre, .reply, .plan")];
+  const tops = boxes().map((b) => b.scrollTop);
   top.innerHTML = cardHtml; top._html = html;
   const c = top.firstElementChild;
   c.firstElementChild.insertAdjacentHTML("afterend", lab);
@@ -876,6 +880,7 @@ function renderPop() {
   const ta = top.querySelector(".compose textarea");
   if (ta) { ta.value = s.draft; fitCompose(ta, true); }
   if (ta && sel0) { ta.focus(); [ta.selectionStart, ta.selectionEnd, ta.scrollTop] = sel0; }
+  boxes().forEach((b, i) => { if (tops[i]) b.scrollTop = tops[i]; });
 }
 
 // The + slides open into a box; Enter makes the label and puts this feature in it.
