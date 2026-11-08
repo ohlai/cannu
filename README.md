@@ -52,6 +52,32 @@ dropped. The features on the old board in `notes/features.md`
 were imported on 2026-11-08, with their notes copied word for word into each
 `log.md`.
 
+## Board and list
+
+Three views, picked with the switcher left of the search box (same sliding
+style as the bells):
+
+- **By status**: a column per status (Waiting, Working, Planned, Merged,
+  Dropped). Cards move on their own as agents change.
+- **By label**: a column per label, plus Unlabelled. Drag a card to another
+  column to relabel it.
+- **List**: the old page, cards in a list with a filter per status.
+
+On the board, **Detailed** cards show the label (or status, by label), what a
+working agent is doing and the start of a waiting agent's last reply.
+**Compact** is one line per feature. **Hide completed** hides merged and
+dropped. All three are remembered per browser.
+
+Clicking a board card opens it in a popup with the cursor in the message box,
+so a card moving underneath never moves what you're doing. The popup has the
+card's details, its labels, the chat (tall even when it's short, and the box
+grows upwards so Send stays at its bottom right) and the card's buttons.
+
+**Labels**: one per feature, any text. Click one in the popup to set it (click
+it again to clear it), or click **+**, type a new one and press Enter. Saved as
+`- Label:` in `feature.md` and committed on main ("Label X: PT side"). A
+label's colour comes from its name.
+
 ## What each button does
 
 - **+ New feature** (a popup): name, what I want, and a model (the agent

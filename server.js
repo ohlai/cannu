@@ -691,6 +691,11 @@ http.createServer(async (req, res) => {
       const prompt = String(b.prompt || "").trim();
       return send(res, 200, createFeature(b.title.trim(), prompt, { continues: f.slug, refs: mentions(prompt, f.slug), plan: !!b.plan }));
     }
+    // One label per feature, any text. Empty clears it.
+    if (action === "label") {
+      const label = String(b.label || "").replace(/\s+/g, " ").trim().slice(0, 40);
+      return send(res, 200, update(f.slug, { label }, label ? `Label ${f.title}: ${label}` : `Unlabel ${f.title}`));
+    }
     if (action === "drop") return send(res, 200, dropFeature(f));
     if (action === "remove" && f.status === "dropped" && f.dir && !f.removed) return send(res, 200, removeFeature(f));
     if (f.status === "planned") {

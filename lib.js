@@ -32,7 +32,7 @@ fs.mkdirSync(STATE, { recursive: true });
 // ---------- feature.md ----------
 
 // Fields kept in feature.md, in the order they're written.
-const FIELDS = ["Status", "Created", "Started", "Branch", "Model", "Merged", "Dropped", "Continues", "Related", "Imported"];
+const FIELDS = ["Status", "Label", "Created", "Started", "Branch", "Model", "Merged", "Dropped", "Continues", "Related", "Imported"];
 export const MD_KEYS = new Set([...FIELDS.map((k) => k.toLowerCase()), "title", "prompt", "refs"]);
 
 export function parseFeatureMd(slug, text) {
