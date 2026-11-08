@@ -53,12 +53,16 @@
   .hint { color: var(--mute); font-size:12px; }
   .msg { margin-top:8px; font-size:13px; white-space:pre-wrap; }
   .msg.bad { color: var(--bad); } .msg.good { color: var(--idle); }
-  /* Errors: a box about 3 lines tall. Scroll it, or drag its corner to see more
-     (dragging sets an inline height, which lifts the cap). */
-  .err { position:relative; margin-top:8px; border:1px solid var(--bad); border-radius:7px; background:var(--bg); }
-  .err pre { margin:0; padding:8px 70px 8px 10px; font-size:12px; line-height:1.45; color:var(--bad); white-space:pre-wrap; word-break:break-word; max-height:calc(3 * 1.45em + 16px); overflow:auto; resize:vertical; }
-  .err pre[style*="height"] { max-height:none; }
-  .err button { position:absolute; top:6px; right:18px; font-size:12px; padding:3px 8px; }
+  /* Errors: a box about 3 lines tall that scrolls for the rest. */
+  .err { position:relative; margin-top:8px; border:2px solid color-mix(in srgb, var(--bad) 30%, transparent); border-radius:7px; background:var(--bg); }
+  .err { cursor:pointer; } .err.full pre { max-height:calc(6 * 1.45em + 16px); }
+  .err pre { margin:0; padding:8px 70px 8px 10px; font-size:12px; line-height:1.45; color:var(--bad); white-space:pre-wrap; word-break:break-word; max-height:calc(3 * 1.45em + 16px); overflow:auto; }
+  .err button { position:absolute; top:50%; transform:translateY(-50%); right:18px; font-size:12px; padding:3px 8px; color:var(--bad); background:color-mix(in srgb, var(--bad) 12%, transparent); border:2px solid color-mix(in srgb, var(--bad) 30%, transparent); display:inline-flex; align-items:center; gap:5px; }
+  .err button:hover { background:color-mix(in srgb, var(--bad) 22%, transparent); border-color:color-mix(in srgb, var(--bad) 45%, transparent); }
+  /* An open box keeps Copy where it sat in the 3 line box: half of that box's height. */
+  .err.full button { top:calc((3 * 1.45 * 12px + 16px) / 2); }
+  .err button span { min-width:6ch; text-align:left; } /* "Copied" is wider than "Copy"; keep the icon still */
+  .err button svg { width:14px; height:7px; fill:none; stroke:currentColor; stroke-width:2.2; stroke-linecap:round; }
   a { color: inherit; }
   details summary { cursor:pointer; color:var(--mute); font-size:13px; }
   .empty { color: var(--mute); text-align:center; padding: 30px; }
@@ -301,7 +305,11 @@ let all = [];
 function msgBlock(s) {
   if (!s.msg) return "";
   if (s.cls !== "bad") return `<div class="msg ${s.cls}">${esc(s.msg)}</div>`;
-  return `<div class="err"><pre>${esc(s.msg)}</pre><button data-act="copy" title="Copy the error">Copy</button></div>`;
+  return errBlock(s, "msg", s.msg);
+}
+// Click the box to make it up to 2x taller, fitting the error (it still scrolls past that); click again to shrink it.
+function errBlock(s, key, text) {
+  return `<div class="err ${s.errFull?.[key] ? "full" : ""}" data-act="errexpand" data-key="${key}" title="Click to show more"><pre>${esc(text)}</pre><button data-act="copy" title="Copy the error"><svg viewBox="0 0 24 12" aria-hidden="true"><path d="M8 1H6a5 5 0 0 0 0 10h2M16 1h2a5 5 0 0 1 0 10h-2M8 6h8"/></svg><span>Copy</span></button></div>`;
 }
 
 // [status, detail]. The detail (needs you, background…) shows after it.
@@ -384,7 +392,7 @@ function card(f) {
   const body = `${st.activity && cls === "working" ? `<div class="activity" style="margin-top:6px">${esc(st.activity)}</div>` : ""}
     ${banner}
     ${st.lastReply && !s.fb ? `<div class="reply md ${s.full ? "full" : ""}" data-act="expand" title="Click to show all of it">${md(st.lastReply)}</div>` : ""}
-    ${st.denied?.length ? `<div class="msg bad">Blocked in the background run (open the session to allow):\n${esc(st.denied.join("\n"))}</div>` : ""}`;
+    ${st.denied?.length ? errBlock(s, "denied", "Blocked in the background run (open the session to allow):\n" + st.denied.join("\n")) : ""}`;
   return `<div class="card" data-slug="${f.slug}">
     <div class="row top">
       ${bellBtn(f)}
@@ -620,7 +628,8 @@ async function onClick(e) {
   const slug = b.closest("[data-slug]").dataset.slug; const s = u(slug); const act = b.dataset.act;
   const say = (msg, cls = "") => { s.msg = msg; s.cls = cls; render(all); refresh(); };
   const base = `/api/features/${slug}`;
-  if (act === "copy") { try { await navigator.clipboard.writeText(s.msg); b.textContent = "Copied"; } catch { b.textContent = "Couldn't copy"; } setTimeout(() => { b.textContent = "Copy"; }, 1500); return; }
+  if (act === "copy") { try { await navigator.clipboard.writeText(b.closest(".err").querySelector("pre").textContent); b.lastChild.textContent = "Copied"; } catch { b.lastChild.textContent = "Couldn't copy"; } setTimeout(() => { b.lastChild.textContent = "Copy"; }, 1500); return; }
+  if (act === "errexpand") { (s.errFull ??= {})[b.dataset.key] = !s.errFull[b.dataset.key]; return render(all); }
   if (act === "expand") { s.full = !s.full; return render(all); }
   if (act === "collapse") { collapsed.has(slug) ? collapsed.delete(slug) : collapsed.add(slug); store.set("collapsed", [...collapsed]); turned = slug; render(all); turned = null; return; }
   // Chat opens a folded card back up.
@@ -846,6 +855,7 @@ $("#defaultsSave").onclick = async () => {
   if (r.msg) { $("#defaultsMsg").textContent = r.msg; return; }
   setModels(r); fillDefaults(r);
   $("#defaultsMsg").textContent = "Saved and committed on main.";
+  setTimeout(() => closeModal($("#defaultsDlg")), 700);
 };
 
 // ---------- @ mentions ----------
