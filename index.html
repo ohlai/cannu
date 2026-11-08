@@ -1015,6 +1015,8 @@ async function onClick(e) {
   }
   if (act === "merge") {
     if (!(await ask(`Check and merge “${all.find((x) => x.slug === slug).title}”?`,"Runs pnpm check on the branch and merges it into main if it passes. Nothing is pushed.", "Check and merge"))) return;
+    // Back to the board: the card shows Checking, then how it went.
+    if (popSlug === slug) closeModal($("#popDlg"));
     say("Checking (starts the branch's server and runs pnpm check)…");
     const r = await api(`${base}/merge`, {});
     if (r.ok) return say(r.msg, "good");
