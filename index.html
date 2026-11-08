@@ -55,7 +55,7 @@
   .msg.bad { color: var(--bad); } .msg.good { color: var(--idle); }
   /* Errors: a box about 3 lines tall that scrolls for the rest. */
   .err { position:relative; margin-top:8px; border:2px solid color-mix(in srgb, var(--bad) 30%, transparent); border-radius:7px; background:color-mix(in srgb, var(--bad) 5%, var(--card)); }
-  .err { cursor:pointer; } .err.full pre { max-height:calc(6 * 1.45em + 16px); }
+  .err { cursor:pointer; } .err.short { cursor:auto; } .err.full pre { max-height:calc(6 * 1.45em + 16px); }
   .err pre { margin:0; padding:8px 110px 8px 10px; overflow-wrap:anywhere; font-size:12px; line-height:1.45; color:var(--bad); white-space:pre-wrap; word-break:break-word; max-height:calc(3 * 1.45em + 16px); overflow:auto; }
   .err button { position:absolute; top:50%; transform:translateY(-50%); right:18px; font-size:12px; padding:3px 8px; color:var(--bad); background:color-mix(in srgb, var(--bad) 12%, transparent); border:2px solid color-mix(in srgb, var(--bad) 30%, transparent); display:inline-flex; align-items:center; gap:5px; }
   .err button:hover { background:color-mix(in srgb, var(--bad) 22%, transparent); border-color:color-mix(in srgb, var(--bad) 45%, transparent); }
@@ -937,7 +937,15 @@ $("#popDlg").addEventListener("keydown", (e) => {
 });
 $("#popDlg").addEventListener("focusout", (e) => { if (e.target.matches("[data-newlabel]") && !e.target.value.trim()) e.target.closest(".newlabel").classList.remove("open"); });
 
-async function refresh() { try { render(await api("/api/features")); } catch {} }
+// An error that fits in its box has nothing to open: no pointer, no "show more".
+function markShortErrors() {
+  for (const e of document.querySelectorAll(".err:not(.full)")) {
+    const pre = e.querySelector("pre"), short = pre.scrollHeight <= pre.clientHeight + 1;
+    e.classList.toggle("short", short);
+    e.title = short ? "" : "Click to show more";
+  }
+}
+async function refresh() { try { render(await api("/api/features")); markShortErrors(); } catch {} }
 
 for (const host of [$("#list"), $("#popDlg")]) {
 host.addEventListener("input", (e) => {
@@ -963,7 +971,12 @@ async function onClick(e) {
   if (act === "newlabel") { if (!b.classList.contains("open")) { b.classList.add("open"); b.querySelector("input").focus(); } return; }
   if (act === "label") { const f = all.find((x) => x.slug === slug); return setLabel(slug, b.dataset.label === f.label ? "" : b.dataset.label); }
   if (act === "copy") { try { await navigator.clipboard.writeText(b.closest(".err").querySelector("pre").textContent); b.lastChild.textContent = "Copied"; } catch { b.lastChild.textContent = "Couldn't copy"; } setTimeout(() => { b.lastChild.textContent = "Copy"; }, 1500); return; }
-  if (act === "errexpand") { (s.errFull ??= {})[b.dataset.key] = !s.errFull[b.dataset.key]; return render(all); }
+  if (act === "errexpand") {
+    // Nothing hidden (a one line error): nothing to open, so the box and Copy stay put.
+    const pre = b.querySelector("pre");
+    if (!s.errFull?.[b.dataset.key] && pre.scrollHeight <= pre.clientHeight + 1) return;
+    (s.errFull ??= {})[b.dataset.key] = !s.errFull[b.dataset.key]; render(all); return markShortErrors();
+  }
   if (act === "expand") { s.full = !s.full; return render(all); }
   if (act === "collapse") { collapsed.has(slug) ? collapsed.delete(slug) : collapsed.add(slug); store.set("collapsed", [...collapsed]); turned = slug; render(all); turned = null; return; }
   // Chat opens a folded card back up.
