@@ -1063,7 +1063,11 @@ async function onClick(e) {
     if (r.files) { s.draft = r.draft; s.fb = true; }
     return say(m, "bad");
   }
-  if (act === "remove") { if (!(await (all.find((x) => x.slug === slug).status === "dropped" ? ask("Remove the worktree?", "Deletes this dropped feature's folder. Its branch is kept in git.", "Remove") : ask("Remove the worktree?", "Deletes this feature's folder and branch. The feature and its notes stay in the list.", "Remove")))) return; const r = await api(`${base}/remove`, {}); return say(r.msg, r.ok ? "good" : "bad"); }
+  if (act === "remove") {
+    const f = all.find((x) => x.slug === slug);
+    if (!(await ask(`Remove the worktree for “${f.title}”?`, f.status === "dropped" ? "Deletes this dropped feature's folder. Its branch is kept in git." : "Deletes this feature's folder and branch. The feature and its notes stay in the list.", "Remove"))) return;
+    const r = await api(`${base}/remove`, {}); return say(r.msg, r.ok ? "good" : "bad");
+  }
   if (act === "reopen-go" || act === "reopen-plan") {
     const f = all.find((x) => x.slug === slug), plan = act === "reopen-plan";
     const title = (s.rtitle || f.title + " (continued)").trim(), prompt = s.rprompt.trim();
