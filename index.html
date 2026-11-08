@@ -683,15 +683,36 @@ async function loadChat(slug) {
   const r = await api(`/api/features/${slug}/chat`);
   const el = $(`[data-slug="${slug}"] [data-chat]`); if (!el) return;
   const f = all.find((x) => x.slug === slug);
-  const atBottom = !el.dataset.loaded || el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+  // First load: where you left it, else the newest. After that, you're
+  // "following" if you're at the newest message (anywhere in it); then a new
+  // message shows its start. Scrolled further up, nothing moves.
+  const first = !el.dataset.loaded;
+  const following = first || atNewest(el);
+  const count = el.children.length, y = el.scrollTop;
   el.innerHTML = r.messages?.length ? r.messages.map((m) => `<div class="bubble ${m.who}">
       <div class="md">${md(m.who === "dashboard" ? m.text.replace(/^\[Added by the dashboard, not my words\]\s*/, "") : m.text)}</div>
       <div class="who">${{ me: "You", agent: "Agent", dashboard: "Sent by the dashboard" }[m.who]}${m.queued ? " · waiting to send" : m.at ? " · " + new Date(m.at).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : ""}</div>
     </div>`).join("") : `<div class="hint">${r.saved === false ? "This session has no saved conversation yet." : "No messages yet."}</div>`;
   el.dataset.loaded = "1";
   el.dataset.at = String(f?.st?.at) + (f?.st?.queue?.length || 0);
-  if (atBottom) el.scrollTop = el.scrollHeight;
+  const saved = chatSpot[slug];
+  if (first && typeof saved === "number") el.scrollTop = saved;
+  else if (following && (first || el.children.length !== count)) toNewest(el);
+  else el.scrollTop = y; // same messages: stay exactly where you are
 }
+// At the newest message: its start is at or above the top of the box.
+function atNewest(el) {
+  const b = el.lastElementChild; if (!b) return true;
+  return el.scrollTop >= b.offsetTop - el.offsetTop - 40;
+}
+// The top of the newest message, a little above it so the one before shows its end.
+function toNewest(el) {
+  const b = el.lastElementChild; if (!b) return;
+  el.scrollTop = Math.max(0, b.offsetTop - el.offsetTop - 12);
+}
+// Where you'd scrolled each feature's chat to when you closed it, kept for this
+// tab. false (or nothing) means you were at the newest message, so open there.
+const chatSpot = {};
 
 // One line: Send sits to the right. Once the text wraps (measured at the
 // one-line width, so it doesn't flick back and forth), the box takes the full
@@ -834,7 +855,8 @@ function nameNewCol(c, slug) {
 // ---------- feature popup ----------
 let popSlug = null;
 function openPop(slug) {
-  popSlug = slug; $("#popTop")._html = "";
+  // Start empty: the last popup's chat (maybe another feature's) mustn't be reused.
+  popSlug = slug; $("#popTop")._html = ""; $("#popTop").innerHTML = "";
   renderPop();
   openModal($("#popDlg"));
   // Straight into the message box, or the popup itself when there's no chat.
@@ -843,7 +865,13 @@ function openPop(slug) {
   if (ta) { fitCompose(ta, true); ta.focus(); ta.selectionStart = ta.selectionEnd = ta.value.length; }
   else $("#popDlg [data-close]").focus();
 }
+function rememberChat() {
+  const el = popSlug && $("#popTop [data-chat][data-loaded]"); if (!el) return;
+  chatSpot[popSlug] = atNewest(el) ? false : el.scrollTop;
+}
 $("#popDlg").addEventListener("close", () => { popSlug = null; });
+// Noted as you scroll, so it's right whenever the popup closes.
+$("#popDlg").addEventListener("scroll", (e) => { if (e.target.matches?.("[data-chat][data-loaded]")) rememberChat(); }, true);
 
 function renderPop() {
   const f = all.find((x) => x.slug === popSlug); if (!f) return closeModal($("#popDlg"));
@@ -856,6 +884,7 @@ function renderPop() {
   s.draft = draft;
   const top = $("#popTop");
   const thread = top.querySelector("[data-chat][data-loaded]");
+  const threadY = thread?.scrollTop; // read now: once it's out of the page it reads 0
   // Typing a new label: leave it be until Enter or Escape.
   const naming = document.activeElement?.matches?.("#popDlg [data-newlabel]");
   if (top._html === html || naming || mouseDown) {
@@ -879,7 +908,7 @@ function renderPop() {
   $("#popActs").replaceChildren(...(acts ? [acts] : []));
   const slot = top.querySelector("[data-chat]");
   // Taking the thread out of the page resets its scroll, so put it back.
-  if (slot && thread) { const y = thread.scrollTop; slot.replaceWith(thread); thread.scrollTop = y; }
+  if (slot && thread) { slot.replaceWith(thread); thread.scrollTop = threadY; }
   if (slot && (!thread || thread.dataset.at !== String(f.st?.at) + (f.st?.queue?.length || 0))) loadChat(f.slug);
   const ta = top.querySelector(".compose textarea");
   if (ta) { ta.value = s.draft; fitCompose(ta, true); }
