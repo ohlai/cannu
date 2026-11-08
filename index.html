@@ -150,6 +150,9 @@
   dialog.modal { border:0; padding:0; background:none; color:var(--fg); max-width:min(680px, calc(100vw - 32px)); width:100%; overflow:visible; }
   dialog.modal::backdrop { background:rgba(10,10,12,.35); backdrop-filter:blur(0); opacity:0; transition:opacity .28s ease, backdrop-filter .28s ease; }
   dialog.modal.in::backdrop { opacity:1; backdrop-filter:blur(6px); }
+  /* A popup under another one drops its own dim and blur: the top one's backdrop
+     covers it and the page once, so nothing is darkened or blurred twice. */
+  dialog.modal.in.under::backdrop { opacity:0; backdrop-filter:blur(0); }
   .panel { background:var(--card); border:1px solid var(--line); border-radius:14px; box-shadow:0 24px 64px rgba(0,0,0,.22), 0 2px 8px rgba(0,0,0,.08);
     max-height:calc(100vh - 64px); display:flex; flex-direction:column;
     opacity:0; transform:translateY(14px) scale(.97); transition:opacity .2s ease, transform .2s ease; }
@@ -1023,9 +1026,9 @@ async function onClick(e) {
     const r = await api(`${base}/drop`, {}); return say(r.ok ? "" : r.msg, r.ok ? "" : "bad");
   }
   if (act === "merge") {
-    if (!(await ask(`Check and merge “${all.find((x) => x.slug === slug).title}”?`,"Runs pnpm check on the branch and merges it into main if it passes. Nothing is pushed.", "Check and merge"))) return;
-    // Back to the board: the card shows Checking, then how it went.
+    // Back to the board straight away: the card shows Checking, then how it went.
     if (popSlug === slug) closeModal($("#popDlg"));
+    if (!(await ask(`Check and merge “${all.find((x) => x.slug === slug).title}”?`,"Runs pnpm check on the branch and merges it into main if it passes. Nothing is pushed.", "Check and merge"))) return;
     say("Checking (starts the branch's server and runs pnpm check)…");
     const r = await api(`${base}/merge`, {});
     if (r.ok) return say(r.msg, "good");
@@ -1053,11 +1056,15 @@ function openModal(d) {
   // Lock the page without it jumping sideways when its scrollbar goes.
   document.documentElement.style.paddingRight = innerWidth - document.documentElement.clientWidth + "px";
   document.documentElement.classList.add("locked");
+  for (const o of document.querySelectorAll("dialog.modal[open]")) if (o !== d) o.classList.add("under");
   d.showModal(); requestAnimationFrame(() => requestAnimationFrame(() => d.classList.add("in")));
 }
 function closeModal(d) {
   if (!d.open || !d.classList.contains("in")) return;
   d.classList.remove("in");
+  // The popup underneath, if any, takes its dim and blur back as this one fades.
+  const below = [...document.querySelectorAll("dialog.modal[open]")].filter((o) => o !== d).pop();
+  below?.classList.remove("under");
   setTimeout(() => {
     d.close();
     if (document.querySelector("dialog.modal[open]")) return; // another popup is still up (Drop's "are you sure?" over a feature)

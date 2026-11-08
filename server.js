@@ -503,7 +503,8 @@ async function merge(f) {
     return { ok: false, step: "conflict", msg: "Merging conflicts with main. Nothing was changed on main.", files: list, draft: fill(defaults().conflictText, { files: list.join(", ") }) };
   }
   update(f.slug, { status: "merged", merged: stamp() }, `Merged: ${f.title}`);
-  return { ok: true, msg: `Merged into main. Not pushed.` };
+  stopApp(f); // merged: its preview is done with
+  return { ok: true, msg: `Merged into main and stopped its preview. Not pushed.` };
 }
 
 // A bad idea, planned or part built. A built one's app stops, but its folder
