@@ -1053,12 +1053,11 @@ async function onClick(e) {
   }
   if (act === "merge") {
     if (!(await ask(`Check and merge “${all.find((x) => x.slug === slug).title}”?`,"Runs pnpm check on the branch and merges it into main if it passes. Nothing is pushed.", "Check and merge"))) return;
-    // Yes: back to the board, where the card shows Checking, then how it went.
-    // The question goes first; the feature popup follows a beat later.
-    if (popSlug === slug) setTimeout(() => closeModal($("#popDlg")), 160);
+    // The feature popup stays open while it checks and merges, and closes only
+    // once it's merged. A failed check or merge leaves it open with the error.
     say("Checking (starts the branch's server and runs pnpm check)…");
     const r = await api(`${base}/merge`, {});
-    if (r.ok) return say(r.msg, "good");
+    if (r.ok) { if (popSlug === slug) closeModal($("#popDlg")); return say(r.msg, "good"); }
     let m = r.msg; if (r.files) m += "\nConflicting files:\n  " + r.files.join("\n  ") + "\n\nI've filled in a message asking the agent to fix it. Check it and press Send."; if (r.out) m += "\n\n" + r.out;
     if (r.files) { s.draft = r.draft; s.fb = true; }
     return say(m, "bad");
