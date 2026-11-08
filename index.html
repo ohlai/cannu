@@ -183,6 +183,8 @@
   /* Everything but the board keeps the page's width, so switching views moves nothing above it. */
   main { max-width:none; }
   main > *:not(#board) { max-width:1068px; margin-left:auto; margin-right:auto; }
+  /* The board's own gap from the window edges, on top of the page's 16px. */
+  #board { padding:0 16px; }
   /* The view switcher, colours flipped: a black box, the picked view on a white square. */
   #viewSeg { background:var(--fg); border-color:var(--fg); }
   #viewSeg .thumb { background:var(--bg); }
@@ -533,17 +535,16 @@ function simpleCard(f) {
       ${head(f, cls, label, "")}
     </div>
     ${planned && !s.edit && f.prompt ? `<div class="plan md">${md(f.prompt)}</div>` : ""}
-    ${actions(planned
-      ? `<button data-act="edit">${s.edit ? "Cancel edit" : "Edit"}</button><button data-act="drop" title="Keep it on record as dropped">Drop</button>`
-      : `<button data-act="reopen">${s.reopen ? "Cancel reopen" : "Reopen"}</button>`,
-      planned ? `<button class="primary" data-act="start" title="Make its branch and start an agent on what it says">Start agent</button>`
-      : leftover ? `<button class="primary" data-act="remove" title="Delete its folder. The unmerged branch is kept, so the work is still in git.">Remove worktree</button>` : "")}
     ${s.edit ? `<div style="margin-top:10px; display:grid; gap:8px">
       <input type="text" data-field="etitle" value="${esc(s.etitle ?? f.title)}">
       <textarea data-field="eprompt" data-mention data-self="${f.slug}" placeholder="What you want and why. This is what the agent starts on.">${esc(s.eprompt ?? f.prompt ?? "")}</textarea>
       ${MENTION_HINT}
-      <div class="row"><button class="primary" data-act="edit-save">Save</button></div>
     </div>` : ""}
+    ${actions(planned
+      ? `<button data-act="edit">${s.edit ? "Cancel edit" : "Edit"}</button><button data-act="drop" title="Keep it on record as dropped">Drop</button>`
+      : `<button data-act="reopen">${s.reopen ? "Cancel reopen" : "Reopen"}</button>`,
+      planned ? `${s.edit ? `<button data-act="edit-save" title="Save the name and description on main">Save</button>` : ""}<button class="primary" data-act="start" title="Make its branch and start an agent on what it says">Start agent</button>`
+      : leftover ? `<button class="primary" data-act="remove" title="Delete its folder. The unmerged branch is kept, so the work is still in git.">Remove worktree</button>` : "")}
     ${s.reopen ? `<div style="margin-top:10px; display:grid; gap:8px">
       <div class="hint">A new feature that continues this one. Start agent makes a new branch from current main with a new session, and the agent reads this feature's notes first. Save as planned records it to start later.</div>
       <input type="text" data-field="rtitle" value="${esc(s.rtitle || f.title + " (continued)")}">
@@ -878,10 +879,13 @@ function renderPop() {
   const s = u(f.slug);
   const lab = `<div class="labels" data-slug="${f.slug}">${labels().map((l) => `<button class="tag ${l === f.label ? "" : "off"}" style="--h:${hue(l)}" data-act="label" data-label="${esc(l)}" title="${l === f.label ? "Click to remove this label" : "Label it " + esc(l) + " (a feature has one label)"}">${esc(l)}</button>`).join("")}
     <span class="newlabel" data-act="newlabel" title="New label"><span class="plus"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M5 1v8M1 5h8"/></svg></span><input type="text" data-newlabel placeholder="New label" maxlength="40" aria-label="New label"></span></div>`;
-  // Built without the draft: what you type isn't a change to redraw for.
-  const draft = s.draft; s.draft = "";
+  // Built without anything typed (the message, an edit, a reopen): typing
+  // isn't a change to redraw for. Every refresh redrew it, which threw the
+  // cursor out of the box you were typing in.
+  const typed = Object.fromEntries(TYPED.map((k) => [k, s[k]]));
+  Object.assign(s, { draft: "", etitle: null, eprompt: null, rtitle: "", rprompt: "" });
   const html = (f.worktree ? card(f, true) : simpleCard(f)) + "\u0000" + lab;
-  s.draft = draft;
+  Object.assign(s, typed);
   const top = $("#popTop");
   const thread = top.querySelector("[data-chat][data-loaded]");
   const threadY = thread?.scrollTop; // read now: once it's out of the page it reads 0
@@ -891,8 +895,8 @@ function renderPop() {
     if (thread && thread.dataset.at !== String(f.st?.at) + (f.st?.queue?.length || 0)) loadChat(f.slug);
     return;
   }
-  // Redrawn while you type in the message box: put the cursor back where it was.
-  const ta0 = document.activeElement?.matches?.("#popDlg .compose textarea") && document.activeElement;
+  // Redrawn while you type in any box: put the cursor back where it was.
+  const ta0 = document.activeElement?.matches?.("#popTop [data-field]") && document.activeElement;
   const sel0 = ta0 && [ta0.selectionStart, ta0.selectionEnd, ta0.scrollTop];
   const [cardHtml] = html.split("\u0000");
   // A redraw resets every scrolled box, the popup itself included. Note each
@@ -910,11 +914,16 @@ function renderPop() {
   // Taking the thread out of the page resets its scroll, so put it back.
   if (slot && thread) { slot.replaceWith(thread); thread.scrollTop = threadY; }
   if (slot && (!thread || thread.dataset.at !== String(f.st?.at) + (f.st?.queue?.length || 0))) loadChat(f.slug);
+  // What you'd typed goes back into its box (the HTML was built without it).
+  for (const el of top.querySelectorAll("[data-field]")) if (s[el.dataset.field] != null) el.value = s[el.dataset.field];
   const ta = top.querySelector(".compose textarea");
-  if (ta) { ta.value = s.draft; fitCompose(ta, true); }
-  if (ta && sel0) { ta.focus(); [ta.selectionStart, ta.selectionEnd, ta.scrollTop] = sel0; }
+  if (ta) fitCompose(ta, true);
+  const back = ta0 && top.querySelector(`[data-field="${ta0.dataset.field}"]`);
+  if (back) { back.focus(); [back.selectionStart, back.selectionEnd, back.scrollTop] = sel0; }
   boxes().forEach((b, i) => { if (tops[i]) b.scrollTop = tops[i]; });
 }
+
+const TYPED = ["draft", "etitle", "eprompt", "rtitle", "rprompt"];
 
 // The + slides open into a box; Enter makes the label and puts this feature in it.
 const shutLabel = (box) => { const w = box.closest(".newlabel"); w.classList.remove("open"); box.value = ""; box.blur(); };
