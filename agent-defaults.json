@@ -1,5 +1,6 @@
 {
   "model": "claude-opus-5-5",
+  "systemPrompt": "In background runs, write files with Write or Edit, never with cat >> or heredocs.",
   "env": {
     "PONYTAIL_DEFAULT_MODE": "full"
   }
