@@ -487,6 +487,11 @@ function render(features) {
   // Filter chips, with how many features each would show.
   const inGroup = (f, g) => g === "all" || kind(f)[0] === g;
   $("#chips").innerHTML = ["all", ...CHIPS].map((g) => `<button data-filter="${g}" title="${KIND_TIPS[g]}" class="${g === filter ? "on" : ""}">${cap(g)}<span class="n">${features.filter((f) => inGroup(f, g)).length}</span></button>`).join("");
+  // Rebuilding the cards mid-drag, or under a selection, throws the selection
+  // onto whatever HTML replaced it, which looked like the whole page selecting
+  // itself. Hold the cards still until the selection is let go.
+  const sel = getSelection();
+  if (mouseDown || (sel && !sel.isCollapsed && $("#list").contains(sel.anchorNode))) return;
   if (typing) { // don't wipe what you're typing, but keep open chats up to date
     for (const f of features) {
       const el = u(f.slug).fb && $(`[data-slug="${f.slug}"] [data-chat][data-loaded]`);
@@ -840,6 +845,9 @@ document.addEventListener("keydown", (e) => {
 document.addEventListener("focusout", (e) => { if (e.target === mTarget) setTimeout(() => { if (document.activeElement !== mTarget) closeMention(); }, 0); });
 menu.addEventListener("mousedown", (e) => { e.preventDefault(); const d = e.target.closest("[data-i]"); if (d) pickMention(Number(d.dataset.i)); });
 
+let mouseDown = false;
+document.addEventListener("mousedown", () => { mouseDown = true; });
+document.addEventListener("mouseup", () => { mouseDown = false; });
 loadDefaults().catch(() => {}); refresh(); setInterval(refresh, 2000);
 </script>
 </body>

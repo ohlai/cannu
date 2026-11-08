@@ -26,7 +26,11 @@
     "Bash(tail:*)",
     "Bash(python:*)",
     "Bash(powershell:*)",
-    "Bash(git merge:*)"
+    "Bash(git merge:*)",
+    "Bash(cd:*)",
+    "Bash(grep:*)",
+    "Bash(wc:*)",
+    "Bash(head:*)"
   ],
   "headlessDisallowedTools": [
     "Bash(git push:*)",
