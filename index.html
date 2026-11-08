@@ -487,9 +487,8 @@ function render(features) {
   // Filter chips, with how many features each would show.
   const inGroup = (f, g) => g === "all" || kind(f)[0] === g;
   $("#chips").innerHTML = ["all", ...CHIPS].map((g) => `<button data-filter="${g}" title="${KIND_TIPS[g]}" class="${g === filter ? "on" : ""}">${cap(g)}<span class="n">${features.filter((f) => inGroup(f, g)).length}</span></button>`).join("");
-  // Rebuilding the cards mid-drag, or under a selection, throws the selection
-  // onto whatever HTML replaced it, which looked like the whole page selecting
-  // itself. Hold the cards still until the selection is let go.
+  // Replacing a card under a drag or a selection throws the selection onto
+  // the new HTML. Hold the cards still until it's let go.
   const sel = getSelection();
   if (mouseDown || (sel && !sel.isCollapsed && $("#list").contains(sel.anchorNode))) return;
   if (typing) { // don't wipe what you're typing, but keep open chats up to date
@@ -510,17 +509,47 @@ function render(features) {
   const urgent = { "needs-you": 0, stuck: 0, interrupted: 1, "not-started": 1, failed: 1, error: 2 };
   const rank = (f) => KINDS.indexOf(kind(f)[0]) * 10 + (urgent[status(f)[0]] ?? 5);
   shown.sort((a, b) => rank(a) - rank(b) || String(b.merged || b.dropped || b.started || b.created || "").localeCompare(String(a.merged || a.dropped || a.started || a.created || "")));
-  $("#list").innerHTML = shown.length ? shown.map((f) => (f.worktree ? card(f) : simpleCard(f))).join("")
-    : `<div class="card empty">${q ? "Nothing matches that search." : filter === "all" ? "No features yet. Add one with + New feature." : `Nothing is ${filter} right now.`}</div>`;
+  const html = shown.length ? shown.map((f) => (f.worktree ? card(f) : simpleCard(f)))
+    : [`<div class="card empty">${q ? "Nothing matches that search." : filter === "all" ? "No features yet. Add one with + New feature." : `Nothing is ${filter} right now.`}</div>`];
+  patchList(html);
   for (const f of shown) {
     const s = u(f.slug);
     const slot = s.fb && $(`[data-slug="${f.slug}"] [data-chat]`);
     if (!slot) continue;
     const old = keep[f.slug];
-    if (old) { slot.replaceWith(old); old.scrollTop = +old.dataset.top; }
+    if (old && old !== slot) { slot.replaceWith(old); old.scrollTop = +old.dataset.top; }
     if (!old || old.dataset.at !== String(f.st?.at) + (f.st?.queue?.length || 0)) loadChat(f.slug);
   }
   for (const ta of document.querySelectorAll(".compose textarea")) fitCompose(ta, true);
+}
+
+// The list is redrawn every 2 seconds. Rewriting all of it reset every
+// scrolled box inside the cards and briefly changed the page's height, so the
+// page jumped while scrolling. Now a card is only swapped when its HTML
+// changed, and the scroll of each box inside it carries over.
+function patchList(html) {
+  const list = $("#list");
+  const tpl = document.createElement("template");
+  tpl.innerHTML = html.join("");
+  const next = [...tpl.content.children];
+  next.forEach((el, i) => (el._html = html[i])); // what it was built from; the live DOM drifts (open chats, box sizes)
+  const old = new Map([...list.children].map((el) => [el.dataset.slug ?? "", el]));
+  let at = list.firstElementChild;
+  for (const el of next) {
+    const cur = old.get(el.dataset.slug ?? "");
+    let use = el;
+    if (cur && cur._html === el._html) use = cur; // unchanged: keep the node and its scroll
+    else if (cur) {
+      // Changed: carry over the scroll of each box, matched by position.
+      const tops = [...cur.querySelectorAll(".reply, .thread")].map((b) => b.scrollTop);
+      [...el.querySelectorAll(".reply, .thread")].forEach((b, i) => { if (tops[i]) requestAnimationFrame(() => (b.scrollTop = tops[i])); });
+    }
+    if (cur && use !== cur) cur.replaceWith(use);
+    else if (use !== at) list.insertBefore(use, at);
+    at = use.nextElementSibling;
+    old.delete(el.dataset.slug ?? "");
+  }
+  for (const el of old.values()) el.remove();
 }
 
 // The conversation, newest at the bottom. Reloaded when the agent's state
