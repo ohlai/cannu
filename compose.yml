@@ -1,0 +1,29 @@
+# Cannu on a Linux server. Before the first `docker compose up -d --build`:
+#   1. Clone each repo Cannu should run into one folder, kept for Cannu (not
+#      a folder a live container builds from).
+#   2. cp config.example.json config.json and list those clones under "repos".
+#   3. Set CANNU_REPOS below to that folder, and HOME_DIR to your home folder.
+#   4. Log in to Claude Code and gh as yourself on the host once. The
+#      container uses those logins.
+services:
+  cannu:
+    build: .
+    user: "1000:1000"
+    # Host network: previews come up on their own ports, and agents reach
+    # Cannu on localhost. Host PIDs: an agent opened from an SSH terminal on
+    # the host is still seen as running.
+    network_mode: host
+    pid: host
+    working_dir: ${PWD}
+    command: sh -c "gh auth setup-git 2>/dev/null; exec node server.js"
+    restart: unless-stopped
+    environment:
+      HOME: /home/node
+    volumes:
+      # Same paths inside and out: worktrees record absolute paths, and
+      # Claude Code names each transcript folder after the working directory.
+      - ${PWD}:${PWD}
+      - ${CANNU_REPOS:-/home/oli/cannu-repos}:${CANNU_REPOS:-/home/oli/cannu-repos}
+      - ${HOME_DIR:-/home/oli}/.claude:/home/node/.claude
+      - ${HOME_DIR:-/home/oli}/.claude.json:/home/node/.claude.json
+      - ${HOME_DIR:-/home/oli}/.config/gh:/home/node/.config/gh

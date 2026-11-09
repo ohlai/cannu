@@ -1,0 +1,4 @@
+{
+  "commitNotes": false,
+  "check": "node --check server.js && node --check repo.js && node --check lib.js && node --check hook.js && node --check launch.js"
+}

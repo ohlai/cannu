@@ -1,11 +1,11 @@
 // Claude Code runs this on session and turn events in a feature worktree
 // (wired up in that worktree's .claude/settings.local.json). It records
-// what the agent is doing for the dashboard, and appends every message Oli
-// sends, word for word, to notes/features/<slug>/prompts.md.
+// what the agent is doing for the dashboard, and appends every message you
+// send, word for word, to <notes>/<slug>/prompts.md.
 // It must never block the session, so every failure is swallowed.
 import fs from "node:fs";
 import path from "node:path";
-import { findByDir, writeState, readState, stamp, AUTO } from "./lib.js";
+import { findByDir, writeState, stamp, AUTO, notesDir } from "./lib.js";
 
 let raw = "";
 process.stdin.on("data", (c) => (raw += c));
@@ -38,7 +38,7 @@ function run(h) {
       break;
     case "UserPromptSubmit": {
       writeState(f.slug, { ...base, state: "working", activity: "thinking", lastPrompt: h.prompt });
-      const dir = path.join(f.dir, "notes", "features", f.slug);
+      const dir = notesDir(f);
       fs.mkdirSync(dir, { recursive: true });
       const file = path.join(dir, "prompts.md");
       if (!fs.existsSync(file)) fs.writeFileSync(file, `# ${f.title}: everything I said\n\nWritten by a hook, word for word. Never edited.\n`);

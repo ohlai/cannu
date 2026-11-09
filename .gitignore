@@ -1,0 +1,5 @@
+config.json
+local/
+state/
+.env
+*.bak

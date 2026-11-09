@@ -1,0 +1,14 @@
+{
+  "main": "main",
+  "notes": "notes/features",
+  "copy": ["data/app.db", "data/uploads"],
+  "setup": ["pnpm install --frozen-lockfile"],
+  "app": "node server.js",
+  "seed": ["node scripts/seed.js"],
+  "check": "pnpm check",
+  "merge": "local",
+  "agent": {
+    "model": "claude-opus-5-5",
+    "env": { "PONYTAIL_DEFAULT_MODE": "full" }
+  }
+}

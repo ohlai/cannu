@@ -1,4 +1,5 @@
-// Runs inside a Windows Terminal tab the dashboard opened. Starts (or
+// Runs in a terminal: a Windows Terminal tab the dashboard opened, or one
+// you ran it in yourself. Starts (or
 // resumes) the feature's claude session in its worktree and records the
 // claude process ID, so the dashboard can tell whether it's still running.
 // Usage: node launch.js <slug> new|resume|continue
@@ -7,7 +8,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
-import { loadFeatures, saveRuntime, readState, writeState, claudeBaseArgs, resumeText, defaults, fill, AUTO } from "./lib.js";
+import { loadFeatures, saveRuntime, readState, writeState, claudeBaseArgs, resumeText, defaults, fill, AUTO, NOTES, COMMIT_NOTES, APP } from "./lib.js";
 
 const [slug, mode] = process.argv.slice(2);
 const f = loadFeatures().find((x) => x.slug === slug);
@@ -36,7 +37,7 @@ if (mode === "new" || !st.started) {
   const fresh = crypto.randomUUID();
   saveRuntime(slug, { lostSessions: [...(f.lostSessions || []), id], sessionId: fresh });
   console.log(`The previous session (${id}) has no saved conversation, so this is a new session that picks up from the notes.\n`);
-  args.push("--session-id", fresh, `${AUTO} ${fill(defaults().freshText, { title: f.title, slug: f.slug })}`);
+  args.push("--session-id", fresh, `${AUTO} ${fill(defaults().freshText, { title: f.title, slug: f.slug, notes: COMMIT_NOTES ? NOTES : path.join(APP, NOTES) })}`);
 }
 
 const child = spawn("claude", args, { cwd: f.dir, stdio: "inherit", env });
