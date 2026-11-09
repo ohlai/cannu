@@ -1,14 +1,89 @@
+// cannu.json: how Cannu works on this repo. Put it in the repo's root and
+// commit it. Every key is optional; leave one out and Cannu uses the default
+// shown in its comment. // comments are fine in here, but saving from Cannu's
+// page (Agent defaults, Add repo) rewrites the file without them.
+//
+// Every command below runs through the shell, inside the feature's own
+// folder, with these set:
+//   PORT          the feature's own port
+//   DATA_DIR      <feature folder>/data, for the app's database and files
+//   APP_URL       http://localhost:<PORT>
+//   FEATURE_SLUG  the feature's short name, like "dark-mode"
 {
+  // The branch features start from and merge into. Cannu also records each
+  // feature (its feature.md) on it. Default "main". Restart after changing.
   "main": "main",
+
+  // Where each feature's notes go: <notes>/<slug>/ holds feature.md,
+  // prompts.md (everything you said), log.md and decisions.md.
+  // Default "notes/features". Restart after changing.
   "notes": "notes/features",
-  "copy": ["data/app.db", "data/uploads"],
+
+  // false keeps those notes out of git: they stay in your main folder, are
+  // never committed or pushed, and a fresh clone has none.
+  // Default true. Restart after changing.
+  "commitNotes": true,
+
+  // Files and folders git doesn't have, copied from your main folder into
+  // each new feature folder: a local database, uploads, a .env. Never
+  // overwrites. .db and .sqlite files are copied safely while open.
+  // Default [].
+  "copy": ["data/app.db", "data/uploads", ".env"],
+
+  // Run once in each new feature folder, in order, before the app starts.
+  // Each gets 10 minutes; one failing stops setup. Retry setup runs them all
+  // again, so they should be safe to repeat. Default [].
   "setup": ["pnpm install --frozen-lockfile"],
+
+  // Runs the feature's own copy of the app. It must listen on $PORT within
+  // 20 seconds. Used by Preview, by agents restarting it after a change, and
+  // by Check and merge (a fresh copy on port + 1000).
+  // No app: Preview is greyed out. Default none.
   "app": "node server.js",
+
+  // Run once the app is up (many apps make their tables when they start),
+  // such as demo data. Each gets 2 minutes. They run again on Retry setup, so
+  // they should skip what's already there. Default [].
   "seed": ["node scripts/seed.js"],
+
+  // Has to pass before Check and merge merges, run with APP_URL pointing at a
+  // fresh copy of the branch's app. Agents are told to run it before they say
+  // they're done. "" means no check.
+  // Default: package.json's "check" script, else its "test" script, else none.
   "check": "pnpm check",
+
+  // Which ship button is the main (black) one on a card: "local" is Check and
+  // merge on this machine, "pr" is Open PR on GitHub with CI shown on the
+  // card. Both buttons are always there. Default "local".
   "merge": "local",
+
+  // Agent defaults. The Agent defaults popup writes these, storing only what
+  // differs from Cannu's built-in values. Default: Cannu's built-in values.
   "agent": {
+    // The model for new features (each can pick its own).
+    // Default: Claude Code's own default.
     "model": "claude-opus-5-5",
-    "env": { "PONYTAIL_DEFAULT_MODE": "full" }
+
+    // Added to every agent's system prompt, after Cannu's own short brief
+    // (its branch, never push, where its notes go, the check).
+    "systemPrompt": "Prefer small commits with clear messages.",
+
+    // Extra environment variables for every agent.
+    "env": { "PONYTAIL_DEFAULT_MODE": "full" },
+
+    // What a background turn may do without asking, as Claude Code
+    // permission rules. Anything else is refused and listed in red on the
+    // card. Default: reading, editing, and common git, node and npm commands.
+    "allowedTools": ["Read", "Edit", "Write", "Glob", "Grep", "Bash(git status:*)", "Bash(git diff:*)", "Bash(git add:*)", "Bash(git commit:*)", "Bash(pnpm:*)"],
+
+    // What a background turn may never do.
+    // Default: git push, checkout, switch and reset.
+    "disallowedTools": ["Bash(git push:*)", "Bash(git checkout:*)", "Bash(git switch:*)", "Bash(git reset:*)"],
+
+    // Messages Cannu sends for you. {title}, {slug}, {notes} and {files} are
+    // filled in. Defaults: Cannu's built-in wording.
+    "resumeText": "You were interrupted mid-turn. Check git status and your log.md, then carry on.",
+    "freshText": "Feature: {title}. Your previous session can't be reopened. Read {notes}/{slug}/ and git log, say where it's up to, and wait for me.",
+    "conflictText": "Main has moved on and merging your branch conflicts in: {files}. Merge main in, keep both sides' intent, run the check and commit."
   }
 }

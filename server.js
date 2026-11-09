@@ -7,7 +7,7 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { spawn, execFileSync } from "node:child_process";
-import { META, CONFIG, all, repos, repoEntry } from "./lib.js";
+import { META, CONFIG, all, repos, repoEntry, parseJsonc } from "./lib.js";
 
 const PORT = all.port || 4000;
 const LOGS = path.join(META, "local");
@@ -63,7 +63,7 @@ const cleanDir = (dir) => path.resolve(String(dir || "").trim().replace(/^["']|[
 // The name is in addresses and folder names, so keep it plain.
 const plainName = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "");
 const gitIn = (dir, ...args) => { try { return execFileSync("git", args, { cwd: dir, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true }).trim(); } catch { return ""; } };
-const readJson = (f) => { try { return JSON.parse(fs.readFileSync(f, "utf8")); } catch { return null; } };
+const readJson = (f) => { try { return parseJsonc(fs.readFileSync(f, "utf8")); } catch { return null; } };
 
 // What Add repo shows for a folder: its cannu.json if it has one, otherwise a
 // guess from what's in it, for the person to check before saving.

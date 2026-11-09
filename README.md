@@ -99,8 +99,9 @@ machine and lists the repos.
 | `launchPrefix` | | Put before the Open session command, such as `ssh atlas ` |
 
 **`cannu.json`** lives in the repo's root and is committed there. It says how
-to work on this repo. Every key is optional, and `cannu.example.json` has an
-example of each.
+to work on this repo. Every key is optional. `cannu.example.json` has an example of each, with a
+comment saying what it does and its default; `//` comments are allowed in
+`cannu.json`.
 
 | Key | Default | What |
 | --- | --- | --- |
@@ -211,8 +212,9 @@ comes from its name.
   stays in the list with its notes, read from main.
 - **Carry on** (on an interrupted card): resumes the session with a message
   telling the agent it was cut off.
-- **Retry setup**: re-runs setup. Each step skips what's already done.
-  Unfinished setups also re-run when the dashboard starts.
+- **Retry setup**: re-runs setup. `copy` skips files already there, but
+  every `setup` and `seed` command runs again, so they should be safe to
+  repeat. Unfinished setups also re-run when the dashboard starts.
 - **Reopen** (merged or dropped features): a new feature that continues the
   old one. **Start agent** makes a new branch from current main and a new
   session pointed at the old notes. **Save as planned** records it to start
