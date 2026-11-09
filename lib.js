@@ -30,7 +30,9 @@ export const repoEntry = (r, i) => ({
   name: r.name || path.basename(abs(r.repo)),
   dir: abs(r.repo),
   worktrees: abs(r.worktrees) || abs(r.repo) + "-worktrees",
-  port: (all.port || 4000) + 1 + i,
+  // Internal: each repo.js, on localhost. "internalPort" moves them (a preview
+  // copy of Cannu sets it so it never meets the live one).
+  port: (all.internalPort || (all.port || 4000) + 1) + i,
   firstFeaturePort: r.firstFeaturePort || (all.firstFeaturePort || 8100) + i * 100,
 });
 export const repos = (all.repos || [{ repo: all.repo }]).map(repoEntry);

@@ -1,4 +1,5 @@
 {
   "commitNotes": false,
+  "app": "node scripts/preview.js",
   "check": "node --check server.js && node --check repo.js && node --check lib.js && node --check hook.js && node --check launch.js"
 }

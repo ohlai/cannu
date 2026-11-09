@@ -228,6 +228,7 @@
   .tag { display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:500; padding:1px 7px; border-radius:5px; color:var(--fg); background:color-mix(in srgb, var(--h) 18%, transparent); border:1px solid transparent; white-space:nowrap; }
   .tag::before { content:""; width:6px; height:6px; border-radius:2px; background:var(--h); }
   .title .tag { margin-left:8px; vertical-align:2px; }
+  button.nopreview { opacity:.45; cursor:help; } button.nopreview:hover { border-color:var(--line); }
   button.tag { font-size:12px; padding:3px 9px; border-radius:7px; }
   button.tag.off { background:none; border-color:var(--line); color:var(--mute); }
   button.tag.off:hover { border-color:var(--mute); }
@@ -590,7 +591,8 @@ function card(f, inPop) {
     ${c ? "" : body}
     ${(s.fb || inPop) && !c ? chatBox(f, s, cls) : ""}
     ${msgBlock(s)}
-    ${actions(`${REPO.app ? `<span class="split"><button data-act="${f.appUp ? "app" : "appstart"}" title="${f.appUp ? "Open this feature's app" : "Start this feature's app and open it"}">Preview ↗</button><button data-act="appstop" title="Stop this feature's app" ${f.appUp ? "" : "disabled"}>✕</button></span>` : ""}
+    ${actions(`${REPO.app ? `<span class="split"><button data-act="${f.appUp ? "app" : "appstart"}" title="${f.appUp ? "Open this feature's app" : "Start this feature's app and open it"}">Preview ↗</button><button data-act="appstop" title="Stop this feature's app" ${f.appUp ? "" : "disabled"}>✕</button></span>`
+      : `<button class="nopreview" data-act="nopreview" aria-disabled="true" title="This repo has no app to preview. Set &quot;app&quot; in its cannu.json">Preview ↗</button>`}
       <button data-act="open">Open session</button>
       <button data-act="fb">${s.fb ? "Hide chat" : "Chat"}${st.queue?.length ? ` (${st.queue.length} waiting)` : ""}</button>
       ${!f.merged ? `<button data-act="drop" title="A bad idea: stop it and keep it on record as dropped">Drop</button>` : ""}`,
@@ -1092,6 +1094,8 @@ async function onClick(e) {
   if (act === "bell") { bells.has(slug) ? bells.delete(slug) : bells.add(slug); store.set("notifyBells", [...bells]); return render(all); }
   if (act === "app") { window.open(appUrl(port(slug)), "_blank"); return; }
   if (act === "appstop") { const r = await api(`${base}/appstop`, {}); return say(r.msg, r.ok ? "" : "bad"); }
+  // Greyed out, but it still says why when clicked (a disabled button can't).
+  if (act === "nopreview") return say(`No preview: this repo's cannu.json has no "app", the command that runs a copy of it on $PORT. Add one to ${REPO.name || "the repo"}'s cannu.json and Preview appears.`);
   if (act === "appstart") {
     // Open the tab now (a tab opened after waiting gets blocked as a popup), then point it at the app once it's up.
     const w = window.open("", "_blank");

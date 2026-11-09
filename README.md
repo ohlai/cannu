@@ -109,7 +109,7 @@ example of each.
 | `commitNotes` | `true` | `false` keeps feature notes out of git entirely. They all live in the main folder, kept out of git through `.git/info/exclude`, so nothing is ever committed or pushed and a fresh clone has none. Agents are told not to `git add` them |
 | `copy` | `[]` | Files and folders git doesn't have (a local database, `.env`), copied from the main folder into each worktree. `.db` and `.sqlite` files are copied safely while open |
 | `setup` | `[]` | Commands run once in a new worktree, such as installing packages |
-| `app` | | The command that runs the app. It gets `PORT`, `DATA_DIR` and `APP_URL`, and must listen on `PORT`. With no app there's no Preview |
+| `app` | | The command that runs the app. It gets `PORT`, `DATA_DIR` and `APP_URL`, and must listen on `PORT`. With no app, Preview is greyed out and says why. Cannu's own is `scripts/preview.js`, which runs the feature's copy of Cannu on a demo repo, never your real ones |
 | `seed` | `[]` | Commands run once the app is up, such as loading demo data. They should skip what's already there |
 | `check` | `package.json`'s `check` or `test` script | What Check and merge runs, with `APP_URL` pointing at a fresh copy of the branch's app |
 | `merge` | `local` | Which ship button is the main one: `local` or `pr`. Both are always there |
