@@ -1,9 +1,45 @@
 # Cannu: parallel agent management
 
-The feature agents dashboard, called Cannu (a moth logo, `logo.png`). Not part of the app. This is the tool I used to build the app: one git
-branch, folder and Claude Code session per feature, with one page that shows
-what every agent is doing and lets me plan features, talk to the agents, and
-merge their work. Node built-ins only, nothing to install.
+Cannu is the dashboard I built to run Claude Code agents in parallel, one per
+feature, and it's how most of Spotter got built. It isn't part of the app.
+Node built-ins only, nothing to install.
+
+![The Cannu board, features in columns by status](screenshots/board.png)
+
+**What it does**
+
+- Each feature gets its own git branch, worktree, app port, database and
+  Claude Code session, so agents never trip over each other.
+- One board shows every feature by status (planned, working, waiting, merged,
+  dropped), what each agent is doing, and what it's cost in time and money.
+- Chat with an agent from its card and give feedback at the end of its turn,
+  or open the real session in a terminal.
+- Preview each feature's own copy of the app, with demo data seeded in.
+- Check and merge runs `pnpm check` against the branch's own server before it
+  merges into main.
+- Every message I send is written word for word into the feature's
+  `prompts.md` by a hook, next to the agent's `log.md` and `decisions.md`.
+- Notifications when an agent needs me, finishes, fails or gets stuck.
+- Agent defaults (model, system prompt, what background turns may do) are set
+  in one place and committed.
+
+![A feature's popup with its chat: the agent's last reply and the message box](screenshots/feature-chat.png)
+
+![The list view, every feature as a card with a filter per status](screenshots/list.png)
+
+![The New feature popup, tagging a related feature with @](screenshots/new-feature.png)
+
+**Why it's called Cannu.** It's named after Can Nü (蠶女), the silkworm girl of
+Chinese myth and the goddess of silkworms and silk. Each agent is a silkworm spinning its own thread in parallel, and Cannu weaves the threads into something bigger. The logo is a
+silk moth (`logo.png`).
+
+**Where it's going.** I'm still working on it and will keep going: improving
+the UX, and first making it work for other codebases, settings and
+architectures, since right now it's set up for this repo on my Windows
+machine. Future work happens at
+[github.com/ohlai/cannu](https://github.com/ohlai/cannu).
+
+## Running it
 
 Trying it for the first time? Start with `../README.md`: what you need
 installed, the database that isn't in the repo, and a first feature end to
@@ -22,7 +58,7 @@ after a restart or log out. To start it at login, put a shortcut to
 ## Kept apart from the app
 
 - It lives in `tools/cannu/` and nothing in the app imports it.
-- The Docker image only copies `server.js`, `README.md`, `scripts/seed-jack.js`
+- The Docker image only copies `server.js`, `README.md`, the two seed scripts
   and `public/`, so it never ships.
 - `pnpm check` doesn't cover it: TypeScript only checks `*.ts`, `spec/` and
   `scripts/`, and the tests only run `spec/`.
