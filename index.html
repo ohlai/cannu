@@ -490,14 +490,14 @@
 
 <dialog class="modal" id="newDlg">
   <div class="panel">
-    <header><h2>New feature</h2></header>
+    <header class="row"><h2>New feature</h2><span class="grow" style="min-width:0"></span><select id="newModel" title="The model its agent runs on" aria-label="Model"></select></header>
     <div class="body">
       <div class="labels" id="newLabels" style="margin-top:0"></div>
       <input type="text" id="title" placeholder="Feature name, e.g. Client can hide Training now">
       <textarea id="prompt" class="tall" data-mention placeholder="What you want and why. Saved word for word in the feature's notes. Optional if you're only planning it."></textarea>
       <div class="hint">@ to tag a related feature. The agent reads their notes first.</div>
       <div class="hint" data-tags></div>
-      <div class="field"><label for="newModel">Model</label><select id="newModel"></select></div>      <div class="banner" id="limitNew" hidden></div>
+      <div class="banner" id="limitNew" hidden></div>
     </div>
     <div class="dmsg" id="addMsg"></div>
     <footer class="row"><button data-close title="Keeps what you've typed here for next time, in this browser tab. Nothing is saved to the repo.">Close</button><span class="grow" style="min-width:0"></span>
@@ -886,6 +886,7 @@ function simpleCard(f, inPop) {
         ${edit ? "" : linksHtml(f)}
       </div>
       ${head(f, cls, label, "")}
+      ${planned ? `<select class="model" data-model title="The model its agent runs on. Changeable until it starts." aria-label="Model">${modelOptions(f.model || "", true)}</select>` : ""}
     </div>
     ${planned && !edit && f.prompt ? `<div class="plan md">${md(f.prompt)}</div>` : ""}
     ${edit ? `<div style="margin-top:10px; display:grid; gap:8px">
@@ -1692,6 +1693,14 @@ host.addEventListener("input", (e) => {
   if (e.target.dataset.field === "eprompt") fitPlan(e.target);
 });
 host.addEventListener("click", onClick);
+// A planned feature's model, saved as soon as it's picked.
+host.addEventListener("change", async (e) => {
+  if (!e.target.matches("[data-model]")) return;
+  const slug = e.target.closest("[data-slug]").dataset.slug, s = u(slug);
+  const r = await api(`/api/features/${slug}/model`, { model: e.target.value });
+  if (r.msg) { s.msg = r.msg; s.cls = "bad"; render(all); }
+  refresh();
+});
 // Ctrl+Enter (or Cmd+Enter) does the main thing: send, or start the agent.
 host.addEventListener("keydown", (e) => {
   const act = KEYS[e.target.dataset?.field];
