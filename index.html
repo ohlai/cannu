@@ -1248,17 +1248,32 @@ function colourPicker(btn, panel, start, onPick) {
   const close = (keep = false, refocus) => {
     if (!isOpen()) return;
     if (!keep) { [h, s, v, cur] = was; paint(); } else if (cur !== was[3]) onPick(cur);
-    panel.hidden = true; btn.setAttribute("aria-expanded", "false"); removeEventListener("scroll", onScroll, true); if (refocus) btn.focus();
+    panel.hidden = true; btn.setAttribute("aria-expanded", "false");
+    removeEventListener("scroll", onScroll, true); removeEventListener("mousedown", onAway, true);
+    if (refocus) btn.focus({ preventScroll: true });
   };
-  const onScroll = (e) => { if (!panel.contains(e.target)) close(); };
+  // A scroll, or a click anywhere outside it, closes it as Cancel. Only the
+  // picker closes: a click outside the label form doesn't take focus, so the
+  // form's own focusout (which saves it) doesn't fire and it stays open.
+  const onScroll = (e) => { if (!panel.contains(e.target)) close(false, true); };
+  const form = btn.closest(".colform");
+  const onAway = (e) => {
+    if (panel.contains(e.target) || btn.contains(e.target)) return;
+    const out = !form.contains(e.target);
+    if (out) { // eat this click too, so it doesn't open a card behind
+      e.preventDefault();
+      const eat = (c) => { c.preventDefault(); c.stopPropagation(); };
+      addEventListener("click", eat, { capture: true, once: true });
+      addEventListener("mouseup", () => setTimeout(() => removeEventListener("click", eat, true)), { capture: true, once: true });
+    }
+    close(false, out);
+  };
   btn.addEventListener("click", () => {
     if (isOpen()) return close();
     was = [h, s, v, cur]; panel.hidden = false; btn.setAttribute("aria-expanded", "true"); place(); sv.focus();
-    addEventListener("scroll", onScroll, true);
+    addEventListener("scroll", onScroll, true); addEventListener("mousedown", onAway, true);
   });
   panel.querySelector(".btns").addEventListener("click", (e) => { const b = e.target.closest("[data-cp]"); if (b) close(b.dataset.cp === "save", true); });
-  // A click elsewhere in the form, or a scroll, closes it as Cancel.
-  btn.closest(".colform").addEventListener("pointerdown", (e) => { if (!panel.contains(e.target) && !btn.contains(e.target)) close(); });
   return { isOpen, close };
 }
 
