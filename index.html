@@ -210,9 +210,19 @@
   #viewSeg button { color:var(--bg); opacity:.6; }
   #viewSeg button:hover { opacity:.9; }
   #viewSeg button.on { color:var(--fg); opacity:1; }
-  .board { display:grid; grid-auto-flow:column; grid-auto-columns:minmax(240px, 1fr); gap:14px; overflow-x:auto; align-items:start; padding-bottom:8px; }
+  .board { display:grid; grid-auto-flow:column; grid-auto-columns:minmax(300px, 1fr); gap:14px; overflow-x:auto; align-items:start; padding:24px 32px 32px; margin:-16px -32px -24px; } /* the scroller clips, so room inside it for a dragged card's lean and shadow, pulled back out (the top only partly, so it stays off the filters) */
   .col { background:color-mix(in srgb, var(--line) 35%, transparent); border-radius:12px; padding:10px; min-height:110px; }
   .col.drop { outline:2px dashed var(--mute); outline-offset:-2px; }
+  .colhead[data-dragcol] { cursor:grab; }
+  .board { position:relative; } /* the offsetParent the drag measures slots against */
+  .board .tile, .colhead[data-dragcol] { user-select:none; }
+  .col:has(.tile) > .none { display:none; }
+  /* dragging: the others spring into the gap, the held one leans toward the pointer */
+  .board.sorting .tile, .board.sorting > .col { transition:transform .24s cubic-bezier(.3,1.35,.5,1); }
+  .board .lifted { position:relative; z-index:3; box-shadow:0 6px 16px rgba(0,0,0,.18); transition:transform .12s ease-out !important; }
+  .col.lifted { background:color-mix(in srgb, var(--line) 35%, var(--bg)); }
+  body.grabbing, body.grabbing * { cursor:grabbing !important; }
+  @media (prefers-reduced-motion: reduce) { .board.sorting .tile, .board.sorting > .col, .board .lifted { transition:none !important; } }
   .col.newcol { background:none; border:1.5px dashed var(--line); }
   .col.newcol .colhead { color:var(--mute); font-weight:500; }
   .col.newcol.drop { outline:0; border-color:var(--mute); }
@@ -412,6 +422,10 @@
     <div class="seg text" id="densSeg"><span class="thumb"></span>
       <button data-val="detailed" title="Status, label, what the agent is doing and its last reply on every card">Detailed</button>
       <button data-val="compact" title="One line per feature">Compact</button>
+    </div>
+    <div class="repopick" id="sortPick">
+      <button id="sortBtn" aria-haspopup="true" aria-expanded="false" title="How cards are ordered, in every column and the list"><span id="sortName"></span><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
+      <div class="repomenu" id="sortMenu" hidden style="left:0; right:auto"></div>
     </div>
     <label class="switch" id="hideWrap" title="Hide merged and dropped features"><input type="checkbox" id="hideDone">Hide completed</label>
     <div class="chips" id="chips"></div>
@@ -946,7 +960,7 @@ function render(features) {
   for (const el of document.querySelectorAll("[data-chat][data-loaded]")) { el.dataset.top = el.scrollTop; keep[el.closest("[data-slug]").dataset.slug] = el; }
   const q = $("#search").value.trim().toLowerCase();
   const shown = features.filter((f) => inGroup(f, filter) && (!q || (f.title + " " + (f.prompt || "")).toLowerCase().includes(q)));
-  shown.sort(byUrgency);
+  shown.sort(bySort);
   const html = shown.length ? shown.map((f) => (f.worktree ? card(f) : simpleCard(f)))
     : [`<div class="card empty">${q ? "Nothing matches that search." : filter === "all" ? "No features yet. Add one with + New feature." : `Nothing is ${filter} right now.`}</div>`];
   patchList(html);
@@ -1070,6 +1084,22 @@ const URGENT = { "needs-you": 0, stuck: 0, interrupted: 1, limited: 1, "not-star
 const rank = (f) => KINDS.indexOf(kind(f)[0]) * 10 + (URGENT[status(f)[0]] ?? 5);
 const newest = (f) => String(f.merged || f.dropped || f.started || f.created || "");
 const byUrgency = (a, b) => rank(a) - rank(b) || newest(b).localeCompare(newest(a));
+// The toolbar's sort, for every column at once. Manual is the order cards were
+// dragged into; cards never dragged go on top, newest first.
+// ponytail: manual order lives in this browser (localStorage), move it to notes/ if it should follow you between machines
+let order = store.get("order", []);
+const pos = (f) => order.indexOf(f.slug);
+const active = (f) => +new Date(f.st?.at || 0) || 0;
+const SORTS = {
+  status: byUrgency,
+  active: (a, b) => active(b) - active(a) || newest(b).localeCompare(newest(a)),
+  created: (a, b) => String(b.created || "").localeCompare(String(a.created || "")),
+  name: (a, b) => a.title.localeCompare(b.title, undefined, { numeric: true, sensitivity: "base" }),
+  manual: (a, b) => pos(a) - pos(b) || newest(b).localeCompare(newest(a)),
+};
+let sortBy = store.get("sort", "status");
+if (!(sortBy in SORTS)) sortBy = "status";
+const bySort = (a, b) => SORTS[sortBy](a, b);
 
 // Each label gets a colour from its name, kept clear of the status colours.
 const HUES = ["#0891b2", "#db2777", "#65a30d", "#ea580c", "#0d9488", "#ca8a04", "#be185d", "#059669"];
@@ -1078,7 +1108,8 @@ const hue = (l) => LABELS[l]?.color || HUES[[...l].reduce((a, c) => (a * 31 + c.
 const tagHtml = (l) => `<span class="tag" style="--h:${hue(l)}">${esc(l)}</span>`;
 // Every label with its description, from notes/labels.json, so a label can be empty.
 let LABELS = {};
-const labels = () => [...new Set([...Object.keys(LABELS), ...all.map((f) => f.label).filter(Boolean)])].sort((a, b) => a.localeCompare(b));
+// In labels.json's order, which dragging a column header changes.
+const labels = () => [...new Set([...Object.keys(LABELS), ...all.map((f) => f.label).filter(Boolean)])];
 
 let view = store.get("view", "status"), dens = store.get("density", "detailed");
 if (!["status", "label", "list"].includes(view)) view = "status";
@@ -1100,15 +1131,36 @@ function makeSeg(el, get, set) {
 makeSeg($("#viewSeg"), () => view, (v) => { view = v; store.set("view", v); });
 makeSeg($("#densSeg"), () => dens, (v) => { dens = v; store.set("density", v); });
 $("#hideDone").onchange = () => { store.set("hideDone", $("#hideDone").checked); render(all); };
+// The sort dropdown, built like the repo one.
+const SORT_NAMES = { status: "Needs you first", active: "Last active", created: "Newest", name: "Name", manual: "Manual (drag)" };
+$("#sortName").textContent = "Sort: " + SORT_NAMES[sortBy];
+function sortMenu(open) {
+  $("#sortMenu").hidden = !open; $("#sortBtn").setAttribute("aria-expanded", open);
+  if (!open) return;
+  $("#sortMenu").innerHTML = Object.entries(SORT_NAMES).map(([k, n]) => `<button data-sort="${k}">${k === sortBy ? TICK : `<span class="tick"></span>`}${n}</button>`).join("");
+  $("#sortMenu button")?.focus();
+}
+$("#sortBtn").onclick = () => sortMenu($("#sortMenu").hidden);
+$("#sortMenu").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-sort]"); if (!b) return;
+  sortMenu(false); $("#sortBtn").focus();
+  sortBy = b.dataset.sort; store.set("sort", sortBy); $("#sortName").textContent = "Sort: " + SORT_NAMES[sortBy]; render(all);
+});
+document.addEventListener("click", (e) => { if (!e.target.closest("#sortPick")) sortMenu(false); });
+$("#sortPick").addEventListener("keydown", (e) => {
+  if ($("#sortMenu").hidden) return;
+  const items = [...$("#sortMenu").querySelectorAll("button")], i = items.indexOf(document.activeElement);
+  if (e.key === "Escape") { e.preventDefault(); sortMenu(false); $("#sortBtn").focus(); }
+  else if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); items[(i + (e.key === "ArrowDown" ? 1 : items.length - 1)) % items.length].focus(); }
+});
 
 function tile(f) {
   const [k, detail] = kind(f), cls = status(f)[0], st = f.st || {};
   const pill = `<span class="pill ${k} ${cls}"><span class="dot"></span>${k}${detail ? `<span class="detail">· ${esc(detail)}</span>` : ""}</span>`;
   const when = ago(st.at) || day(f.merged || f.dropped || f.created);
-  const drag = view === "label" ? 'draggable="true"' : "";
-  if (dens === "compact") return `<div class="tile" data-open="${f.slug}" tabindex="0" ${drag} title="${esc(f.title)}${detail ? " · " + esc(detail) : ""}">
+  if (dens === "compact") return `<div class="tile" data-open="${f.slug}" tabindex="0" title="${esc(f.title)}${detail ? " · " + esc(detail) : ""}">
     <span class="pill ${k} ${cls}" style="border:0;padding:0"><span class="dot"></span></span><span class="t">${esc(f.title)}</span><span class="when">${when}</span></div>`;
-  return `<div class="tile" data-open="${f.slug}" tabindex="0" ${drag}>
+  return `<div class="tile" data-open="${f.slug}" tabindex="0">
     <div class="t">${esc(f.title)}</div>
     ${st.activity && cls === "working" ? `<div class="activity">${esc(st.activity)}</div>` : ""}
     ${k === "waiting" && st.lastReply ? `<div class="snip">${esc(st.lastReply.replace(/[#*`>|]/g, "").trim().slice(0, 240))}</div>` : ""}
@@ -1124,14 +1176,14 @@ function renderBoard(features) {
   // don't move cards under the pointer, the box you're naming in, or an open ⋯ menu
   if (mouseDown || dragging || naming || $("#board .colmenu[open]")) return;
   const q = $("#search").value.trim().toLowerCase(), hide = $("#hideDone").checked;
-  const shown = features.filter((f) => (!q || (f.title + " " + (f.prompt || "") + " " + (f.label || "")).toLowerCase().includes(q)) && !(hide && ["merged", "dropped"].includes(kind(f)[0]))).sort(byUrgency);
+  const shown = features.filter((f) => (!q || (f.title + " " + (f.prompt || "") + " " + (f.label || "")).toLowerCase().includes(q)) && !(hide && ["merged", "dropped"].includes(kind(f)[0]))).sort(bySort);
   const cols = view === "status"
     ? CHIPS.filter((k) => !(hide && ["merged", "dropped"].includes(k))).map((k) => ({ key: k, head: `<span class="pill ${k}"><span class="dot"></span></span>${cap(k)}`, items: shown.filter((f) => kind(f)[0] === k) }))
     : [...labels(), ""].map((l) => ({ key: l, head: l ? `<span class="editcol" data-editcol tabindex="0" title="Click to rename, describe or recolour">${tagHtml(l)}</span>` : "Unlabelled", menu: l ? colMenu(l) : "", desc: LABELS[l]?.description || "", items: shown.filter((f) => (f.label || "") === l) }));
   const empty = view === "label" ? "Drag a card here to label it" : "Nothing here";
   const add = view === "label" ? `<div class="col newcol" data-newcol tabindex="0" title="Click to make an empty label, or drop a feature here to give it a new one"><div class="colhead">+ New label</div><div class="none">Click to name it, or drag a feature here.</div></div>` : "";
   const plus = (l) => view === "label" ? `<button class="coladd" data-addcol title="${l ? `New feature labelled ${esc(l)}` : "New feature without a label"}" aria-label="New feature"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M5 1v8M1 5h8"/></svg></button>` : "";
-  const html = `<div class="board ${dens}">${cols.map((c) => `<div class="col" data-col="${esc(c.key)}"><div class="colhead">${c.head}<span class="n">${c.items.length}</span>${plus(c.key)}${c.menu || ""}</div>${c.desc ? `<div class="desc">${esc(c.desc)}</div>` : ""}${c.items.map(tile).join("") || `<div class="none">${empty}</div>`}</div>`).join("")}${add}</div>`;
+  const html = `<div class="board ${dens}">${cols.map((c) => `<div class="col" data-col="${esc(c.key)}"><div class="colhead"${view === "label" && c.key ? ' data-dragcol title="Drag to move this column"' : ""}>${c.head}<span class="n">${c.items.length}</span>${plus(c.key)}${c.menu || ""}</div>${c.desc ? `<div class="desc">${esc(c.desc)}</div>` : ""}${c.items.map(tile).join("") || `<div class="none">${empty}</div>`}</div>`).join("")}${add}</div>`;
   const host = $("#board");
   if (host._html === html) return;
   const left = host.firstElementChild?.scrollLeft || 0;
@@ -1180,24 +1232,134 @@ async function labelAction(name, act) {
 }
 
 // Dragging between label columns relabels. One label per feature, so the card just moves.
-let dragging = null;
-$("#board").addEventListener("dragstart", (e) => { const t = e.target.closest("[data-open]"); if (!t) return; dragging = t.dataset.open; e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", dragging); });
-$("#board").addEventListener("dragend", () => { dragging = null; mouseDown = false; for (const c of document.querySelectorAll(".col.drop")) c.classList.remove("drop"); render(all); });
-$("#board").addEventListener("dragover", (e) => {
-  const c = e.target.closest(".col"); if (!c || !dragging || view !== "label") return;
-  e.preventDefault();
-  for (const o of document.querySelectorAll(".col.drop")) if (o !== c) o.classList.remove("drop");
-  c.classList.add("drop");
+// With the manual sort, where it lands in the column is its place in the order.
+// A label column's header drags too, to move the column.
+// A pointer drag, not HTML drag and drop, so the board reorders as you go: the
+// held card leans toward the pointer but stays tied to its slot, and once the
+// pointer passes the next card's middle it jumps there and the others slide
+// into the gap.
+const PULL = 0.3; // manual sort: how much of the pointer's travel the held card follows
+// Elsewhere it barely leaves its slot: starts at `slope` of the pointer's travel
+// and gives less and less the further you go, never past `max` px.
+const lean = (d, max, slope) => max * Math.tanh(d * slope / max);
+let dragging = null, held = null;
+const board = () => $("#board .board");
+// Where an element sits in the layout, leaving out transforms, so cards mid-slide don't jitter.
+function lay(el) {
+  const b = board(), r = b.getBoundingClientRect();
+  return { x: r.left + b.clientLeft + el.offsetLeft - b.scrollLeft, y: r.top + b.clientTop + el.offsetTop, w: el.offsetWidth, h: el.offsetHeight };
+}
+// Moves el before `before` in parent; the cards (or columns) that moved slide from where they were.
+function shift(el, parent, before) {
+  if (el.parentNode === parent && el.nextElementSibling === before) return;
+  const others = [...board().querySelectorAll(el.matches(".col") ? ".board > .col" : ".tile")].filter((o) => o !== el);
+  const was = new Map(others.map((o) => [o, o.getBoundingClientRect()]));
+  parent.insertBefore(el, before);
+  for (const o of others) { o.style.transition = "none"; o.style.transform = "none"; }
+  for (const o of others) {
+    const r = was.get(o), n = o.getBoundingClientRect();
+    o.style.transform = r.left - n.left || r.top - n.top ? `translate(${r.left - n.left}px, ${r.top - n.top}px)` : "";
+  }
+  board().offsetWidth; // apply the start positions before sliding from them
+  for (const o of others) { o.style.transition = ""; o.style.transform = ""; }
+}
+// Puts the held card or column in the slot under the pointer, then leans it toward the pointer.
+function follow() {
+  const { el, px, py } = held;
+  if (el.matches(".col")) { // among the label columns, which come before Unlabelled
+    const cols = [...board().querySelectorAll(".col[data-col]")].filter((c) => c.dataset.col), me = cols.indexOf(el);
+    // Where the column's middle would be if it followed the pointer fully. It swaps
+    // once that is a fifth of the way into the next column, wherever you grabbed it.
+    const mid = px - held.gx + el.offsetWidth / 2;
+    const at = cols.find((c, i) => { if (c === el) return false; const L = lay(c); return mid < L.x + L.w * (i > me ? 0.2 : 0.8); });
+    shift(el, board(), at || board().querySelector('.col[data-col=""]'));
+  } else {
+    const cols = [...board().querySelectorAll(".board > .col")];
+    // a status board's columns follow the agents, so a card only moves up and down in its own
+    const over = (view === "label" && cols.find((c) => { const L = lay(c); return px >= L.x - 7 && px < L.x + L.w + 7; })) || (view === "label" ? el.closest(".col") : held.from);
+    for (const c of cols) c.classList.toggle("drop", c === over && c.matches("[data-newcol]"));
+    if (!over.matches("[data-newcol]")) {
+      const tiles = [...over.querySelectorAll(".tile")].filter((t) => t !== el);
+      const f = all.find((x) => x.slug === el.dataset.open);
+      // manual: above the first card whose middle is below the pointer; otherwise where the sort puts it
+      // Like the columns: the card's middle, as if it followed the pointer fully, swaps once it's a
+      // fifth into the next card. Coming from another column there's no next, so it's halfway.
+      const mid = py - held.gy + el.offsetHeight / 2, mine = [...over.querySelectorAll(".tile")], me = mine.indexOf(el);
+      const before = sortBy === "manual" ? tiles.find((t) => { const L = lay(t), i = mine.indexOf(t); return mid < L.y + L.h * (me < 0 ? 0.5 : i > me ? 0.2 : 0.8); })
+        : over === el.closest(".col") ? el.nextElementSibling : tiles.find((t) => bySort(f, all.find((x) => x.slug === t.dataset.open)) < 0);
+      shift(el, over, before || null);
+    }
+  }
+  const L = lay(el);
+  const dx = px - held.gx - L.x, dy = py - held.gy - L.y;
+  const [x, y] = el.matches(".col") ? [lean(dx, 24, 0.25), 0] // columns only go sideways
+    // cards stay tied to their column sideways; once they hop to another column dx starts again from that slot
+    : [lean(dx, 8, 0.12), sortBy === "manual" ? dy * PULL : lean(dy, 8, 0.15)];
+  el.style.transform = `translate(${x}px, ${y}px)`;
+}
+$("#board").addEventListener("pointerdown", (e) => {
+  if (e.button !== 0 || naming || !board()) return;
+  const h = view === "label" && !e.target.closest(".colmenu, .coladd") && e.target.closest("[data-dragcol]");
+  const el = h ? h.closest(".col") : (view === "label" || sortBy === "manual") && e.target.closest(".tile");
+  if (el) held = { el, id: e.pointerId, x0: e.clientX, y0: e.clientY, on: false };
 });
-$("#board").addEventListener("drop", (e) => {
-  const c = e.target.closest(".col"); if (!c || !dragging) return;
+window.addEventListener("pointermove", (e) => {
+  if (!held || e.pointerId !== held.id) return;
+  if (!held.on) { // a click until it's moved a few pixels
+    if (Math.hypot(e.clientX - held.x0, e.clientY - held.y0) < 6) return;
+    const L = lay(held.el);
+    Object.assign(held, { on: true, gx: held.x0 - L.x, gy: held.y0 - L.y, from: held.el.closest(".col") });
+    dragging = held.el.dataset.open || held.el.dataset.col;
+    held.el.classList.add("lifted"); board().classList.add("sorting"); document.body.classList.add("grabbing");
+  }
   e.preventDefault();
-  const slug = dragging; dragging = null; mouseDown = false;
-  c.classList.remove("drop");
-  if (c.matches("[data-newcol]")) return nameNewCol(c, slug);
-  if ((all.find((f) => f.slug === slug)?.label || "") !== c.dataset.col) setLabel(slug, c.dataset.col);
-  else render(all);
+  held.px = e.clientX; held.py = e.clientY;
+  follow();
 });
+function drop(e) {
+  if (!held || e.pointerId !== held.id) return;
+  const { el, on } = held; held = null;
+  if (!on) return;
+  // swallow the click that ends the drag, so it doesn't open the card or the label editor
+  const stop = (ev) => { ev.stopPropagation(); ev.preventDefault(); };
+  window.addEventListener("click", stop, { capture: true, once: true });
+  setTimeout(() => window.removeEventListener("click", stop, true), 0);
+  document.body.classList.remove("grabbing");
+  el.style.transform = ""; // springs into its slot
+  const newcol = board().querySelector("[data-newcol].drop");
+  setTimeout(() => {
+    dragging = null;
+    const host = $("#board"); host._html = null; // moved by hand, so build it again
+    if (el.matches(".col")) {
+      const names = [...host.querySelectorAll(".col[data-col]")].map((c) => c.dataset.col).filter(Boolean);
+      return names.join("\n") === labels().join("\n") ? render(all) : moveCols(names);
+    }
+    const slug = el.dataset.open, c = el.closest(".col");
+    if (newcol) { render(all); return nameNewCol($("#board [data-newcol]"), slug); }
+    if (sortBy === "manual") place(slug, el.nextElementSibling?.dataset.open, c);
+    if (view === "label" && (all.find((f) => f.slug === slug)?.label || "") !== c.dataset.col) return setLabel(slug, c.dataset.col);
+    render(all);
+  }, 220);
+}
+window.addEventListener("pointerup", drop);
+window.addEventListener("pointercancel", drop);
+
+// Puts the card above `before`, or under the last card in column c.
+function place(slug, before, c) {
+  const list = [...all].sort(SORTS.manual).map((f) => f.slug).filter((s) => s !== slug);
+  const last = [...c.querySelectorAll("[data-open]")].map((t) => t.dataset.open).filter((s) => s !== slug).at(-1);
+  const i = before ? list.indexOf(before) : last ? list.indexOf(last) + 1 : -1;
+  if (i < 0) return; // an empty column: nothing to be next to
+  list.splice(i, 0, slug);
+  order = list; store.set("order", order);
+}
+
+async function moveCols(names) {
+  LABELS = Object.fromEntries(names.map((n) => [n, LABELS[n] || {}])); render(all); // show it now; the server commits it
+  const r = await api("/api/labels/order", { names });
+  if (!r.ok) boardSay(r.msg);
+  refresh();
+}
 
 async function setLabel(slug, label) {
   const f = all.find((x) => x.slug === slug); if (!f) return;
