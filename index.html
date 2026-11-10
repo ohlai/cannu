@@ -189,7 +189,8 @@
   /* Text version of the bell switcher: same box and sliding black square, sized to each word. */
   .seg.text .thumb { width:var(--w, 0); transform:translateX(var(--x, 0)); transition:transform .25s cubic-bezier(.4,0,.2,1), width .25s cubic-bezier(.4,0,.2,1); }
   .seg.text:not(.ready) .thumb { transition:none; }
-  .seg.text button { width:auto; padding:0 12px; font-size:12.5px; white-space:nowrap; }
+  .seg.text button { width:auto; padding:0 12px; font-size:12.5px; white-space:nowrap; opacity:1; }
+  .seg.text button:not(.on):hover { background:var(--bg); }
   @media (prefers-reduced-motion: reduce) { .seg.text .thumb { transition:none; } }
   /* Hide completed: a checkbox drawn like Cannu's buttons, black with a white tick when on. */
   .switch { display:inline-flex; align-items:center; gap:8px; font-size:13px; color:var(--mute); cursor:pointer; user-select:none; }
