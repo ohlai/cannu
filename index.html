@@ -315,11 +315,12 @@
   .found button.on { border-color:var(--fg); }
   .colhead .pill { border:0; padding:0; }
   /* Claude usage: the week as the outer ring, the 5 hours inside it. Hovering
-     grows the rings to fit the 5h % and slides a panel out to their left with
-     both limits and reset times. It stays out while a limit is full or
-     features are held, saying what that means. Grey: usage not known. */
+     grows the rings to fit the 5h % and slides them left to show the 5H and
+     7D lines on their right (the title gives up the room, the buttons stay
+     put). Clicking doesn't hold it open; keyboard focus does. Grey: usage not
+     known. */
   :root { --u-green:#22c55e; --u-orange:#f59e0b; --u-red:#ef4444; }
-  .rings { position:relative; width:34px; height:34px; cursor:default; outline:none; }
+  .rings { display:flex; align-items:center; height:34px; cursor:default; outline:none; }
   .urings { position:relative; width:34px; height:34px; transition:transform .3s cubic-bezier(.16,1,.3,1); }
   .urings svg { display:block; width:100%; height:100%; transform:rotate(-90deg); }
   .urings circle { fill:none; }
@@ -328,24 +329,17 @@
   .green { --c:var(--u-green); } .orange { --c:var(--u-orange); } .red { --c:var(--u-red); } .grey { --c:var(--mute); }
   .urings .fill, .udot { stroke:var(--c); background:var(--c); }
   .ucenter { position:absolute; inset:0; display:grid; place-content:center; font-size:8px; font-weight:700; letter-spacing:-.02em; opacity:0; transition:opacity .2s; }
-  /* The panel touches the rings (padding, not a gap) so the pointer can move
-     onto its switch without the hover ending. Clicking doesn't hold it open:
-     only keyboard focus does, besides hover and a limit that needs saying. */
-  .upanel { position:absolute; right:100%; top:50%; transform:translateY(-50%); z-index:5; padding:4px 14px 4px 0; background:var(--bg); }
-  .uin { max-width:0; overflow:hidden; white-space:nowrap; opacity:0; transition:max-width .4s cubic-bezier(.16,1,.3,1), opacity .2s; }
-  .rings:is(:hover, :focus-visible, :has(:focus-visible), .pinned) .uin { max-width:460px; opacity:1; }
-  .rings:is(:hover, :focus-visible, :has(:focus-visible), .pinned) .ucenter { opacity:1; }
-  .rings:is(:hover, :focus-visible, :has(:focus-visible), .pinned) .urings { transform:scale(1.3); }
-  .rings:not(:hover, :focus-visible, :has(:focus-visible), .pinned) .upanel { pointer-events:none; }
-  .uauto { display:flex; justify-content:flex-end; margin-top:3px; font-size:11px; color:var(--mute); }
-  .uline { display:flex; align-items:center; justify-content:flex-end; gap:6px; font-size:12px; line-height:1.55; }
-  .uline b { min-width:30px; text-align:right; }
-  .uline small, .unote { color:var(--mute); font-size:11px; }
+  .uin { max-width:0; overflow:hidden; white-space:nowrap; opacity:0; transition:max-width .4s cubic-bezier(.16,1,.3,1), opacity .25s; }
+  .rings:is(:hover, :focus-visible) .uin { max-width:300px; opacity:1; }
+  .rings:is(:hover, :focus-visible) .ucenter { opacity:1; }
+  .rings:is(:hover, :focus-visible) .urings { transform:scale(1.3); }
+  .uline { display:flex; align-items:center; gap:6px; padding-left:14px; font-size:12px; line-height:1.5; }
+  .uline .ulab { width:20px; font-size:10.5px; font-weight:700; color:var(--mute); }
+  .uline b { min-width:30px; }
+  .uline small { color:var(--mute); font-size:11px; }
   .udot { width:7px; height:7px; border-radius:50%; flex:none; }
-  .unote { text-align:right; margin-top:2px; }
-  .unote b { color:var(--fg); }
-  .unote button { padding:1px 8px; font-size:11px; margin-left:6px; }
-  @media (prefers-reduced-motion: reduce) { .upanel, .urings, .uin, .ucenter { transition:none; } }
+  #limitMsg .switch { font-size:12px; margin-left:12px; }
+  @media (prefers-reduced-motion: reduce) { .urings, .uin, .ucenter { transition:none; } }
   .limited .dot { background:var(--bad); }
 </style>
 </head>
@@ -371,6 +365,7 @@
     </div>
   </div>
   <div class="msg bad" id="notifyMsg" hidden style="margin-top:-12px; margin-bottom:12px"></div>
+  <div class="banner" id="limitMsg" hidden style="margin:-12px 0 20px"></div>
 
   <div class="filters">
     <div class="seg text" id="viewSeg"><span class="thumb"></span>
@@ -626,20 +621,22 @@ function renderUsage() {
   const box = $("#rings");
   const line = (k, label) => {
     const p = known(k), l = USAGE?.[k];
-    return `<div class="uline"><small>${p == null ? (l?.resets ? "reset, not checked since" : "not known yet") : l.resets ? `resets ${resetAt(l.resets)}` : ""}</small><span>${label}</span><b>${p == null ? "–" : p + "%"}</b><span class="udot ${p == null ? "grey" : tone(p)}"></span></div>`;
+    return `<div class="uline"><span class="ulab">${label}</span><span class="udot ${p == null ? "grey" : tone(p)}"></span><b>${p == null ? "–" : p + "%"}</b><small>${p == null ? (l?.resets ? "reset, not checked since" : "not known yet") : l.resets ? `resets ${resetAt(l.resets)}` : ""}</small></div>`;
   };
-  // A full limit, or features waiting to carry on after one.
+  const html = `${usageRings()}<div class="uin">${line("session", "5H")}${line("weekly", "7D")}</div>`;
+  if (box.dataset.html !== html) { box.innerHTML = html; box.dataset.html = html; }
+  // Under the header: a full limit, or features waiting to carry on after one.
   const full = limitFull(), held = all.filter((f) => f.worktree && f.live?.state === "limited");
   const wait = held.map(heldUntil).filter(Boolean).sort().at(-1);
   const n = held.length, ones = `${n} ${n === 1 ? "feature" : "features"}`;
   const auto = DEF?.autoContinue !== false, then = auto ? "they carry on by themselves then" : "then their cards offer Carry on";
-  const note = full ? `<b>${cap(LIMIT_NAME[full.which])} limit full.</b> No agents start until it resets${n ? `. ${ones} held` : ""}; ${then}.`
-    : wait ? `<b>${ones} held</b> until ${resetTime(wait)}; ${then}.`
-    : n ? `<b>Limit reset.</b> ${ones} held${auto ? ", carrying on by themselves shortly" : ""}. <button data-act="continueall">Carry on now</button>` : "";
-  box.classList.toggle("pinned", !!note);
-  const html = `<div class="upanel"><div class="uin">${line("session", "5 hours")}${line("weekly", "week")}${note ? `<div class="unote">${note}</div>` : ""}
-    <div class="uauto"><label class="switch" title="Agents held by a full limit carry on by themselves once it resets. Also in Agent defaults."><input type="checkbox" data-act="autocont" ${auto ? "checked" : ""}>Carry on by itself after a reset</label></div></div></div>${usageRings()}`;
-  if (box.dataset.html !== html) { box.innerHTML = html; box.dataset.html = html; }
+  const note = full ? `Your ${LIMIT_NAME[full.which]} Claude limit is full. It resets ${resetAt(full.resets)}. Until then Cannu doesn't start agents: new features are set up and wait, and messages stay queued${n ? `. ${ones} held` : ""}; ${then}.`
+    : wait ? `${ones} held by your Claude usage limit until ${resetAt(wait)}; ${then}.`
+    : n ? `Your Claude limit has reset. ${ones} held${auto ? ", carrying on by themselves shortly" : ""}. <button class="primary" data-act="continueall">Carry on now</button>` : "";
+  const lm = $("#limitMsg");
+  lm.hidden = !note;
+  const banner = note && `${note}<label class="switch" title="Also in Agent defaults."><input type="checkbox" data-act="autocont" ${auto ? "checked" : ""}>Carry on by itself after a reset</label>`;
+  if (note && lm.dataset.html !== banner) { lm.innerHTML = banner; lm.dataset.html = banner; }
   const ln = $("#limitNew");
   ln.hidden = !full;
   if (full) ln.textContent = `Your ${LIMIT_NAME[full.which]} Claude limit is full until ${resetAt(full.resets)}. Start agent sets the feature up now and its agent waits, then ${DEF?.autoContinue !== false ? "starts by itself" : "its card offers Start"} once the limit resets.`;
@@ -653,14 +650,14 @@ async function loadUsage() {
   renderUsage();
 }
 loadUsage(); setInterval(loadUsage, 30e3);
-$("#rings").addEventListener("change", async (e) => {
+$("#limitMsg").addEventListener("change", async (e) => {
   if (e.target.dataset.act !== "autocont") return;
   // Defaults are saved whole, so send the current ones with this changed.
   const r = await api("/api/defaults", { ...(await loadDefaults()).values, autoContinue: e.target.checked });
   if (r.values) setModels(r);
   renderUsage(); refresh();
 });
-$("#rings").addEventListener("click", async (e) => {
+$("#limitMsg").addEventListener("click", async (e) => {
   if (e.target.dataset.act !== "continueall") return;
   e.target.disabled = true;
   const r = await api("/api/continue", {});
@@ -1600,7 +1597,7 @@ function defaultsForm(r) {
     <div class="field"><label for="dModel">Model</label><select id="dModel">${modelOptions(v.model, false)}</select>
       <div class="hint">Used by every feature that doesn't pick its own in New feature.</div></div>
     <div class="field"><label class="switch"><input type="checkbox" id="dAuto" ${v.autoContinue ? "checked" : ""}>Carry on by itself after a usage limit resets</label>
-      <div class="hint">Agents held by a full 5-hour or weekly limit start or carry on in the background once it resets. Off: their cards offer Carry on instead. Also under the usage rings.</div></div>
+      <div class="hint">Agents held by a full 5-hour or weekly limit start or carry on in the background once it resets. Off: their cards offer Carry on instead. Also on the limit banner above the board while a limit is full.</div></div>
     <div class="field"><label for="dSystem">System prompt${reset("systemPrompt")}</label>
       <textarea id="dSystem" class="tall" placeholder="Empty: agents get Claude Code's own system prompt, plus CLAUDE.md.">${esc(v.systemPrompt)}</textarea>
       <div class="hint">Added to every agent's system prompt on every run. Slash commands don't run from here, so ask for a skill in words.</div></div>
