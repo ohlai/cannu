@@ -140,7 +140,7 @@ Keys inside `agent`:
 | `model` | Claude Code's own default | The model for new features (each can pick its own) |
 | `systemPrompt` | | Added to every agent's system prompt, after Cannu's own short brief |
 | `env` | | Extra environment variables for every agent |
-| `allowedTools` | Reading, editing, and common git, node and npm commands | What a background turn may do without asking, as Claude Code permission rules. Anything else is refused and listed in red on the card |
+| `allowedTools` | Reading, editing, and common git (including `git merge`, for fixing conflicts), node and npm commands | What a background turn may do without asking, as Claude Code permission rules. Anything else is refused and listed in red on the card |
 | `disallowedTools` | `git push`, `checkout`, `switch` and `reset` | What a background turn may never do |
 | `resumeText`, `freshText`, `conflictText`, `commitText`, `checkText`, `prFixText` | Cannu's built-in wording | Messages Cannu sends for you, or fills in for you to send: after an interrupted turn, when a session can't be reopened, when merging conflicts, when shipping finds uncommitted changes, when Check and merge's check fails, and from Ask the agent to fix on a pull request. `{title}`, `{slug}`, `{notes}`, `{files}`, `{check}`, `{out}`, `{pr}` and `{problems}` are filled in |
 
