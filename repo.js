@@ -695,16 +695,19 @@ async function removeFeature(f) {
 
 // ---------- labels ----------
 
-// Every label and its description, in labels.json in the notes folder, so a
-// label can have no features in it. It goes in git only when feature notes do
-// (commitNotes). A label only on features (from before this file) counts too,
-// and is saved the next time anything is.
+// Every label, in labels.json in the notes folder, as name → { description,
+// color }, so a label can have no features in it. It goes in git only when
+// feature notes do (commitNotes). A label only on features (from before this
+// file) counts too, and is saved the next time anything is. No color: the
+// board picks one from the name.
 const LABELS_REL = path.join(NOTES, "labels.json");
 const LABELS_FILE = path.join(APP, LABELS_REL);
 const cleanLabel = (s) => String(s || "").replace(/\s+/g, " ").trim().slice(0, 40);
+const labelInfo = (description, color) => ({ description: String(description || "").trim(), ...(/^#[0-9a-f]{6}$/i.test(color) ? { color: color.toLowerCase() } : {}) });
 function readLabels() {
   let l = {}; try { l = JSON.parse(fs.readFileSync(LABELS_FILE, "utf8")); } catch {}
-  for (const f of loadFeatures()) if (f.label && !(f.label in l)) l[f.label] = "";
+  for (const k in l) if (typeof l[k] === "string") l[k] = labelInfo(l[k]); // the first version stored just the description
+  for (const f of loadFeatures()) if (f.label && !(f.label in l)) l[f.label] = labelInfo();
   return l;
 }
 // labels.json plus any changed feature.md (and any deleted feature folders),
@@ -717,24 +720,24 @@ function saveLabels(l, feats, message, gone = []) {
 }
 function setLabel(f, label) {
   const l = readLabels(); // still has its old label, so that column stays when it empties
-  if (label) l[label] ??= "";
+  if (label) l[label] ??= labelInfo();
   saveLabels(l, [{ ...f, label }], label ? `Label ${f.title}: ${label}` : `Unlabel ${f.title}`);
 }
-function newLabel(name, description = "") {
+function newLabel(name, description = "", color = "") {
   const l = readLabels();
   if (!name) throw new Error("Needs a name.");
   if (name in l) throw new Error("There's already a label called that.");
-  l[name] = String(description).trim();
+  l[name] = labelInfo(description, color);
   saveLabels(l, [], `New label: ${name}`);
 }
-// Rename and describe. Its features move to the new name.
-function editLabel(name, to, description) {
+// Rename, describe, recolour. Its features move to the new name.
+function editLabel(name, to, description, color) {
   const l = readLabels();
   if (!(name in l)) throw new Error("That label doesn't exist any more.");
   if (!to) throw new Error("Needs a name.");
   if (to !== name && to in l) throw new Error("There's already a label called that.");
-  delete l[name]; l[to] = String(description || "").trim();
-  saveLabels(l, loadFeatures().filter((f) => f.label === name).map((f) => ({ ...f, label: to })), to === name ? `Describe label ${name}` : `Rename label ${name} to ${to}`);
+  delete l[name]; l[to] = labelInfo(description, color);
+  saveLabels(l, loadFeatures().filter((f) => f.label === name).map((f) => ({ ...f, label: to })), to === name ? `Edit label ${name}` : `Rename label ${name} to ${to}`);
 }
 // A copy of the label, with a planned copy of each feature in it (same prompt
 // and model). Copies are planned, so no branches or agents start.
@@ -744,7 +747,7 @@ function duplicateLabel(name) {
   const named = (end) => name.slice(0, 40 - end.length) + end; // its number survives the 40 character limit
   let to = named(" copy");
   for (let n = 2; to in l; n++) to = named(` copy ${n}`);
-  newLabel(to, l[name]);
+  newLabel(to, l[name].description, l[name].color);
   const feats = loadFeatures().filter((f) => f.label === name);
   for (const f of feats) {
     let title = `${f.title} (copy)`;
@@ -956,8 +959,8 @@ const server = http.createServer(async (req, res) => {
       const b = await body(req), name = cleanLabel(b.name);
       fresh();
       try {
-        if (lm[1] === "new") { newLabel(name, b.description); return send(res, 200, { ok: true }); }
-        if (lm[1] === "edit") { editLabel(name, cleanLabel(b.to), b.description); return send(res, 200, { ok: true }); }
+        if (lm[1] === "new") { newLabel(name, b.description, b.color); return send(res, 200, { ok: true }); }
+        if (lm[1] === "edit") { editLabel(name, cleanLabel(b.to), b.description, b.color); return send(res, 200, { ok: true }); }
         return send(res, 200, lm[1] === "duplicate" ? duplicateLabel(name) : await deleteLabel(name));
       } catch (e) { return send(res, 200, { ok: false, msg: e.message }); }
     }
