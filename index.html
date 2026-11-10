@@ -264,6 +264,12 @@
   .colmenu .menu button { border:0; background:none; text-align:left; font-weight:400; padding:6px 10px; border-radius:6px; }
   .colmenu .menu button:hover, .colmenu .menu button:focus-visible { background:color-mix(in srgb, var(--line) 60%, transparent); }
   .colmenu .menu .danger { color:var(--bad); }
+  /* The + on a label column: a new feature already in it. */
+  .coladd { margin-left:auto; display:grid; place-items:center; width:24px; height:22px; padding:0; border:0; border-radius:6px; background:none; color:var(--mute); cursor:pointer; }
+  .coladd + .colmenu { margin-left:0; }
+  .coladd:hover { background:color-mix(in srgb, var(--line) 80%, transparent); color:var(--fg); }
+  .coladd:focus-visible { outline:2px solid var(--work); outline-offset:1px; }
+  .coladd svg { width:10px; height:10px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; }
   .tile { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin-bottom:8px; cursor:pointer; transition:border-color .15s; }
   .tile:hover { border-color:var(--mute); }
   .tile:focus-visible { outline:2px solid var(--work); outline-offset:1px; }
@@ -449,11 +455,11 @@
   <div class="panel">
     <header><h2>New feature</h2></header>
     <div class="body">
+      <div class="labels" id="newLabels" style="margin-top:0"></div>
       <input type="text" id="title" placeholder="Feature name, e.g. Client can hide Training now">
       <textarea id="prompt" class="tall" data-mention placeholder="What you want and why. Saved word for word in the feature's notes. Optional if you're only planning it."></textarea>
       <div class="hint">@ to tag a related feature. The agent reads their notes first.</div>
-      <div class="field"><label for="newModel">Model</label><select id="newModel"></select></div>
-      <div class="banner" id="limitNew" hidden></div>
+      <div class="field"><label for="newModel">Model</label><select id="newModel"></select></div>      <div class="banner" id="limitNew" hidden></div>
     </div>
     <div class="dmsg" id="addMsg"></div>
     <footer class="row"><button data-close title="Keeps what you've typed here for next time, in this browser tab. Nothing is saved to the repo.">Close</button><span class="grow" style="min-width:0"></span>
@@ -1124,7 +1130,8 @@ function renderBoard(features) {
     : [...labels(), ""].map((l) => ({ key: l, head: l ? `<span class="editcol" data-editcol tabindex="0" title="Click to rename, describe or recolour">${tagHtml(l)}</span>` : "Unlabelled", menu: l ? colMenu(l) : "", desc: LABELS[l]?.description || "", items: shown.filter((f) => (f.label || "") === l) }));
   const empty = view === "label" ? "Drag a card here to label it" : "Nothing here";
   const add = view === "label" ? `<div class="col newcol" data-newcol tabindex="0" title="Click to make an empty label, or drop a feature here to give it a new one"><div class="colhead">+ New label</div><div class="none">Click to name it, or drag a feature here.</div></div>` : "";
-  const html = `<div class="board ${dens}">${cols.map((c) => `<div class="col" data-col="${esc(c.key)}"><div class="colhead">${c.head}<span class="n">${c.items.length}</span>${c.menu || ""}</div>${c.desc ? `<div class="desc">${esc(c.desc)}</div>` : ""}${c.items.map(tile).join("") || `<div class="none">${empty}</div>`}</div>`).join("")}${add}</div>`;
+  const plus = (l) => view === "label" ? `<button class="coladd" data-addcol title="${l ? `New feature labelled ${esc(l)}` : "New feature without a label"}" aria-label="New feature"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M5 1v8M1 5h8"/></svg></button>` : "";
+  const html = `<div class="board ${dens}">${cols.map((c) => `<div class="col" data-col="${esc(c.key)}"><div class="colhead">${c.head}<span class="n">${c.items.length}</span>${plus(c.key)}${c.menu || ""}</div>${c.desc ? `<div class="desc">${esc(c.desc)}</div>` : ""}${c.items.map(tile).join("") || `<div class="none">${empty}</div>`}</div>`).join("")}${add}</div>`;
   const host = $("#board");
   if (host._html === html) return;
   const left = host.firstElementChild?.scrollLeft || 0;
@@ -1135,6 +1142,8 @@ function renderBoard(features) {
 $("#board").addEventListener("click", (e) => {
   const lab = e.target.closest("[data-lab]");
   if (lab) { lab.closest("details").open = false; return labelAction(lab.closest("[data-label]").dataset.label, lab.dataset.lab); }
+  const ad = e.target.closest("[data-addcol]");
+  if (ad) return openNew(ad.closest(".col").dataset.col);
   const nc = e.target.closest("[data-newcol]");
   if (nc && !naming) return nameNewCol(nc, null);
   const nm = e.target.closest("[data-editcol]");
@@ -1704,31 +1713,52 @@ async function loadDefaults() { const r = await api("/api/defaults"); setModels(
 // New feature: what you've typed is kept for this browser tab, so closing the
 // popup to look at another feature doesn't lose it. Cleared once it's created.
 const NEW_KEY = "newFeature";
-const saveNew = () => { try { sessionStorage.setItem(NEW_KEY, JSON.stringify({ title: $("#title").value, prompt: $("#prompt").value, model: $("#newModel").value })); } catch {} };
+let newLabel = "";
+const saveNew = () => { try { sessionStorage.setItem(NEW_KEY, JSON.stringify({ title: $("#title").value, prompt: $("#prompt").value, model: $("#newModel").value, label: newLabel })); } catch {} };
 let newDraft = {}; try { newDraft = JSON.parse(sessionStorage.getItem(NEW_KEY)) || {}; } catch {}
-$("#title").value = newDraft.title || ""; $("#prompt").value = newDraft.prompt || "";
+$("#title").value = newDraft.title || ""; $("#prompt").value = newDraft.prompt || ""; newLabel = newDraft.label || "";
 for (const id of ["#title", "#prompt", "#newModel"]) $(id).addEventListener("input", saveNew);
-$("#newOpen").onclick = async () => {
+// Its label: the same tags and + box as a feature's popup, but only picked here; made when it's created.
+function drawNewLabels() {
+  $("#newLabels").innerHTML = [...new Set([...labels(), newLabel].filter(Boolean))].map((l) => `<button type="button" class="tag ${l === newLabel ? "" : "off"}" style="--h:${hue(l)}" data-pick="${esc(l)}">${esc(l)}</button>`).join("")
+    + `<span class="newlabel" title="New label"><span class="plus"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M5 1v8M1 5h8"/></svg></span><input type="text" data-newpick placeholder="New label" maxlength="40" aria-label="New label"></span>`;
+}
+const pickLabel = (l) => { newLabel = l; saveNew(); drawNewLabels(); };
+$("#newLabels").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-pick]"); if (b) return pickLabel(b.dataset.pick === newLabel ? "" : b.dataset.pick);
+  const w = e.target.closest(".newlabel"); if (w && !w.classList.contains("open")) { w.classList.add("open"); w.querySelector("input").focus(); }
+});
+$("#newLabels").addEventListener("keydown", (e) => {
+  if (!e.target.matches("[data-newpick]") || e.ctrlKey || e.metaKey) return;
+  if (e.key === "Enter") { e.preventDefault(); const v = e.target.value.replace(/\s+/g, " ").trim(); if (v) pickLabel(v); else shutLabel(e.target); }
+  else if (e.key === "Escape") { e.preventDefault(); $("#newDlg")._keep = true; shutLabel(e.target); }
+});
+$("#newLabels").addEventListener("focusout", (e) => { if (e.target.matches("[data-newpick]") && !e.target.value.trim()) e.target.closest(".newlabel").classList.remove("open"); });
+// label: from a label column's +, else what was picked last time.
+async function openNew(label) {
+  if (label != null) newLabel = label;
   const keep = $("#newModel").value || newDraft.model || "";
+  drawNewLabels(); dlgMsg("#addMsg", "");
+  openModal($("#newDlg")); $("#title").focus();
   await loadDefaults();
   $("#newModel").innerHTML = modelOptions(keep, true);
-  dlgMsg("#addMsg", "");
-  openModal($("#newDlg")); $("#title").focus();
-};
+}
+$("#newOpen").onclick = () => openNew();
+// Closes at once; the server's work happens behind it. If it says no, it reopens with what you'd typed and why.
 async function addFeature(plan) {
-  const title = $("#title").value.trim(), prompt = $("#prompt").value.trim();
+  const typed = $("#newLabels [data-newpick]")?.value.replace(/\s+/g, " ").trim(); // typed in the + box but Enter never pressed: still meant
+  const title = $("#title").value.trim(), prompt = $("#prompt").value.trim(), model = $("#newModel").value, label = typed || newLabel;
   if (!title || (!plan && !prompt)) { dlgMsg("#addMsg", plan ? "Needs a name." : "Needs a name and what you want. Or save it as planned.", "bad"); return; }
-  dlgMsg("#addMsg", "Creating…");
-  // Busy: a second Enter (or click) mustn't make it twice.
-  const busy = (on) => { $("#add").disabled = $("#addPlan").disabled = on; };
-  busy(true);
-  const r = await api("/api/features", { title, prompt, plan, model: $("#newModel").value });
-  if (r.msg) { busy(false); dlgMsg("#addMsg", r.msg, "bad"); return; }
-  setTimeout(() => busy(false), 700);
-  $("#title").value = ""; $("#prompt").value = ""; $("#newModel").value = ""; newDraft = {};
+  const keep = { title: $("#title").value, prompt: $("#prompt").value };
+  closeModal($("#newDlg"));
+  $("#title").value = ""; $("#prompt").value = ""; $("#newModel").value = ""; newLabel = ""; newDraft = {};
   try { sessionStorage.removeItem(NEW_KEY); } catch {}
-  dlgMsg("#addMsg", plan ? "Saved as planned." : limitFull() ? `Setting up ${r.branch}. Its agent waits for the limit to reset.` : `Started ${r.branch}.`, "good");
-  setTimeout(() => closeModal($("#newDlg")), 700);
+  const r = await api("/api/features", { title, prompt, plan, model, label });
+  if (r.msg) {
+    if ($("#title").value || $("#prompt").value) return boardSay(`Couldn't create “${title}”: ${r.msg}`); // already typing the next one
+    $("#title").value = keep.title; $("#prompt").value = keep.prompt; newDraft = { model }; newLabel = label; saveNew();
+    await openNew(); dlgMsg("#addMsg", r.msg, "bad"); return;
+  }
   refresh();
 }
 $("#add").onclick = () => addFeature(false);

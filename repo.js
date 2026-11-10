@@ -1003,10 +1003,12 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === "POST" && url.pathname === "/api/features") {
       fresh();
-      const { title, prompt, plan, model } = await body(req);
+      const { title, prompt, plan, model, label } = await body(req);
       if (!title?.trim()) return send(res, 400, { msg: "Needs a name." });
       if (!plan && !prompt?.trim()) return send(res, 400, { msg: "Needs a starting prompt to start an agent. Or save it as planned." });
-      return send(res, 200, createFeature(title.trim(), String(prompt || "").trim(), { refs: mentions(prompt), plan: !!plan, model }));
+      const lab = cleanLabel(label), l = readLabels();
+      if (lab && !(lab in l)) newLabel(lab); // saved like any other, so its column stays if the feature leaves it
+      return send(res, 200, createFeature(title.trim(), String(prompt || "").trim(), { refs: mentions(prompt), plan: !!plan, model, label: lab }));
     }
     // Continue every feature a usage limit held back.
     if (req.method === "POST" && url.pathname === "/api/continue") {
