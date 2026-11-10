@@ -885,8 +885,8 @@ function simpleCard(f, inPop) {
         <div class="meta">${when}${spent(f.usage) ? " · " + spent(f.usage) : ""}${prev ? ` · continues “${esc(prev.title)}”` : ""}${later.length ? " · continued in " + later.map((x) => "“" + esc(x.title) + "”").join(", ") : ""}</div>
         ${edit ? "" : linksHtml(f)}
       </div>
-      ${planned ? `<select class="model" data-model title="The model its agent runs on. Changeable until it starts." aria-label="Model">${modelOptions(f.model || "", true)}</select>` : ""}
       ${head(f, cls, label, "")}
+      ${planned ? `<select class="model" data-model title="The model its agent runs on. Changeable until it starts." aria-label="Model">${modelOptions(f.model || "", true)}</select>` : ""}
     </div>
     ${planned && !edit && f.prompt ? `<div class="plan md">${md(f.prompt)}</div>` : ""}
     ${edit ? `<div style="margin-top:10px; display:grid; gap:8px">
