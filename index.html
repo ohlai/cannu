@@ -208,6 +208,15 @@
   .col.newcol.drop { outline:0; border-color:var(--mute); }
   .col .namecol, .col .desccol { width:100%; margin-bottom:6px; }
   .col .desccol { min-height:58px; resize:vertical; font-size:12.5px; }
+  .col .namerow { display:flex; gap:8px; align-items:center; margin-bottom:6px; }
+  .col .namerow .namecol { margin:0; flex:1; min-width:0; }
+  /* The colour circle: the native picker, drawn as a round swatch. */
+  .colorcol { flex:none; width:24px; height:24px; padding:0; border:1px solid var(--line); border-radius:50%; background:none; cursor:pointer; overflow:hidden; }
+  .colorcol:hover { border-color:var(--mute); }
+  .colorcol:focus-visible { outline:2px solid var(--work); outline-offset:1px; }
+  .colorcol::-webkit-color-swatch-wrapper { padding:0; }
+  .colorcol::-webkit-color-swatch { border:0; border-radius:50%; }
+  .colorcol::-moz-color-swatch { border:0; border-radius:50%; }
   .col .colform { padding-bottom:4px; }
   .colhead .editcol { cursor:text; border-radius:6px; }
   .colhead .editcol:hover .tag { outline:1px solid var(--mute); }
@@ -874,7 +883,8 @@ const byUrgency = (a, b) => rank(a) - rank(b) || newest(b).localeCompare(newest(
 
 // Each label gets a colour from its name, kept clear of the status colours.
 const HUES = ["#0891b2", "#db2777", "#65a30d", "#ea580c", "#0d9488", "#ca8a04", "#be185d", "#059669"];
-const hue = (l) => HUES[[...l].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7) % HUES.length];
+// A colour picked in its column wins; with none, one from its name.
+const hue = (l) => LABELS[l]?.color || HUES[[...l].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7) % HUES.length];
 const tagHtml = (l) => `<span class="tag" style="--h:${hue(l)}">${esc(l)}</span>`;
 // Every label with its description, from notes/labels.json, so a label can be empty.
 let LABELS = {};
@@ -927,7 +937,7 @@ function renderBoard(features) {
   const shown = features.filter((f) => (!q || (f.title + " " + (f.prompt || "") + " " + (f.label || "")).toLowerCase().includes(q)) && !(hide && ["merged", "dropped"].includes(kind(f)[0]))).sort(byUrgency);
   const cols = view === "status"
     ? CHIPS.filter((k) => !(hide && ["merged", "dropped"].includes(k))).map((k) => ({ key: k, head: `<span class="pill ${k}"><span class="dot"></span></span>${cap(k)}`, items: shown.filter((f) => kind(f)[0] === k) }))
-    : [...labels(), ""].map((l) => ({ key: l, head: l ? `<span class="editcol" data-editcol tabindex="0" title="Click to rename or describe">${tagHtml(l)}</span>` : "Unlabelled", menu: l ? colMenu(l) : "", desc: LABELS[l] || "", items: shown.filter((f) => (f.label || "") === l) }));
+    : [...labels(), ""].map((l) => ({ key: l, head: l ? `<span class="editcol" data-editcol tabindex="0" title="Click to rename, describe or recolour">${tagHtml(l)}</span>` : "Unlabelled", menu: l ? colMenu(l) : "", desc: LABELS[l]?.description || "", items: shown.filter((f) => (f.label || "") === l) }));
   const empty = view === "label" ? "Drag a card here to label it" : "Nothing here";
   const add = view === "label" ? `<div class="col newcol" data-newcol tabindex="0" title="Click to make an empty label, or drop a feature here to give it a new one"><div class="colhead">+ New label</div><div class="none">Click to name it, or drag a feature here.</div></div>` : "";
   const html = `<div class="board ${dens}">${cols.map((c) => `<div class="col" data-col="${esc(c.key)}"><div class="colhead">${c.head}<span class="n">${c.items.length}</span>${c.menu || ""}</div>${c.desc ? `<div class="desc">${esc(c.desc)}</div>` : ""}${c.items.map(tile).join("") || `<div class="none">${empty}</div>`}</div>`).join("")}${add}</div>`;
@@ -1005,28 +1015,35 @@ async function setLabel(slug, label) {
   refresh();
 }
 
-// A name box with a description box under it, in place of a column's head.
-// Enter in the name (Ctrl+Enter in the description), the button, or clicking
-// away with a name saves; Escape, or clicking away with no name, cancels.
+// A name box with a colour circle on its right and a description box under
+// it, in place of a column's head. Enter in the name (Ctrl+Enter in the
+// description), the button, or clicking away with a name saves; Escape, or
+// clicking away with no name, cancels. save gets the colour only if it was
+// picked (or the label already had one), so others keep the one from their name.
 let naming = null;
-function colForm(host, { name = "", desc = "", go }, save) {
+function colForm(host, { name = "", desc = "", color = "", go }, save) {
   const me = {}; naming = me;
-  host.innerHTML = `<input type="text" class="namecol" maxlength="40" placeholder="Label name" aria-label="Label name" value="${esc(name)}">
+  host.innerHTML = `<div class="namerow"><input type="text" class="namecol" maxlength="40" placeholder="Label name" aria-label="Label name" value="${esc(name)}">
+    <input type="color" class="colorcol" value="${color || hue(name)}" title="Label colour" aria-label="Label colour"></div>
     <textarea class="desccol" placeholder="Description (optional)" aria-label="Label description">${esc(desc)}</textarea>
     <button class="primary namego" data-namego>${go}</button>`;
-  const box = host.querySelector("input"), ta = host.querySelector("textarea");
+  const box = host.querySelector(".namecol"), pick = host.querySelector(".colorcol"), ta = host.querySelector("textarea");
+  let picked = !!color;
+  pick.addEventListener("input", () => { picked = true; });
   box.focus(); box.select();
   const done = (keep) => {
     if (naming !== me) return; naming = null; $("#board")._html = "";
     const v = box.value.trim();
-    if (keep && v) save(v, ta.value.trim()); else render(all);
+    if (keep && v) save(v, ta.value.trim(), picked ? pick.value : ""); else render(all);
   };
   host.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && (e.target === box || e.ctrlKey || e.metaKey)) { e.preventDefault(); done(true); }
     else if (e.key === "Escape") { e.preventDefault(); done(false); }
   });
   host.querySelector("[data-namego]").addEventListener("click", () => done(true));
-  host.addEventListener("focusout", (e) => { if (!host.contains(e.relatedTarget)) done(true); });
+  // Checked a moment later: the colour picker's own window blurs the page but
+  // leaves the circle focused, and that isn't clicking away.
+  host.addEventListener("focusout", () => setTimeout(() => { if (!host.contains(document.activeElement)) done(true); }));
 }
 
 // Clicked, or dropped on, the new label column: the label is made empty, or
@@ -1034,11 +1051,11 @@ function colForm(host, { name = "", desc = "", go }, save) {
 function nameNewCol(c, slug) {
   const f = slug && all.find((x) => x.slug === slug);
   c.innerHTML = `<div class="colhead">New label</div><div class="colform"></div>${slug ? `<div class="none">For “${esc(f?.title || slug)}”</div>` : ""}`;
-  colForm(c.querySelector(".colform"), { go: "Create board" }, async (v, description) => {
+  colForm(c.querySelector(".colform"), { go: "Create board" }, async (v, description, color) => {
     boardSay("");
     if (!slug || !labels().includes(v)) { // dropped on an existing name just labels it
-      LABELS[v] ??= description; render(all); // show it now; the server saves it
-      const r = await api("/api/labels/new", { name: v, description });
+      LABELS[v] ??= { description, color }; render(all); // show it now; the server saves it
+      const r = await api("/api/labels/new", { name: v, description, color });
       if (!r.ok) boardSay(r.msg);
     }
     if (slug) return setLabel(slug, v);
@@ -1052,14 +1069,15 @@ function editCol(name) {
   const c = [...document.querySelectorAll("#board .col[data-col]")].find((x) => x.dataset.col === name); if (!c) return;
   const host = document.createElement("div"); host.className = "colform";
   c.querySelector(".desc")?.remove(); c.querySelector(".colhead").replaceWith(host);
-  colForm(host, { name, desc: LABELS[name] || "", go: "Save" }, async (to, description) => {
+  const was = LABELS[name] || {};
+  colForm(host, { name, desc: was.description || "", color: was.color || "", go: "Save" }, async (to, description, color) => {
     boardSay("");
-    if (to === name && description === (LABELS[name] || "")) return render(all);
+    if (to === name && description === (was.description || "") && color === (was.color || "")) return render(all);
     // Show it now; the server saves it.
-    delete LABELS[name]; LABELS[to] = description;
+    delete LABELS[name]; LABELS[to] = { description, color };
     for (const f of all) if (f.label === name) f.label = to;
     render(all);
-    const r = await api("/api/labels/edit", { name, to, description });
+    const r = await api("/api/labels/edit", { name, to, description, color });
     if (!r.ok) boardSay(r.msg);
     refresh();
   });
