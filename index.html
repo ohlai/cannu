@@ -537,7 +537,9 @@ function status(f) {
   }
   const s = f.live?.state;
   // Once merged, that's the news, unless the agent is busy or needs you again.
-  if (f.merged && !["working", "needs-you", "interrupted", "error", "stuck"].includes(s)) return ["merged", "merged"];
+  // Merged and nothing new since: done. New commits on its branch (from a chat
+  // after merging) put it back to waiting, with Check and merge to ship them.
+  if (f.merged && !f.ahead && !["working", "needs-you", "interrupted", "error", "stuck"].includes(s)) return ["merged", "merged"];
   return [s, { working: f.live.background ? "working (background)" : "working", stuck: "stuck", "needs-you": "needs you", idle: "idle, open", closed: "idle", error: "error", interrupted: "interrupted", "not-started": "never started" }[s] || "no session"];
 }
 
@@ -622,7 +624,7 @@ function card(f, inPop) {
       <button data-act="open">Open session</button>
       <button data-act="fb">${s.fb ? "Hide chat" : "Chat"}${st.queue?.length ? ` (${st.queue.length} waiting)` : ""}</button>
       ${!f.merged ? `<button data-act="drop" title="A bad idea: stop it and keep it on record as dropped">Drop</button>` : ""}`,
-      !f.merged ? shipButtons(f) : `<button class="primary" data-act="remove">Remove worktree</button>`)}
+      !f.merged || f.ahead ? shipButtons(f) : `<button class="primary" data-act="remove">Remove worktree</button>`)}
   </div>`;
 }
 

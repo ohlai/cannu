@@ -208,6 +208,10 @@ comes from its name.
   **Merge PR** merges it on GitHub, pulls main down, records the feature as
   merged and pushes that record. A PR merged directly on GitHub is picked up
   the same way.
+- **After merging**, the feature's agent and folder stay until you remove
+  them, so you can keep chatting with it. While it works its card shows
+  working, and once it has committed something main doesn't have, it goes back
+  to waiting with Check and merge (or Open PR) to ship that too.
 - **Remove worktree**: deletes the folder and branch once merged. The feature
   stays in the list with its notes, read from main.
 - **Carry on** (on an interrupted card): resumes the session with a message

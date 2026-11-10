@@ -625,10 +625,11 @@ async function prPoll(f, force = false) {
     info = { at: Date.now(), state: j.state, url: j.url, mergeable: j.mergeable, review: j.reviewDecision || "", checks, failed: runs.filter((c) => ["FAILURE", "ERROR", "TIMED_OUT"].includes((c.conclusion || c.state || "").toUpperCase())).map((c) => c.name || c.context) };
   } catch {}
   prInfo.set(f.slug, info);
-  // Merged on GitHub (from here or not): record it.
-  if (info.state === "MERGED" && f.status === "building") await afterPRMerged(f).catch(() => {});
+  // Merged on GitHub (from here or not): record it. A feature only has a pr
+  // while that PR is open, so this also catches a merged feature's second PR.
+  if (info.state === "MERGED") await afterPRMerged(f).catch(() => {});
 }
-setInterval(() => { for (const f of loadFeatures()) if (f.pr && f.status === "building") prPoll(f); }, 10e3);
+setInterval(() => { for (const f of loadFeatures()) if (f.pr) prPoll(f); }, 10e3);
 
 async function mergePR(f) {
   const m = await gh("pr", "merge", String(f.pr), "--merge");
@@ -643,7 +644,8 @@ async function afterPRMerged(f) {
   }
   const pull = await run("git", ["pull", "--no-rebase", "--no-edit", "origin", MAIN], { cwd: APP, timeout: 120000 });
   if (pull.code !== 0) return { ok: false, msg: `Merged on GitHub, but pulling ${MAIN} failed.`, out: tail(pull.out) };
-  update(f.slug, { status: "merged", merged: stamp() }, `Merged: ${f.title} (#${f.pr})`);
+  // pr cleared: new commits after this get a new pull request, not this one.
+  update(f.slug, { status: "merged", merged: stamp(), pr: null, prUrl: null }, `Merged: ${f.title} (#${f.pr})`);
   await stopApp(f);
   const push = await run("git", ["push", "origin", MAIN], { cwd: APP, timeout: 120000 });
   prInfo.delete(f.slug);
