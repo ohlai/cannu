@@ -151,7 +151,8 @@
   #mention div.on { background:var(--fg); color:var(--bg); }
   #mention small { opacity:.6; margin-left:6px; }
   /* An @ that names a real feature, and the line under a box saying what its @s link to. */
-  .ref { color:var(--work); text-decoration:underline; text-underline-offset:2px; }
+  .ref { color:var(--work); text-decoration:underline; text-underline-offset:2px; cursor:pointer; }
+  .ref:hover { text-decoration-thickness:2px; }
   .noref { color:var(--you); }
   [data-tags]:empty { display:none; }
   .chat .hint[data-tags] { padding-bottom:0; }
@@ -546,7 +547,7 @@ function md(src) {
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
     .replace(/(^|[^*\w])\*([^*\n]+)\*(?!\w)/g, "$1<em>$2</em>")
     .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank">$1</a>')
-    .replace(/(^|[^\w/])@([a-z0-9][a-z0-9-]*)/g, (m, pre, slug) => { const f = all.find((x) => x.slug === slug); return f ? `${pre}<span class="ref" title="${esc(f.title)}">@${slug}</span>` : m; });
+    .replace(/(^|[^\w/])@([a-z0-9][a-z0-9-]*)/g, (m, pre, slug) => { const f = all.find((x) => x.slug === slug); return f ? `${pre}<span class="ref" data-goto="${slug}" title="Open ${esc(f.title)}">@${slug}</span>` : m; });
   const lines = String(src ?? "").replace(/\r\n/g, "\n").split("\n");
   const out = [];
   for (let i = 0; i < lines.length; ) {
@@ -822,6 +823,7 @@ function card(f, inPop) {
         <div class="meta">${git}</div>
         ${spent(f.usage) ? `<div class="meta">${spent(f.usage)}</div>` : ""}
         ${prev ? `<div class="meta">Continues “${esc(prev.title)}”</div>` : ""}
+        ${linksHtml(f)}
         ${prLine(f)}`;
   const body = `${st.activity && cls === "working" ? `<div class="activity" style="margin-top:6px">${esc(st.activity)}</div>` : ""}
     ${banner}
@@ -888,6 +890,7 @@ function simpleCard(f, inPop) {
       <div class="grow">
         <div class="title">${esc(f.title)}${f.label ? tagHtml(f.label) : ""}</div>
         <div class="meta">${when}${spent(f.usage) ? " · " + spent(f.usage) : ""}${prev ? ` · continues “${esc(prev.title)}”` : ""}${later.length ? " · continued in " + later.map((x) => "“" + esc(x.title) + "”").join(", ") : ""}</div>
+        ${linksHtml(f, !edit)}
       </div>
       ${head(f, cls, label, "")}
     </div>
@@ -2075,9 +2078,29 @@ function pickMention(i) {
 function tagsHtml(text, self) {
   const slugs = [...new Set([...String(text || "").matchAll(/@([a-z0-9][a-z0-9-]*)/g)].map((m) => m[1]))].filter((x) => x !== self);
   const ok = slugs.map((x) => all.find((f) => f.slug === x)).filter(Boolean), bad = slugs.filter((x) => !all.some((f) => f.slug === x));
-  return [ok.length && `Linked: ${ok.map((f) => `<span class="ref" title="@${esc(f.slug)}">${esc(f.title)}</span>`).join(", ")}`,
+  return [ok.length && `Linked to: ${refList(ok)}`,
     bad.length && `<span class="noref">Not linked, no such feature: ${bad.map((x) => "@" + esc(x)).join(", ")}</span>`].filter(Boolean).join(" · ");
 }
+const refList = (fs) => fs.map((f) => `<span class="ref" data-goto="${f.slug}" title="Open it">${esc(f.title)}</span>`).join(", ");
+// A feature's saved links both ways: the features its description @s, and those that @ it.
+// Each line only when there's something on it. to=false when the live line under its box already shows them.
+function linksHtml(f, to = true) {
+  const out = to ? (f.refs || []).map((x) => all.find((y) => y.slug === x)).filter(Boolean) : [];
+  const from = all.filter((x) => x.slug !== f.slug && x.refs?.includes(f.slug));
+  return (out.length ? `<div class="meta">Linked to: ${refList(out)}</div>` : "") + (from.length ? `<div class="meta">Linked from: ${refList(from)}</div>` : "");
+}
+// Clicking a linked feature: the popup you're in closes (saving any edit), then the linked one opens.
+function gotoFeature(slug) {
+  const d = $("#popDlg");
+  if (!d.open) return openPop(slug);
+  if (slug === popSlug) return;
+  d.addEventListener("close", () => openPop(slug), { once: true });
+  closeModal(d);
+}
+document.addEventListener("click", (e) => {
+  const g = e.target.closest?.("[data-goto]"); if (!g) return;
+  e.preventDefault(); e.stopPropagation(); gotoFeature(g.dataset.goto);
+}, true);
 function showTags(t) { const box = (t.closest(".chat") || t.parentElement).querySelector("[data-tags]"); if (box) box.innerHTML = tagsHtml(t.value, t.dataset.self); }
 document.addEventListener("input", (e) => { if (e.target.matches?.("[data-mention]")) { mentionCheck(e.target); showTags(e.target); } });
 document.addEventListener("focusin", (e) => { if (e.target.matches?.("[data-mention]")) showTags(e.target); });

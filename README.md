@@ -241,7 +241,10 @@ comes from its name.
   features. Picking one writes `@slug`, which points the agent at that
   feature's notes (recorded as Related in `feature.md`). Under the box, a line
   lists which @s link to a real feature and which don't, and in shown text a
-  linked @slug is underlined.
+  linked @slug is underlined. Clicking a linked feature closes the popup
+  you're in (saving any edit) and opens that one. A card shows **Linked to**
+  (the features it tags) and **Linked from** (the features that tag it), each
+  only when there are any.
 - **Agent defaults** (a popup): everything the dashboard sends an agent. That
   covers the default model, the repo's own system prompt, extra environment variables,
   the carry on, new session and merge conflict messages, and what background
