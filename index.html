@@ -1153,10 +1153,9 @@ async function setLabel(slug, label) {
   refresh();
 }
 
-// A name box with a colour circle on its right and a description box under
-// it, in place of a column's head. Enter in the name (Ctrl+Enter in the
-// description), the button, or clicking away with a name saves; Escape, or
-// clicking away with no name, cancels. save gets the colour only if it was
+// A colour swatch, a name box on its right and a description box under it,
+// in place of a column's head. Enter in the name (Ctrl+Enter in the
+// description) or the button saves; Escape or clicking away cancels. save gets the colour only if it was
 // picked (or the label already had one), so others keep the one from their name.
 let naming = null;
 function colForm(host, { name = "", desc = "", color = "", go }, save) {
@@ -1190,7 +1189,7 @@ function colForm(host, { name = "", desc = "", color = "", go }, save) {
   host.querySelector("[data-namego]").addEventListener("click", () => done(true));
   // Checked a moment later, once focus has landed somewhere: inside the form
   // (the picker included) isn't clicking away.
-  host.addEventListener("focusout", () => setTimeout(() => { if (!host.contains(document.activeElement)) done(true); }));
+  host.addEventListener("focusout", () => setTimeout(() => { if (!host.contains(document.activeElement)) done(false); }));
 }
 
 // hex <-> hue (0-360), saturation and brightness (0-1).
