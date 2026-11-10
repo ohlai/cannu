@@ -173,9 +173,8 @@
   .panel header { padding:16px 20px 0; } .panel header h2 { margin:0; color:var(--fg); font-size:16px; }
   .panel .body { padding:14px 20px; overflow:auto; display:grid; gap:10px; }
   .panel footer { padding:12px 20px 16px; border-top:1px solid var(--line); }
-  /* A long message wraps in the space left over, so the buttons stay on one line. */
-  .panel footer .msg { flex:1 1 0; min-width:0; margin-top:0; }
-  .panel footer > button { flex-shrink:0; }
+  /* A popup's message: above the buttons, not in their row. */
+  .dmsg { padding:0 20px 12px; } .dmsg:empty { display:none; } .dmsg > :first-child { margin-top:0; }
   .field { display:grid; gap:5px; } .field > label { font-weight:600; font-size:13px; }
   .field .row { gap:8px; }
   select { font:inherit; font-size:13px; padding:7px 10px; border-radius:7px; border:1px solid var(--line); background:var(--bg); color:var(--fg); }
@@ -420,7 +419,8 @@
         <label class="switch"><input type="checkbox" id="cNotes">Commit each feature's notes and prompts to the repo</label>
       </div>
     </div>
-    <footer class="row"><button data-close>Close</button><span class="msg" id="repoMsg"></span><span class="grow" style="min-width:0"></span><button class="primary" id="repoAdd">Add repo</button></footer>
+    <div class="dmsg" id="repoMsg"></div>
+    <footer class="row"><button data-close>Close</button><span class="grow" style="min-width:0"></span><button class="primary" id="repoAdd">Add repo</button></footer>
   </div>
 </dialog>
 
@@ -434,7 +434,8 @@
       <div class="field"><label for="newModel">Model</label><select id="newModel"></select></div>
       <div class="banner" id="limitNew" hidden></div>
     </div>
-    <footer class="row"><button data-close title="Keeps what you've typed here for next time, in this browser tab. Nothing is saved to the repo.">Close</button><span class="msg" id="addMsg"></span><span class="grow" style="min-width:0"></span>
+    <div class="dmsg" id="addMsg"></div>
+    <footer class="row"><button data-close title="Keeps what you've typed here for next time, in this browser tab. Nothing is saved to the repo.">Close</button><span class="grow" style="min-width:0"></span>
       <button class="second" id="addPlan" title="Records it on main without a branch or agent. Start it later from its card.">Save as planned</button><button class="primary" id="add">Start agent</button></footer>
   </div>
 </dialog>
@@ -458,7 +459,8 @@
   <div class="panel">
     <header><h2>Agent defaults</h2><div class="hint">What every feature agent is given. Saved under <code>agent</code> in the repo's <code>cannu.json</code> and committed on main. Agents that already started get changes from their next run.</div></header>
     <div class="body" id="defaultsBody"></div>
-    <footer class="row"><button data-close>Close</button><span class="msg" id="defaultsMsg"></span><span class="grow" style="min-width:0"></span><button class="primary" id="defaultsSave">Save</button></footer>
+    <div class="dmsg" id="defaultsMsg"></div>
+    <footer class="row"><button data-close>Close</button><span class="grow" style="min-width:0"></span><button class="primary" id="defaultsSave">Save</button></footer>
   </div>
 </dialog>
 <script>
@@ -1342,6 +1344,19 @@ host.addEventListener("keydown", (e) => {
 $("#chips").addEventListener("click", (e) => { const b = e.target.closest("[data-filter]"); if (!b) return; filter = b.dataset.filter; store.set("filter", filter); render(all); });
 $("#search").addEventListener("input", () => render(all));
 
+async function copyErr(b) {
+  try { await navigator.clipboard.writeText(b.closest(".err").querySelector("pre").textContent); b.lastChild.textContent = "Copied"; } catch { b.lastChild.textContent = "Couldn't copy"; }
+  setTimeout(() => { b.lastChild.textContent = "Copy"; }, 1500);
+}
+// A popup's message sits at the foot of its body, as on a card: a line, or
+// for an error ("bad") the red box with Copy.
+function dlgMsg(id, msg, cls = "") { $(id).innerHTML = msgBlock({ msg, cls }); markShortErrors(); }
+for (const id of ["#newDlg", "#repoDlg", "#defaultsDlg"]) $(id).addEventListener("click", (e) => {
+  const b = e.target.closest("[data-act]");
+  if (b?.dataset.act === "copy") return copyErr(b);
+  if (b?.dataset.act === "errexpand" && !b.classList.contains("short")) b.classList.toggle("full");
+});
+
 async function onClick(e) {
   const b = e.target.closest("[data-act]"); if (!b) return;
   const slug = b.closest("[data-slug]").dataset.slug; const s = u(slug); const act = b.dataset.act;
@@ -1350,7 +1365,7 @@ async function onClick(e) {
   if (act === "collapse" && b.closest(".pop")) return; // the popup always shows everything
   if (act === "newlabel") { if (!b.classList.contains("open")) { b.classList.add("open"); b.querySelector("input").focus(); } return; }
   if (act === "label") { const f = all.find((x) => x.slug === slug); return setLabel(slug, b.dataset.label === f.label ? "" : b.dataset.label); }
-  if (act === "copy") { try { await navigator.clipboard.writeText(b.closest(".err").querySelector("pre").textContent); b.lastChild.textContent = "Copied"; } catch { b.lastChild.textContent = "Couldn't copy"; } setTimeout(() => { b.lastChild.textContent = "Copy"; }, 1500); return; }
+  if (act === "copy") return copyErr(b);
   if (act === "errexpand") {
     // Nothing hidden (a one line error): nothing to open, so the box and Copy stay put.
     const pre = b.querySelector("pre");
@@ -1555,22 +1570,22 @@ $("#newOpen").onclick = async () => {
   const keep = $("#newModel").value || newDraft.model || "";
   await loadDefaults();
   $("#newModel").innerHTML = modelOptions(keep, true);
-  $("#addMsg").textContent = "";
+  dlgMsg("#addMsg", "");
   openModal($("#newDlg")); $("#title").focus();
 };
 async function addFeature(plan) {
   const title = $("#title").value.trim(), prompt = $("#prompt").value.trim();
-  if (!title || (!plan && !prompt)) { $("#addMsg").textContent = plan ? "Needs a name." : "Needs a name and what you want. Or save it as planned."; return; }
-  $("#addMsg").textContent = "Creating…";
+  if (!title || (!plan && !prompt)) { dlgMsg("#addMsg", plan ? "Needs a name." : "Needs a name and what you want. Or save it as planned.", "bad"); return; }
+  dlgMsg("#addMsg", "Creating…");
   // Busy: a second Enter (or click) mustn't make it twice.
   const busy = (on) => { $("#add").disabled = $("#addPlan").disabled = on; };
   busy(true);
   const r = await api("/api/features", { title, prompt, plan, model: $("#newModel").value });
-  if (r.msg) { busy(false); $("#addMsg").textContent = r.msg; return; }
+  if (r.msg) { busy(false); dlgMsg("#addMsg", r.msg, "bad"); return; }
   setTimeout(() => busy(false), 700);
   $("#title").value = ""; $("#prompt").value = ""; $("#newModel").value = ""; newDraft = {};
   try { sessionStorage.removeItem(NEW_KEY); } catch {}
-  $("#addMsg").textContent = plan ? "Saved as planned." : limitFull() ? `Setting up ${r.branch}. Its agent waits for the limit to reset.` : `Started ${r.branch}.`;
+  dlgMsg("#addMsg", plan ? "Saved as planned." : limitFull() ? `Setting up ${r.branch}. Its agent waits for the limit to reset.` : `Started ${r.branch}.`, "good");
   setTimeout(() => closeModal($("#newDlg")), 700);
   refresh();
 }
@@ -1626,10 +1641,10 @@ function defaultsForm(r) {
 }
 function fillDefaults(r) { $("#defaultsBody").innerHTML = defaultsForm(r); builtIn = r.builtIn; defaultsDirty = false; }
 $("#defaultsOpen").onclick = async () => {
-  if (!defaultsDirty) { fillDefaults(await loadDefaults()); $("#defaultsMsg").textContent = ""; }
+  if (!defaultsDirty) { fillDefaults(await loadDefaults()); dlgMsg("#defaultsMsg", ""); }
   openModal($("#defaultsDlg"));
 };
-const notSaved = () => { defaultsDirty = true; $("#defaultsMsg").textContent = "Not saved yet."; };
+const notSaved = () => { defaultsDirty = true; dlgMsg("#defaultsMsg", "Not saved yet."); };
 $("#defaultsBody").addEventListener("input", notSaved);
 $("#defaultsBody").addEventListener("click", (e) => {
   const k = e.target.dataset?.reset; if (!k) return;
@@ -1643,9 +1658,9 @@ $("#defaultsSave").onclick = async () => {
   const body = { model: $("#dModel").value, systemPrompt: $("#dSystem").value.trim(), env, allowedTools: list("#dAllow"), disallowedTools: list("#dDeny") };
   for (const [k] of TEXTS) body[k] = $("#d_" + k).value.trim();
   const r = await api("/api/defaults", body);
-  if (r.msg) { $("#defaultsMsg").textContent = r.msg; return; }
+  if (r.msg) { dlgMsg("#defaultsMsg", r.msg, "bad"); return; }
   setModels(r); fillDefaults(r);
-  $("#defaultsMsg").textContent = "Saved and committed on main.";
+  dlgMsg("#defaultsMsg", "Saved and committed on main.", "good");
   setTimeout(() => closeModal($("#defaultsDlg")), 700);
 };
 
@@ -1756,8 +1771,8 @@ async function inspectDir() {
   if (!dir) { $("#repoSet").hidden = true; loaded = null; return; }
   const r = await fetch("/api/repos/inspect?dir=" + encodeURIComponent(dir)).then((x) => x.json()).catch(() => ({ ok: false }));
   if ($("#repoDir").value.trim() !== dir) return; // typed on since
-  if (!r.ok) { $("#repoSet").hidden = true; loaded = null; $("#repoMsg").textContent = r.msg || ""; return; }
-  $("#repoMsg").textContent = r.listed ? "That repo is already listed." : "";
+  if (!r.ok) { $("#repoSet").hidden = true; loaded = null; dlgMsg("#repoMsg", r.msg || "", "bad"); return; }
+  dlgMsg("#repoMsg", r.listed ? "That repo is already listed." : "");
   if (!nameTouched) $("#repoNameIn").value = r.name;
   fillForm(r.config); loaded = { has: r.hasConfig, values: formValues() };
   $("#repoSetHint").innerHTML = r.hasConfig ? "From the repo's <code>cannu.json</code>. Anything you change is saved back to it and committed."
@@ -1765,7 +1780,7 @@ async function inspectDir() {
   $("#repoSet").hidden = false;
 }
 async function openAddRepo() {
-  $("#repoDir").value = ""; $("#repoNameIn").value = ""; $("#repoMsg").textContent = "";
+  $("#repoDir").value = ""; $("#repoNameIn").value = ""; dlgMsg("#repoMsg", "");
   nameTouched = false; loaded = null; $("#repoSet").hidden = true;
   $("#found").innerHTML = `<div class="hint">Looking…</div>`;
   openModal($("#repoDlg"));
@@ -1780,17 +1795,17 @@ $("#repoDir").addEventListener("input", () => { clearTimeout(inspectTimer); insp
 $("#repoNameIn").addEventListener("input", () => { nameTouched = $("#repoNameIn").value.trim() !== ""; });
 $("#repoAdd").onclick = async () => {
   const dir = $("#repoDir").value.trim();
-  if (!dir) { $("#repoMsg").textContent = "Pick a repo or type its folder."; return; }
+  if (!dir) { dlgMsg("#repoMsg", "Pick a repo or type its folder.", "bad"); return; }
   // Only what's new or changed goes into cannu.json, so an existing one isn't rewritten for nothing.
   let settings;
   if (loaded) {
     const now = formValues();
     settings = loaded.has ? Object.fromEntries(Object.entries(now).filter(([k, v]) => JSON.stringify(v) !== JSON.stringify(loaded.values[k]))) : now;
   }
-  $("#repoMsg").textContent = "Adding…"; $("#repoAdd").disabled = true;
+  dlgMsg("#repoMsg", "Adding…"); $("#repoAdd").disabled = true;
   const r = await fetch("/api/repos", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ dir, name: plain($("#repoNameIn").value.trim()), settings }) }).then((x) => x.json()).catch(() => ({ msg: "Couldn't reach Cannu." }));
   $("#repoAdd").disabled = false;
-  if (!r.ok) { $("#repoMsg").textContent = r.msg; return; }
+  if (!r.ok) { dlgMsg("#repoMsg", r.msg, "bad"); return; }
   REPOS = await fetch("/api/repos").then((x) => x.json());
   closeModal($("#repoDlg"));
   // Its Cannu takes a moment to start; the board fills in on the next refresh.
