@@ -998,10 +998,10 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === "POST" && url.pathname === "/api/features") {
       fresh();
-      const { title, prompt, plan, model } = await body(req);
+      const { title, prompt, plan, model, label } = await body(req);
       if (!title?.trim()) return send(res, 400, { msg: "Needs a name." });
       if (!plan && !prompt?.trim()) return send(res, 400, { msg: "Needs a starting prompt to start an agent. Or save it as planned." });
-      return send(res, 200, createFeature(title.trim(), String(prompt || "").trim(), { refs: mentions(prompt), plan: !!plan, model }));
+      return send(res, 200, createFeature(title.trim(), String(prompt || "").trim(), { refs: mentions(prompt), plan: !!plan, model, label: cleanLabel(label) }));
     }
     // Continue every feature a usage limit held back.
     if (req.method === "POST" && url.pathname === "/api/continue") {
