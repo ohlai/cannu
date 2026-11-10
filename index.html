@@ -636,17 +636,17 @@ function renderUsage() {
   const full = limitFull(), held = all.filter((f) => f.worktree && f.live?.state === "limited");
   const wait = held.map(heldUntil).filter(Boolean).sort().at(-1);
   const n = held.length, ones = `${n} ${n === 1 ? "feature" : "features"}`;
-  const auto = DEF?.autoContinue !== false, then = auto ? "Held agents carry on by themselves once it resets." : "Once it resets, agents will wait for you to click resume.";
+  const auto = DEF?.autoContinue !== false, then = auto ? "Held agents carry on by themselves once it resets." : "Once it resets, held agents will wait for you to click resume.";
   const note = full ? `Your ${LIMIT_NAME[full.which]} Claude limit is full. It resets ${resetAt(full.resets)}.<br>Until then Cannu doesn't start agents: new features are set up and wait, and messages stay queued.${n ? ` ${ones} ${n === 1 ? "is" : "are"} held.` : ""} ${then}`
     : wait ? `${ones} ${n === 1 ? "is" : "are"} held by your Claude usage limit until ${resetAt(wait)}. ${then}`
-    : n ? `Your Claude limit has reset. ${ones} held${auto ? ", carrying on by themselves shortly" : ""}. <button class="primary" data-act="continueall">Carry on now</button>` : "";
+    : n ? `Your Claude limit has reset. ${ones} held${auto ? ", carrying on by themselves shortly" : ""}. <button class="primary" data-act="continueall">${auto ? "Resume now" : "Resume all"}</button>` : "";
   const lm = $("#limitMsg");
   lm.hidden = !note;
   const banner = note && `<span>${note}</span><label class="switch" title="Also in Agent defaults."><input type="checkbox" data-act="autocont" ${auto ? "checked" : ""}>Carry on by itself after a reset</label>`;
   if (note && lm.dataset.html !== banner) { lm.innerHTML = banner; lm.dataset.html = banner; }
   const ln = $("#limitNew");
   ln.hidden = !full;
-  if (full) ln.textContent = `Your ${LIMIT_NAME[full.which]} Claude limit is full until ${resetAt(full.resets)}. Start agent sets the feature up now and its agent waits, then ${DEF?.autoContinue !== false ? "starts by itself" : "its card offers Start"} once the limit resets.`;
+  if (full) ln.textContent = `Your ${LIMIT_NAME[full.which]} Claude limit is full until ${resetAt(full.resets)}. Start agent sets the feature up now and its agent waits, then ${DEF?.autoContinue !== false ? "starts by itself" : "waits for you to click Resume on its card"} once the limit resets.`;
 }
 // ?fakelimit shows the board as if the 5-hour limit were full, to see how
 // that looks. Only this page is fooled: the server still starts agents.
@@ -729,8 +729,8 @@ function card(f, inPop) {
   }
   else if (cls === "limited") {
     const full = limitFull(), wait = heldUntil(f), what = st.held?.first ? "start" : "carry on", auto = DEF?.autoContinue !== false;
-    banner = wait ? `<div class="banner">Held by your ${full ? LIMIT_NAME[full.which] + " " : ""}Claude usage limit. It resets ${resetAt(wait)}, and then ${auto ? `this agent will ${what} by itself` : `this card offers to ${what}`}.</div>`
-      : `<div class="banner">Held by your Claude usage limit, which should have reset.${auto ? ` This agent will ${what} by itself shortly.` : ""} <button class="primary" data-act="continue">${cap(what)}${auto ? " now" : ""}</button></div>`;
+    banner = wait ? `<div class="banner">Held by your ${full ? LIMIT_NAME[full.which] + " " : ""}Claude usage limit. It resets ${resetAt(wait)}, and then ${auto ? `this agent will ${what} by itself` : "it waits for you to click Resume"}.</div>`
+      : `<div class="banner">Held by your Claude usage limit, which should have reset.${auto ? ` This agent will ${what} by itself shortly.` : ""} <button class="primary" data-act="continue">Resume${auto ? " now" : ""}</button></div>`;
   }
   else if (cls === "not-started") banner = `<div class="banner">The terminal for this feature never started a session. <button data-act="resume-term">Start it now</button></div>`;
   const c = !inPop && collapsed.has(f.slug);
