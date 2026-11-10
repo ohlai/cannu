@@ -214,8 +214,8 @@
   /* The view switcher, colours flipped: a black box, the picked view on a white square. */
   #viewSeg { background:var(--fg); border-color:var(--fg); }
   #viewSeg .thumb { background:var(--bg); }
-  #viewSeg button { color:var(--bg); opacity:.6; }
-  #viewSeg button:hover { opacity:.9; }
+  #viewSeg button { color:var(--bg); opacity:1; }
+  #viewSeg button:not(.on):hover { background:rgba(127,127,127,.3); }
   #viewSeg button.on { color:var(--fg); opacity:1; }
   .board { display:grid; grid-auto-flow:column; grid-auto-columns:minmax(300px, 1fr); gap:14px; overflow-x:auto; align-items:start; padding:24px 32px 32px; margin:-16px -32px -24px; } /* the scroller clips, so room inside it for a dragged card's lean and shadow, pulled back out (the top only partly, so it stays off the filters) */
   .col { background:color-mix(in srgb, var(--line) 35%, transparent); border-radius:12px; padding:10px; min-height:110px; }
