@@ -210,7 +210,7 @@
   #viewSeg button { color:var(--bg); opacity:.6; }
   #viewSeg button:hover { opacity:.9; }
   #viewSeg button.on { color:var(--fg); opacity:1; }
-  .board { display:grid; grid-auto-flow:column; grid-auto-columns:minmax(300px, 1fr); gap:14px; overflow-x:auto; align-items:start; padding:20px; margin:-20px -20px -12px; } /* room inside the scroller for a dragged card's lean and shadow, pulled back out so nothing shifts */
+  .board { display:grid; grid-auto-flow:column; grid-auto-columns:minmax(300px, 1fr); gap:14px; overflow-x:auto; align-items:start; padding:24px 32px 32px; margin:-16px -32px -24px; } /* the scroller clips, so room inside it for a dragged card's lean and shadow, pulled back out (the top only partly, so it stays off the filters) */
   .col { background:color-mix(in srgb, var(--line) 35%, transparent); border-radius:12px; padding:10px; min-height:110px; }
   .col.drop { outline:2px dashed var(--mute); outline-offset:-2px; }
   .colhead[data-dragcol] { cursor:grab; }
@@ -219,7 +219,7 @@
   .col:has(.tile) > .none { display:none; }
   /* dragging: the others spring into the gap, the held one leans toward the pointer */
   .board.sorting .tile, .board.sorting > .col { transition:transform .24s cubic-bezier(.3,1.35,.5,1); }
-  .board .lifted { position:relative; z-index:3; box-shadow:0 10px 28px rgba(0,0,0,.16); transition:transform .12s ease-out !important; }
+  .board .lifted { position:relative; z-index:3; box-shadow:0 6px 16px rgba(0,0,0,.18); transition:transform .12s ease-out !important; }
   .col.lifted { background:color-mix(in srgb, var(--line) 35%, var(--bg)); }
   body.grabbing, body.grabbing * { cursor:grabbing !important; }
   @media (prefers-reduced-motion: reduce) { .board.sorting .tile, .board.sorting > .col, .board .lifted { transition:none !important; } }
@@ -323,7 +323,6 @@
   .repopick > button span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .repopick > button svg { width:12px; height:12px; flex:none; fill:none; stroke:currentColor; stroke-width:2.5; transition:transform .15s; }
   .repopick > button[aria-expanded="true"] svg { transform:rotate(180deg); }
-  #sortBtn, #sortBtn:hover { border:3px solid var(--fg); padding:4px 10px; } /* thick outline; padding less by the extra border so it stays the same size */
   .repomenu { position:absolute; right:0; top:calc(100% + 6px); z-index:20; min-width:220px; max-width:340px; padding:5px; background:var(--card); border:1px solid var(--line); border-radius:9px; box-shadow:0 8px 24px rgba(0,0,0,.12); }
   .repomenu button { display:flex; width:100%; align-items:center; gap:8px; border:0; background:none; text-align:left; padding:7px 9px; border-radius:6px; }
   .repomenu button:hover, .repomenu button:focus-visible { background:var(--bg); outline:none; }
