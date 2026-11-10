@@ -46,6 +46,7 @@ export const CLAUDE_SETTINGS = all.claudeSettings && fs.existsSync(abs(all.claud
 const HOME = path.join(abs(all.stateDir || path.join(META, "local")), me.name);
 export const STATE = path.join(HOME, "state");
 export const FEEDBACK = path.join(HOME, "feedback");
+export const ATTACH = path.join(HOME, "attachments"); // files pasted or dropped into a chat
 const RUNTIME = path.join(HOME, "features.json");
 fs.mkdirSync(STATE, { recursive: true });
 

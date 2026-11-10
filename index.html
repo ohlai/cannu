@@ -785,7 +785,7 @@ function chatBox(f, s, cls) {
         <button class="primary send" data-act="send" title="${MAC ? "⌘+Enter" : "Ctrl+Enter"} sends">Send${keysHint(true)}</button>
       </div>
       <div class="hint" data-tags>${tagsHtml(s.draft)}</div>
-      <div class="hint">${f.live?.open ? "Its terminal is open. Sending closes that terminal session and carries on here (the conversation is kept). " : f.live?.background || cls === "working" ? "It's mid-turn. Your message waits and goes as soon as this turn ends. " : ""}Saved word for word in its prompts.md. @ to tag a related feature. The agent reads their notes first.</div>
+      <div class="hint">${f.live?.open ? "Its terminal is open. Sending closes that terminal session and carries on here (the conversation is kept). " : f.live?.background || cls === "working" ? "It's mid-turn. Your message waits and goes as soon as this turn ends. " : ""}Saved word for word in its prompts.md. @ to tag a related feature. The agent reads their notes first. Paste or drag in images and files to attach them.</div>
     </div>`;
 }
 
@@ -1682,6 +1682,20 @@ function markShortErrors() {
     e.title = short ? "" : "Click to show more";
   }
 }
+async function attach(ta, files) {
+  const slug = ta.closest("[data-slug]").dataset.slug;
+  for (const file of files) {
+    say(`Attaching ${file.name || "image"}…`);
+    try {
+      const r = await (await fetch(`/r/${encodeURIComponent(CUR)}/api/features/${slug}/attach?name=${encodeURIComponent(file.name || "pasted.png")}`, { method: "POST", body: file })).json();
+      if (!r.path) throw 0;
+      ta.focus();
+      ta.setRangeText((/\S$/.test(ta.value.slice(0, ta.selectionStart)) ? " " : "") + r.path + " ", ta.selectionStart, ta.selectionEnd, "end");
+      ta.dispatchEvent(new Event("input", { bubbles: true }));
+      say("");
+    } catch { say(`Couldn't attach ${file.name}.`, "bad"); }
+  }
+}
 async function refresh() { try { const [fs, ls] = await Promise.all([api("/api/features"), api("/api/labels")]); LABELS = ls; render(fs); markShortErrors(); renderUsage(); } catch {} }
 
 for (const host of [$("#list"), $("#popDlg")]) {
@@ -1692,6 +1706,11 @@ host.addEventListener("input", (e) => {
   if (e.target.dataset.field === "eprompt") fitPlan(e.target);
 });
 host.addEventListener("click", onClick);
+// Files pasted or dropped into a chat are saved by the server, and their paths
+// go into the message for the agent to read. Plain text pastes as usual.
+host.addEventListener("paste", (e) => { if (e.target.closest(".compose") && e.clipboardData.files.length) { e.preventDefault(); attach(e.target, e.clipboardData.files); } });
+host.addEventListener("dragover", (e) => { if (e.target.closest(".chat") && e.dataTransfer.types.includes("Files")) e.preventDefault(); });
+host.addEventListener("drop", (e) => { const c = e.target.closest(".chat"); if (c && e.dataTransfer.files.length) { e.preventDefault(); attach(c.querySelector(".compose textarea"), e.dataTransfer.files); } });
 // Ctrl+Enter (or Cmd+Enter) does the main thing: send, or start the agent.
 host.addEventListener("keydown", (e) => {
   const act = KEYS[e.target.dataset?.field];
