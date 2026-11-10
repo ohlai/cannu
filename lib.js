@@ -265,6 +265,8 @@ export const refreshUsage = readUsage;
 // too, and mustn't wait on a fetch.
 export function watchUsage() { readUsage(); setInterval(readUsage, 60e3); }
 export function planUsage() { return usageNow; }
+// How Claude words a turn cut off by a usage limit.
+export const LIMIT_HIT = /usage limit|hit your (\w+ )?limit|limit reached|limit · resets/i;
 // The limit that's full right now ({ which, resets }), or null. A reset time
 // that has passed means it's free again, even before the next refresh.
 export function fullLimit() {

@@ -5,7 +5,7 @@
 // It must never block the session, so every failure is swallowed.
 import fs from "node:fs";
 import path from "node:path";
-import { findByDir, writeState, stamp, AUTO, notesDir } from "./lib.js";
+import { findByDir, writeState, stamp, AUTO, notesDir, readState, LIMIT_HIT, resumeText } from "./lib.js";
 
 let raw = "";
 process.stdin.on("data", (c) => (raw += c));
@@ -58,8 +58,16 @@ function run(h) {
     case "Stop":
       writeState(f.slug, { ...base, state: "idle", activity: "", lastReply: h.last_assistant_message || lastReply(h.transcript_path) });
       break;
+    // A terminal turn cut off by a usage limit: held, and the dashboard
+    // carries it on in the background once the limit resets. Background turns
+    // are caught by the dashboard itself.
+    case "StopFailure":
+      if (!headless && (h.error === "rate_limit" || LIMIT_HIT.test(String(h.last_assistant_message || h.error_details || ""))))
+        writeState(f.slug, { ...base, state: "limited", activity: "", held: { text: resumeText(), label: "carrying on after the usage limit" }, limitResets: null, limitTried: Date.now() });
+      else writeState(f.slug, { ...base, state: "idle", activity: "", lastReply: h.last_assistant_message || "" });
+      break;
     case "SessionEnd":
-      if (!headless) writeState(f.slug, { ...base, state: "idle", activity: "" });
+      if (!headless && readState(f.slug).state !== "limited") writeState(f.slug, { ...base, state: "idle", activity: "" });
       break;
   }
 }

@@ -314,35 +314,34 @@
   .found button small { color:var(--mute); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; direction:rtl; }
   .found button.on { border-color:var(--fg); }
   .colhead .pill { border:0; padding:0; }
-  /* Claude usage: the week as a thick outer ring, the 5 hours inside it.
-     Hovering grows a card out of them with the numbers and reset times. */
+  /* Claude usage: the week as the outer ring, the 5 hours inside it. Hovering
+     grows the rings to fit the 5h % and slides a panel out to their left with
+     both limits and reset times. It stays out while a limit is full or
+     features are held, saying what that means. Grey: usage not known. */
   :root { --u-green:#22c55e; --u-orange:#f59e0b; --u-red:#ef4444; }
   .rings { position:relative; width:34px; height:34px; cursor:default; outline:none; }
-  .urings { position:relative; }
+  .urings { position:relative; width:34px; height:34px; transition:transform .3s cubic-bezier(.16,1,.3,1); }
   .urings svg { display:block; width:100%; height:100%; transform:rotate(-90deg); }
   .urings circle { fill:none; }
   .urings .track { stroke:var(--line); }
   .urings .fill { stroke-linecap:round; transition:stroke-dashoffset .5s, stroke .4s; }
-  .green { --c:var(--u-green); } .orange { --c:var(--u-orange); } .red { --c:var(--u-red); }
+  .green { --c:var(--u-green); } .orange { --c:var(--u-orange); } .red { --c:var(--u-red); } .grey { --c:var(--mute); }
   .urings .fill, .udot { stroke:var(--c); background:var(--c); }
-  .rings > .urings { width:34px; height:34px; }
-  .ucard { position:absolute; z-index:50; top:-10px; left:50%; width:162px; padding:12px 10px 10px; border-radius:12px;
-    background:var(--card); border:1px solid var(--line); box-shadow:0 12px 40px rgba(0,0,0,.18);
-    transform:translateX(-50%) scale(.14); transform-origin:50% 25px; opacity:0; pointer-events:none;
-    transition:transform .32s cubic-bezier(.16,1,.3,1), opacity .18s; }
-  .rings:hover .ucard, .rings:focus-within .ucard { transform:translateX(-50%) scale(1); opacity:1; pointer-events:auto; }
-  .ucard .urings { width:104px; height:104px; margin:0 auto; }
-  .ucenter { position:absolute; inset:0; display:grid; place-content:center; text-align:center; font-size:19px; font-weight:700; line-height:1; }
-  .ucenter small, .ulabel { display:block; font-size:9.5px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--mute); margin-top:3px; }
-  .ucenter small { font-size:8px; letter-spacing:.03em; margin-top:2px; }
-  .ustats { display:flex; align-items:stretch; margin-top:10px; }
-  .ustat { flex:1; text-align:center; }
-  .usep { width:1px; background:var(--line); margin:2px 6px; }
-  .unum { display:flex; align-items:center; justify-content:center; gap:5px; font-size:15px; font-weight:700; }
-  .udot { width:7px; height:7px; border-radius:50%; }
-  .ureset { font-size:10px; color:var(--mute); margin-top:6px; }
-  @media (prefers-reduced-motion: reduce) { .ucard { transition:opacity .15s; } }
-  .limited .dot { background:var(--bad); }
+  .ucenter { position:absolute; inset:0; display:grid; place-content:center; font-size:8px; font-weight:700; letter-spacing:-.02em; opacity:0; transition:opacity .2s; }
+  .upanel { position:absolute; right:calc(100% + 12px); top:50%; transform:translateY(-50%); z-index:5; background:var(--bg);
+    display:grid; grid-template-columns:0fr; transition:grid-template-columns .35s cubic-bezier(.16,1,.3,1); }
+  .uin { min-width:0; overflow:hidden; white-space:nowrap; opacity:0; transition:opacity .2s; }
+  .rings:is(:hover, :focus-within, .pinned) .upanel { grid-template-columns:1fr; }
+  .rings:is(:hover, :focus-within, .pinned) .uin, .rings:is(:hover, :focus-within, .pinned) .ucenter { opacity:1; }
+  .rings:is(:hover, :focus-within, .pinned) .urings { transform:scale(1.3); }
+  .uline { display:flex; align-items:center; justify-content:flex-end; gap:6px; font-size:12px; line-height:1.55; }
+  .uline b { min-width:30px; text-align:right; }
+  .uline small, .unote { color:var(--mute); font-size:11px; }
+  .udot { width:7px; height:7px; border-radius:50%; flex:none; }
+  .unote { text-align:right; margin-top:2px; }
+  .unote b { color:var(--fg); }
+  .unote button { padding:1px 8px; font-size:11px; margin-left:6px; }
+  @media (prefers-reduced-motion: reduce) { .upanel, .urings, .uin, .ucenter { transition:none; } }
   .limited .dot { background:var(--bad); }
 </style>
 </head>
@@ -353,7 +352,7 @@
       <div class="brand"><img src="/logo.png?v=2" alt=""><h1>Cannu <span>Parallel agent management</span></h1></div>
       <p class="sub" style="margin:12px 0 0" id="totals">One branch, folder and Claude session per feature.</p>
     </div>
-    <div class="rings" id="rings" tabindex="0" aria-label="Claude usage" hidden></div>
+    <div class="rings" id="rings" tabindex="0" aria-label="Claude usage"></div>
     <button id="defaultsOpen" title="Model, system prompt and everything else every agent is given">Agent defaults</button>
     <div class="seg" id="notify">
       <span class="thumb"></span>
@@ -384,7 +383,6 @@
     <span class="grow" id="gap" style="min-width:0"></span>
     <input type="search" id="search" placeholder="Search features">
   </div>
-  <div class="banner" id="limitMsg" hidden style="margin:0 0 14px"></div>
   <div class="msg bad" id="boardMsg" hidden style="margin-bottom:10px"></div>
   <div id="board"></div>
   <div id="list"></div>
@@ -579,7 +577,7 @@ function status(f) {
   // Merged and nothing new since: done. New commits on its branch (from a chat
   // after merging) put it back to waiting, with Check and merge to ship them.
   if (f.merged && !f.ahead && !["working", "needs-you", "interrupted", "error", "stuck"].includes(s)) return ["merged", "merged"];
-  return [s, { working: f.live.background ? "working (background)" : "working", stuck: "stuck", "needs-you": "needs you", idle: "idle, open", closed: "idle", error: "error", interrupted: "interrupted", "not-started": "never started", limited: limitFull() ? "usage limit" : "limit reset" }[s] || "no session"];
+  return [s, { working: f.live.background ? "working (background)" : "working", stuck: "stuck", "needs-you": "needs you", idle: "idle, open", closed: "idle", error: "error", interrupted: "interrupted", "not-started": "never started", limited: heldUntil(f) ? "usage limit" : "limit reset" }[s] || "no session"];
 }
 
 // ---------- Claude usage ----------
@@ -603,41 +601,46 @@ function limitFull() {
 }
 // Green below 60%, orange to 90%, red from 90%.
 const tone = (p) => (p >= 90 ? "red" : p >= 60 ? "orange" : "green");
-// The week as a thick outer ring with the 5 hours inside it.
-function usageRings(center = "") {
+// A limit's percent, or null when it isn't known: no usage yet, or its reset
+// time has passed and the next reading isn't in.
+const known = (k) => { const l = USAGE?.[k]; return l && !(Date.parse(l.resets) <= Date.now()) ? Math.round(l.percent) : null; };
+// When a held feature carries on by itself: the later of the reset it was
+// held with and a limit that's full now. Null once both have passed.
+function heldUntil(f) {
+  const t = [f?.st?.limitResets, limitFull()?.resets].filter((x) => x && Date.parse(x) > Date.now()).sort();
+  return t.at(-1) || null;
+}
+// The week as the outer ring with the 5 hours inside it. Grey and empty when not known.
+function usageRings() {
   const arc = (k, r, w) => {
-    const l = USAGE[k]; if (!l) return "";
-    const C = 2 * Math.PI * r, p = Math.max(0, Math.min(100, l.percent));
-    return `<circle class="track" cx="50" cy="50" r="${r}" stroke-width="${w}"/><circle class="fill ${tone(p)}" cx="50" cy="50" r="${r}" stroke-width="${w}" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - p / 100)}"/>`;
+    const p = known(k), C = 2 * Math.PI * r, v = Math.max(0, Math.min(100, p ?? 0));
+    return `<circle class="track" cx="50" cy="50" r="${r}" stroke-width="${w}"/><circle class="fill ${p == null ? "grey" : tone(v)}" cx="50" cy="50" r="${r}" stroke-width="${w}" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - v / 100)}"/>`;
   };
-  return `<div class="urings"><svg viewBox="0 0 100 100">${arc("weekly", 44, 6)}${arc("session", 32, 8)}</svg>${center}</div>`;
+  return `<div class="urings"><svg viewBox="0 0 100 100">${arc("weekly", 45, 5)}${arc("session", 33, 8)}</svg><span class="ucenter">${known("session") ?? "–"}${known("session") == null ? "" : "%"}</span></div>`;
 }
 function renderUsage() {
   const box = $("#rings");
-  box.hidden = !USAGE?.session && !USAGE?.weekly;
-  if (!box.hidden) {
-    const pc = (k) => (USAGE[k] ? Math.round(USAGE[k].percent) : null);
-    const stat = (k, label) => USAGE[k] ? `<div class="ustat"><div class="unum"><span class="udot ${tone(pc(k))}"></span>${pc(k)}%</div><div class="ulabel">${label} used</div>
-      ${USAGE[k].resets ? `<div class="ureset">resets ${resetTime(USAGE[k].resets)}<br>in ${until(USAGE[k].resets)}</div>` : ""}</div>` : "";
-    const html = `${usageRings()}<div class="ucard" role="tooltip">
-        ${usageRings(pc("session") != null ? `<div class="ucenter">${pc("session")}%<small>5h used</small></div>` : "")}
-        <div class="ustats">${stat("session", "5h")}<span class="usep"></span>${stat("weekly", "7d")}</div>
-      </div>`;
-    if (box.dataset.html !== html) { box.innerHTML = html; box.dataset.html = html; }
-  }
-  // Over the board: a full limit, or features waiting to carry on after one.
-  const full = limitFull(), held = all.filter((f) => f.worktree && f.live?.state === "limited").length;
-  const lm = $("#limitMsg");
-  lm.hidden = !full && !held;
-  lm.innerHTML = full ? `Your ${LIMIT_NAME[full.which]} Claude limit is full. It resets ${resetAt(full.resets)}. Until then Cannu doesn't start agents: new features are set up and wait, and messages stay queued.${held ? ` ${held} ${held === 1 ? "feature is" : "features are"} waiting.` : ""}`
-    : held ? `Your Claude limit has reset. ${held} ${held === 1 ? "feature is" : "features are"} waiting to carry on. <button class="primary" data-act="continueall">Continue ${held === 1 ? "it" : "all"}</button>` : "";
+  const line = (k, label) => {
+    const p = known(k), l = USAGE?.[k];
+    return `<div class="uline"><small>${p == null ? (l?.resets ? "reset, not checked since" : "not known yet") : l.resets ? `resets ${resetAt(l.resets)}` : ""}</small><span>${label}</span><b>${p == null ? "–" : p + "%"}</b><span class="udot ${p == null ? "grey" : tone(p)}"></span></div>`;
+  };
+  // A full limit, or features waiting to carry on after one.
+  const full = limitFull(), held = all.filter((f) => f.worktree && f.live?.state === "limited");
+  const wait = held.map(heldUntil).filter(Boolean).sort().at(-1);
+  const n = held.length, ones = `${n} ${n === 1 ? "feature" : "features"}`;
+  const note = full ? `<b>${cap(LIMIT_NAME[full.which])} limit full.</b> No agents start until it resets${n ? `. ${ones} held` : ""}; they carry on by themselves then.`
+    : wait ? `<b>${ones} held</b> until ${resetTime(wait)}, then they carry on by themselves.`
+    : n ? `<b>Limit reset.</b> ${ones} held, carrying on by themselves shortly. <button data-act="continueall">Carry on now</button>` : "";
+  box.classList.toggle("pinned", !!note);
+  const html = `<div class="upanel"><div class="uin">${line("session", "5 hours")}${line("weekly", "week")}${note ? `<div class="unote">${note}</div>` : ""}</div></div>${usageRings()}`;
+  if (box.dataset.html !== html) { box.innerHTML = html; box.dataset.html = html; }
   const ln = $("#limitNew");
   ln.hidden = !full;
-  if (full) ln.textContent = `Your ${LIMIT_NAME[full.which]} Claude limit is full until ${resetAt(full.resets)}. Start agent sets the feature up now and its agent waits; its card offers Continue once the limit resets.`;
+  if (full) ln.textContent = `Your ${LIMIT_NAME[full.which]} Claude limit is full until ${resetAt(full.resets)}. Start agent sets the feature up now and its agent waits, then starts by itself once the limit resets.`;
 }
 async function loadUsage() { try { USAGE = await (await fetch("/api/usage")).json(); } catch {} renderUsage(); }
 loadUsage(); setInterval(loadUsage, 30e3);
-$("#limitMsg").addEventListener("click", async (e) => {
+$("#rings").addEventListener("click", async (e) => {
   if (e.target.dataset.act !== "continueall") return;
   e.target.disabled = true;
   const r = await api("/api/continue", {});
@@ -690,7 +693,7 @@ function card(f, inPop) {
   const prev = f.continues && all.find((x) => x.slug === f.continues);
   let banner = "";
   if (setupStuck) banner = `<div class="banner">${f.setup.startsWith("failed") ? esc(f.setup) : "Setup was cut off (the dashboard or PC restarted)."} Retry picks up from the step it stopped at. <button data-act="retry">Retry setup</button></div>`;
-  else if (cls === "interrupted" || cls === "error") banner = `<div class="banner">${cls === "error" ? "The last background run failed or was stopped. Its output is below." : "This agent stopped mid-turn: the dashboard, the PC or its terminal closed before it finished."} Anything it changed is still there, but may not be committed.<div class="row" style="margin-top:8px"><button class="primary" data-act="resume-bg">Carry on in the background</button><button data-act="resume-term">Carry on in a terminal</button></div></div>`;
+  else if (cls === "interrupted" || cls === "error") banner = `<div class="banner">${cls === "error" ? "The last background run failed or was stopped. Its output is below." : "This agent stopped mid-turn: the dashboard, the PC or its terminal closed before it finished."} Anything it changed is still there, but may not be committed.${limitFull() ? ` Your Claude usage limit is full until ${resetAt(limitFull().resets)}: Carry on in the background waits for that, then runs by itself.` : ""}<div class="row" style="margin-top:8px"><button class="primary" data-act="resume-bg">Carry on in the background</button><button data-act="resume-term">Carry on in a terminal</button></div></div>`;
   else if (cls === "stuck") {
     const w = f.stuck.waitingOn, quiet = ago(f.stuck.since).replace(" ago", "");
     banner = `<div class="banner">No activity from this agent for ${quiet}${f.stuck.on ? `. Last thing it did: ${esc(f.stuck.on)}` : ""}.
@@ -699,9 +702,9 @@ function card(f, inPop) {
       <div class="row" style="margin-top:8px">${w ? `<button class="primary" data-act="unstick" data-pid="${w.pid}">End that step</button>` : ""}${f.live.background ? `<button data-act="stopturn">Stop the turn</button>` : ""}</div></div>`;
   }
   else if (cls === "limited") {
-    const full = limitFull(), what = st.held?.first ? "start" : "carry on";
-    banner = full ? `<div class="banner">Waiting on your ${LIMIT_NAME[full.which]} Claude limit, which is full. It resets ${resetAt(full.resets)}, and then this card offers to ${what}.</div>`
-      : `<div class="banner">Your Claude limit has reset, so this agent can ${what}. <button class="primary" data-act="continue">${cap(what)}</button></div>`;
+    const full = limitFull(), wait = heldUntil(f), what = st.held?.first ? "start" : "carry on";
+    banner = wait ? `<div class="banner">Held by your ${full ? LIMIT_NAME[full.which] + " " : ""}Claude usage limit. It resets ${resetAt(wait)}, and then this agent will ${what} by itself.</div>`
+      : `<div class="banner">Held by your Claude usage limit, which should have reset. This agent will ${what} by itself shortly. <button class="primary" data-act="continue">${cap(what)} now</button></div>`;
   }
   else if (cls === "not-started") banner = `<div class="banner">The terminal for this feature never started a session. <button data-act="resume-term">Start it now</button></div>`;
   const c = !inPop && collapsed.has(f.slug);
