@@ -315,12 +315,11 @@
   .found button.on { border-color:var(--fg); }
   .colhead .pill { border:0; padding:0; }
   /* Claude usage: the week as the outer ring, the 5 hours inside it. Hovering
-     grows the rings a little and slides them left to show the 5H and
-     7D lines on their right (the title gives up the room, the buttons stay
-     put). Clicking doesn't hold it open; keyboard focus does. Grey: usage not
+     grows the rings a little and slides the 5H and 7D lines out to their
+     left (the title gives up the room; the rings and buttons stay put). Clicking doesn't hold it open; keyboard focus does. Grey: usage not
      known. */
   :root { --u-green:#22c55e; --u-orange:#f59e0b; --u-red:#ef4444; }
-  .rings { display:flex; align-items:center; height:34px; cursor:default; outline:none; }
+  .rings { display:flex; flex-direction:row-reverse; align-items:center; height:34px; cursor:default; outline:none; }
   .urings { position:relative; width:34px; height:34px; transition:transform .35s cubic-bezier(.65,0,.35,1); }
   .urings svg { display:block; width:100%; height:100%; transform:rotate(-90deg); }
   .urings circle { fill:none; }
@@ -331,15 +330,16 @@
   /* --uw is the lines' real width, set by renderUsage, so the slide runs the
      whole way at the eased speed instead of racing to a guessed maximum.
      The two lines are one grid, so label, dot, % and reset each line up in a
-     column; the % is right-aligned with even-width digits. */
-  .uin { display:grid; grid-template-columns:auto auto auto auto; align-items:center; gap:0 6px; padding-left:14px; font-size:12px; line-height:1.5;
+     column; the % is right-aligned with even-width digits, the reset text
+     right-aligned at the end. */
+  .uin { display:grid; grid-template-columns:auto auto auto auto; align-items:center; gap:0 6px; padding-right:14px; font-size:12px; line-height:1.5;
     max-width:0; overflow:hidden; white-space:nowrap; opacity:0; transition:max-width .35s cubic-bezier(.65,0,.35,1), opacity .3s ease-in-out; }
   .rings:is(:hover, :focus-visible) .uin { max-width:var(--uw, 300px); opacity:1; }
   .rings:is(:hover, :focus-visible) .urings { transform:scale(1.3); }
   .uline { display:contents; }
   .uline .ulab { font-size:10.5px; font-weight:700; color:var(--mute); }
   .uline b { text-align:right; font-variant-numeric:tabular-nums; }
-  .uline small { color:var(--mute); font-size:11px; margin-left:2px; }
+  .uline small { color:var(--mute); font-size:11px; margin-left:10px; justify-self:end; }
   .udot { width:7px; height:7px; border-radius:50%; flex:none; }
   #limitMsg { display:flex; align-items:center; flex-wrap:wrap; gap:8px 14px; }
   #limitMsg[hidden] { display:none; }
