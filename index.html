@@ -53,6 +53,8 @@
   button.second:hover { border-color:var(--mute); }
   textarea, input[type=text], input[type=search] { font:inherit; width:100%; padding:8px 10px; border-radius:7px; border:1px solid var(--line); background:var(--bg); color:var(--fg); }
   textarea { min-height: 70px; resize: vertical; }
+  /* The schedule's time and minutes boxes sit beside a select, so they match it. */
+  input[type=datetime-local], input[type=number] { font:inherit; font-size:13px; padding:7px 10px; border-radius:7px; border:1px solid var(--line); background:var(--bg); color:var(--fg); color-scheme:light dark; /* the calendar icon follows the theme */ }
   .hint { color: var(--mute); font-size:12px; }
   .msg { margin-top:8px; font-size:13px; white-space:pre-wrap; }
   .msg.bad { color: var(--bad); } .msg.good { color: var(--idle); }
@@ -2021,9 +2023,9 @@ $("#newOpen").onclick = () => openNew();
 async function addFeature(plan) {
   const typed = $("#newLabels [data-newpick]")?.value.replace(/\s+/g, " ").trim(); // typed in the + box but Enter never pressed: still meant
   const title = $("#title").value.trim(), prompt = $("#prompt").value.trim(), model = $("#newModel").value, label = typed || newLabel;
-  // A schedule goes with Start agent only: Save as planned is for no start at all.
-  const schedule = plan ? null : schedBody($("#new_swhen").value, $("#new_sat").value, $("#new_smins").value);
-  if (!title || (!plan && !prompt)) { dlgMsg("#addMsg", plan ? "Needs a name." : "Needs a name and what you want. Or save it as planned.", "bad"); return; }
+  // Either button keeps a picked schedule: both save it as planned, and it starts when due.
+  const schedule = schedBody($("#new_swhen").value, $("#new_sat").value, $("#new_smins").value);
+  if (!title || ((!plan || schedule) && !prompt)) { dlgMsg("#addMsg", schedule ? "Needs a name and what you want, so the agent has something to start on." : plan ? "Needs a name." : "Needs a name and what you want. Or save it as planned.", "bad"); return; }
   if (schedule && "at" in schedule && !schedule.at) { dlgMsg("#addMsg", "Pick a time to start it.", "bad"); return; }
   const keep = { title: $("#title").value, prompt: $("#prompt").value };
   closeModal($("#newDlg"));

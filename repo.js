@@ -1060,7 +1060,8 @@ const server = http.createServer(async (req, res) => {
       fresh();
       const { title, prompt, plan, model, label, schedule } = await body(req);
       if (!title?.trim()) return send(res, 400, { msg: "Needs a name." });
-      if (!plan && !prompt?.trim()) return send(res, 400, { msg: `Needs a starting prompt to ${schedule ? "schedule" : "start"} an agent. Or save it as planned.` });
+      if (schedule && !prompt?.trim()) return send(res, 400, { msg: "Needs a starting prompt to schedule an agent." });
+      if (!plan && !prompt?.trim()) return send(res, 400, { msg: "Needs a starting prompt to start an agent. Or save it as planned." });
       let sched = null;
       if (schedule) try { sched = parseSchedule(schedule); } catch (e) { return send(res, 400, { msg: e.message }); }
       const lab = cleanLabel(label), l = readLabels();
