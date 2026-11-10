@@ -650,13 +650,15 @@ function shipButtons(f) {
 
 // A feature with no branch or agent: planned, dropped, imported from the old
 // board, or merged and its worktree removed.
-function simpleCard(f) {
+function simpleCard(f, inPop) {
   const s = u(f.slug);
   const [cls, label] = status(f);
   const later = all.filter((x) => x.continues === f.slug);
   const prev = f.continues && all.find((x) => x.slug === f.continues);
   const when = ["created " + day(f.created), f.merged && "merged " + day(f.merged), f.dropped && "dropped " + day(f.dropped)].filter(Boolean).join(" · ");
   const planned = f.status === "planned";
+  // In the popup a planned feature is always being edited; closing it saves.
+  const edit = s.edit || (planned && inPop);
   // A feature dropped part way through still has its folder until removed.
   const leftover = f.status === "dropped" && f.dir && !f.removed;
   return `<div class="card past ${cls}" data-slug="${f.slug}">
@@ -668,16 +670,16 @@ function simpleCard(f) {
       </div>
       ${head(f, cls, label, "")}
     </div>
-    ${planned && !s.edit && f.prompt ? `<div class="plan md">${md(f.prompt)}</div>` : ""}
-    ${s.edit ? `<div style="margin-top:10px; display:grid; gap:8px">
+    ${planned && !edit && f.prompt ? `<div class="plan md">${md(f.prompt)}</div>` : ""}
+    ${edit ? `<div style="margin-top:10px; display:grid; gap:8px">
       <input type="text" data-field="etitle" value="${esc(s.etitle ?? f.title)}">
       <textarea data-field="eprompt" data-mention data-self="${f.slug}" placeholder="What you want and why. This is what the agent starts on.">${esc(s.eprompt ?? f.prompt ?? "")}</textarea>
       ${MENTION_HINT}
     </div>` : ""}
     ${actions(planned
-      ? `<button data-act="edit">${s.edit ? "Cancel edit" : "Edit"}</button><button data-act="drop" title="Keep it on record as dropped">Drop</button>`
+      ? `${inPop ? "" : `<button data-act="edit">${s.edit ? "Cancel edit" : "Edit"}</button>`}<button data-act="drop" title="Keep it on record as dropped">Drop</button>`
       : `<button data-act="reopen">${s.reopen ? "Cancel reopen" : "Reopen"}</button>`,
-      planned ? `${s.edit ? `<button data-act="edit-save" title="Save the name and description on main">Save</button>` : ""}<button class="primary" data-act="start" title="Make its branch and start an agent on what it says">Start agent</button>`
+      planned ? `${s.edit && !inPop ? `<button data-act="edit-save" title="Save the name and description on main">Save</button>` : ""}<button class="primary" data-act="start" title="Make its branch and start an agent on what it says">Start agent</button>`
       : leftover ? `<button class="primary" data-act="remove" title="Delete its folder. The unmerged branch is kept, so the work is still in git.">Remove worktree</button>` : "")}
     ${s.reopen ? `<div style="margin-top:10px; display:grid; gap:8px">
       <div class="hint">A new feature that continues this one. Start agent makes a new branch from current main with a new session, and the agent reads this feature's notes first. Save as planned records it to start later.</div>
@@ -1058,16 +1060,28 @@ function openPop(slug) {
   renderPop();
   openModal($("#popDlg"));
   // Straight into the message box, or the popup itself when there's no chat.
-  const ta = $("#popTop .compose textarea");
+  const ta = $("#popTop .compose textarea"), plan = $('#popTop [data-field="eprompt"]');
   // Sized now it's on screen: measured while hidden, it came out half a line tall.
   if (ta) { fitCompose(ta, true); ta.focus(); ta.selectionStart = ta.selectionEnd = ta.value.length; }
+  else if (plan) { plan.focus(); plan.selectionStart = plan.selectionEnd = plan.value.length; }
   else $("#popDlg [data-close]").focus();
+}
+// Closing a planned feature's popup (Close, Escape, a click outside) saves
+// what you changed. Nothing changed, nothing committed.
+async function saveOnClose(slug) {
+  const s = u(slug), f = all.find((x) => x.slug === slug);
+  const title = (s.etitle ?? f?.title ?? "").trim(), prompt = (s.eprompt ?? f?.prompt ?? "").trim();
+  s.etitle = s.eprompt = null;
+  if (!f || f.status !== "planned" || (title === f.title && prompt === (f.prompt || "").trim())) return;
+  const r = await api(`/api/features/${slug}/edit`, { title, prompt });
+  s.msg = r.msg || "Saved and committed on main."; s.cls = r.msg ? "bad" : "good";
+  render(all); refresh();
 }
 function rememberChat() {
   const el = popSlug && $("#popTop [data-chat][data-loaded]"); if (!el) return;
   chatSpot[popSlug] = atNewest(el) ? false : el.scrollTop;
 }
-$("#popDlg").addEventListener("close", () => { popSlug = null; });
+$("#popDlg").addEventListener("close", () => { const slug = popSlug; popSlug = null; if (slug) saveOnClose(slug); });
 // Noted as you scroll, so it's right whenever the popup closes.
 $("#popDlg").addEventListener("scroll", (e) => { if (e.target.matches?.("[data-chat][data-loaded]")) rememberChat(); }, true);
 
@@ -1081,7 +1095,7 @@ function renderPop() {
   // cursor out of the box you were typing in.
   const typed = Object.fromEntries(TYPED.map((k) => [k, s[k]]));
   Object.assign(s, { draft: "", etitle: null, eprompt: null, rtitle: "", rprompt: "" });
-  const html = (f.worktree ? card(f, true) : simpleCard(f)) + "\u0000" + lab;
+  const html = (f.worktree ? card(f, true) : simpleCard(f, true)) + "\u0000" + lab;
   Object.assign(s, typed);
   const top = $("#popTop");
   const thread = top.querySelector("[data-chat][data-loaded]");
@@ -1243,7 +1257,7 @@ async function onClick(e) {
   }
   if (act === "start") {
     // Mid-edit: save what's in the boxes first, so the agent starts on what you just wrote.
-    if (s.edit) {
+    if (s.etitle != null || s.eprompt != null) {
       const f = all.find((x) => x.slug === slug);
       const saved = await api(`${base}/edit`, { title: s.etitle ?? f.title, prompt: s.eprompt ?? f.prompt ?? "" });
       if (saved.msg) return say(saved.msg, "bad");
