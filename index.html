@@ -150,6 +150,11 @@
   #mention div { padding:5px 9px; border-radius:6px; cursor:pointer; font-size:13px; }
   #mention div.on { background:var(--fg); color:var(--bg); }
   #mention small { opacity:.6; margin-left:6px; }
+  /* An @ that names a real feature, and the line under a box saying what its @s link to. */
+  .ref { color:var(--work); text-decoration:underline; text-underline-offset:2px; }
+  .noref { color:var(--you); }
+  [data-tags]:empty { display:none; }
+  .chat .hint[data-tags] { padding-bottom:0; }
   button.sq { width:30px; height:30px; padding:0; display:inline-grid; place-items:center; }
   button.bell { width:26px; height:26px; align-self:flex-start; margin-right:-4px; }
   button.bell svg.i { width:15px; height:15px; }
@@ -190,10 +195,10 @@
   .seg.text .thumb { width:var(--w, 0); transform:translateX(var(--x, 0)); transition:transform .25s cubic-bezier(.4,0,.2,1), width .25s cubic-bezier(.4,0,.2,1); }
   .seg.text:not(.ready) .thumb { transition:none; }
   .seg.text button { width:auto; padding:0 12px; font-size:12.5px; white-space:nowrap; }
-  #densSeg button { opacity:1; }
-  #densSeg button:not(.on):hover { background:var(--bg); }
+  #densSeg button, #doneSeg button { opacity:1; }
+  #densSeg button:not(.on):hover, #doneSeg button:not(.on):hover { background:var(--bg); }
   @media (prefers-reduced-motion: reduce) { .seg.text .thumb { transition:none; } }
-  /* Hide completed: a checkbox drawn like Cannu's buttons, black with a white tick when on. */
+  /* Switches in popups: a checkbox drawn like Cannu's buttons, black with a white tick when on. */
   .switch { display:inline-flex; align-items:center; gap:8px; font-size:13px; color:var(--mute); cursor:pointer; user-select:none; }
   .switch:hover { color:var(--fg); }
   .switch input { appearance:none; position:relative; flex:none; width:18px; height:18px; margin:0; border-radius:5px; background:var(--card); border:1px solid var(--line); cursor:pointer; transition:background .15s ease, border-color .15s ease; }
@@ -218,6 +223,11 @@
   #viewSeg button:not(.on):hover { background:rgba(127,127,127,.3); }
   #viewSeg button.on { color:var(--fg); opacity:1; }
   .board { display:grid; grid-auto-flow:column; grid-auto-columns:minmax(300px, 1fr); gap:14px; overflow-x:auto; align-items:start; padding:24px 32px 32px; margin:-16px -32px -24px; } /* the scroller clips, so room inside it for a dragged card's lean and shadow, pulled back out (the top only partly, so it stays off the filters) */
+  /* The board reaches the bottom of the window, so its sideways scrollbar sits there, not under the shortest columns. */
+  body.boarding main { min-height:100vh; display:flex; flex-direction:column; padding-bottom:0; }
+  body.boarding main > *:not(#board, #top, .filters) { width:100%; }
+  body.boarding #board { flex:1; display:flex; flex-direction:column; }
+  body.boarding .board { flex:1; margin-bottom:0; }
   .col { background:color-mix(in srgb, var(--line) 35%, transparent); border-radius:12px; padding:10px; min-height:110px; }
   .col.drop { outline:2px dashed var(--mute); outline-offset:-2px; }
   .colhead[data-dragcol] { cursor:grab; }
@@ -351,7 +361,16 @@
   .repomenu button.trash:hover, .repomenu button.trash:focus-visible { color:var(--bad); }
   .repomenu button.trash svg { width:15px; height:15px; fill:none; stroke:currentColor; stroke-width:2; }
   /* Add repo: how to work on the picked repo, i.e. its cannu.json. */
+  /* A set height, not floor to ceiling, that doesn't jump when a repo is picked: the body scrolls instead. */
+  #repoDlg .panel { height:min(620px, calc(100vh - 160px)); }
+  #repoDlg .body { flex:1; align-content:start; }
   .reposet { display:grid; gap:10px; padding-top:12px; border-top:1px solid var(--line); }
+  /* Picking a repo: its settings fade and rise in, one after another. Restarts each time it's unhidden. */
+  .reposet > * { animation:rise .4s cubic-bezier(.16,1,.3,1) both; }
+  .reposet > :nth-child(2) { animation-delay:.04s; } .reposet > :nth-child(3) { animation-delay:.08s; } .reposet > :nth-child(4) { animation-delay:.12s; }
+  .reposet > :nth-child(5) { animation-delay:.16s; } .reposet > :nth-child(6) { animation-delay:.2s; } .reposet > :nth-child(n+7) { animation-delay:.24s; }
+  @keyframes rise { from { opacity:0; transform:translateY(10px); } }
+  @media (prefers-reduced-motion: reduce) { .reposet > * { animation:none; } }
   .reposet h3 { margin:0; font-size:14px; }
   .reposet .two { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
   @media (max-width:560px) { .reposet .two { grid-template-columns:1fr; } }
@@ -434,7 +453,10 @@
       <button id="sortBtn" aria-haspopup="true" aria-expanded="false" title="How cards are ordered, in every column and the list"><span id="sortName"></span><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
       <div class="repomenu" id="sortMenu" hidden style="left:0; right:auto"></div>
     </div>
-    <label class="switch" id="hideWrap" title="Hide merged and dropped features"><input type="checkbox" id="hideDone">Hide completed</label>
+    <div class="seg text" id="doneSeg"><span class="thumb"></span>
+      <button data-val="show" title="Every feature, merged and dropped too">All</button>
+      <button data-val="hide" title="Hide merged and dropped features">Hide completed</button>
+    </div>
     <div class="chips" id="chips"></div>
     <span class="grow" id="gap" style="min-width:0"></span>
     <span class="searchbox"><input type="search" id="search" placeholder="Search features"><button type="button" id="searchClear" title="Clear search" aria-label="Clear search">×</button></span>
@@ -480,6 +502,7 @@
       <input type="text" id="title" placeholder="Feature name, e.g. Client can hide Training now">
       <textarea id="prompt" class="tall" data-mention placeholder="What you want and why. Saved word for word in the feature's notes. Optional if you're only planning it."></textarea>
       <div class="hint">@ to tag a related feature. The agent reads their notes first.</div>
+      <div class="hint" data-tags></div>
       <div class="field"><label for="newModel">Model</label><select id="newModel"></select></div>      <div class="banner" id="limitNew" hidden></div>
     </div>
     <div class="dmsg" id="addMsg"></div>
@@ -522,7 +545,8 @@ function md(src) {
     .replace(/`([^`]+)`/g, (_, c) => `<code>${c}</code>`)
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
     .replace(/(^|[^*\w])\*([^*\n]+)\*(?!\w)/g, "$1<em>$2</em>")
-    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank">$1</a>')
+    .replace(/(^|[^\w/])@([a-z0-9][a-z0-9-]*)/g, (m, pre, slug) => { const f = all.find((x) => x.slug === slug); return f ? `${pre}<span class="ref" title="${esc(f.title)}">@${slug}</span>` : m; });
   const lines = String(src ?? "").replace(/\r\n/g, "\n").split("\n");
   const out = [];
   for (let i = 0; i < lines.length; ) {
@@ -732,7 +756,7 @@ $("#limitMsg").addEventListener("click", async (e) => {
   refresh();
 });
 
-const MENTION_HINT = `<div class="hint">@ to tag a related feature. The agent reads their notes first.</div>`;
+const mentionHint = (text, self) => `<div class="hint">@ to tag a related feature. The agent reads their notes first.</div><div class="hint" data-tags>${tagsHtml(text, self)}</div>`;
 const port = (slug) => all.find((x) => x.slug === slug).port;
 // The preview is on the machine serving this page, which is localhost on a
 // laptop and the server's name when Cannu runs on one.
@@ -766,6 +790,7 @@ function chatBox(f, s, cls) {
         <textarea data-field="draft" data-mention rows="1" placeholder="Message the agent. ${MAC ? "⌘" : "Ctrl"}+Enter sends.">${esc(s.draft)}</textarea>
         <button class="primary send" data-act="send" title="${MAC ? "⌘+Enter" : "Ctrl+Enter"} sends">Send${keysHint(true)}</button>
       </div>
+      <div class="hint" data-tags>${tagsHtml(s.draft)}</div>
       <div class="hint">${f.live?.open ? "Its terminal is open. Sending closes that terminal session and carries on here (the conversation is kept). " : f.live?.background || cls === "working" ? "It's mid-turn. Your message waits and goes as soon as this turn ends. " : ""}Saved word for word in its prompts.md. @ to tag a related feature. The agent reads their notes first.</div>
     </div>`;
 }
@@ -870,7 +895,7 @@ function simpleCard(f, inPop) {
     ${edit ? `<div style="margin-top:10px; display:grid; gap:8px">
       <input type="text" data-field="etitle" value="${esc(s.etitle ?? f.title)}">
       <textarea data-field="eprompt" data-mention data-self="${f.slug}" placeholder="What you want and why. This is what the agent starts on.">${esc(s.eprompt ?? f.prompt ?? "")}</textarea>
-      ${MENTION_HINT}
+      ${mentionHint(s.eprompt ?? f.prompt, f.slug)}
     </div>` : ""}
     ${actions(planned
       ? `${inPop ? "" : `<button data-act="edit">${s.edit ? "Cancel edit" : "Edit"}</button>`}<button data-act="drop" title="Keep it on record as dropped">Drop</button>`
@@ -881,7 +906,7 @@ function simpleCard(f, inPop) {
       <div class="hint">A new feature that continues this one. Start agent makes a new branch from current main with a new session, and the agent reads this feature's notes first. Save as planned records it to start later.</div>
       <input type="text" data-field="rtitle" value="${esc(s.rtitle || f.title + " (continued)")}">
       <textarea data-field="rprompt" data-mention data-self="${f.slug}" placeholder="What you want changed this time, and why.">${esc(s.rprompt)}</textarea>
-      ${MENTION_HINT}
+      ${mentionHint(s.rprompt, f.slug)}
       <div class="row"><button class="second" data-act="reopen-plan" title="Records it on main without a branch or agent. Start it later from its card.">Save as planned</button><button class="primary" data-act="reopen-go" title="${MAC ? "⌘" : "Ctrl"}+Enter starts it">Start agent${keysHint(true)}</button></div>
     </div>` : ""}
     ${msgBlock(s)}
@@ -945,7 +970,7 @@ function render(features) {
   $("#chips").innerHTML = ["all", ...CHIPS].map((g) => `<button data-filter="${g}" title="${KIND_TIPS[g]}" class="${g === filter ? "on" : ""}">${cap(g)}<span class="n">${features.filter((f) => inGroup(f, g)).length}</span></button>`).join("");
   const onBoard = view !== "list";
   document.body.classList.toggle("boarding", onBoard);
-  $("#chips").hidden = onBoard; $("#densSeg").hidden = !onBoard; $("#hideWrap").hidden = !onBoard;
+  $("#chips").hidden = onBoard; $("#densSeg").hidden = !onBoard; $("#doneSeg").hidden = !onBoard;
   for (const place of segs) place();
   if (popSlug) renderPop();
   if (onBoard) { if ($("#list").firstChild) $("#list").innerHTML = ""; return renderBoard(features); }
@@ -1120,7 +1145,7 @@ const labels = () => [...new Set([...Object.keys(LABELS), ...all.map((f) => f.la
 
 let view = store.get("view", "status"), dens = store.get("density", "detailed");
 if (!["status", "label", "list"].includes(view)) view = "status";
-$("#hideDone").checked = store.get("hideDone", false);
+let hideDone = store.get("hideDone", false);
 
 // The text switchers: the bell switcher's sliding square, sized to each word.
 const segs = [];
@@ -1137,7 +1162,7 @@ function makeSeg(el, get, set) {
 }
 makeSeg($("#viewSeg"), () => view, (v) => { view = v; store.set("view", v); });
 makeSeg($("#densSeg"), () => dens, (v) => { dens = v; store.set("density", v); });
-$("#hideDone").onchange = () => { store.set("hideDone", $("#hideDone").checked); render(all); };
+makeSeg($("#doneSeg"), () => (hideDone ? "hide" : "show"), (v) => { hideDone = v === "hide"; store.set("hideDone", hideDone); });
 // The sort dropdown, built like the repo one.
 const SORT_NAMES = { status: "Needs you first", active: "Last active", created: "Newest", name: "Name", manual: "Manual (drag)" };
 $("#sortName").textContent = "Sort: " + SORT_NAMES[sortBy];
@@ -1182,7 +1207,7 @@ const colMenu = (l) => `<details class="colmenu"><summary title="Edit, duplicate
 function renderBoard(features) {
   // don't move cards under the pointer, the box you're naming in, or an open ⋯ menu
   if (mouseDown || dragging || naming || $("#board .colmenu[open]")) return;
-  const q = $("#search").value.trim().toLowerCase(), hide = $("#hideDone").checked;
+  const q = $("#search").value.trim().toLowerCase(), hide = hideDone;
   const shown = features.filter((f) => (!q || (f.title + " " + (f.prompt || "") + " " + (f.label || "")).toLowerCase().includes(q)) && !(hide && ["merged", "dropped"].includes(kind(f)[0]))).sort(bySort);
   const cols = view === "status"
     ? CHIPS.filter((k) => !(hide && ["merged", "dropped"].includes(k))).map((k) => ({ key: k, head: `<span class="pill ${k}"><span class="dot"></span></span>${cap(k)}`, items: shown.filter((f) => kind(f)[0] === k) }))
@@ -1788,7 +1813,9 @@ async function onClick(e) {
   if (act === "drop") {
     const f = all.find((x) => x.slug === slug);
     if (!(await ask(`Drop “${f.title}”?`, f.worktree ? "Its app stops and it stays on record under Dropped. Its folder and branch are kept until you remove the worktree, and the branch stays in git." : "It stays on record under Dropped.", "Drop"))) return;
-    const r = await api(`${base}/drop`, {}); return say(r.ok ? "" : r.msg, r.ok ? "" : "bad");
+    const r = await api(`${base}/drop`, {});
+    if (r.ok && popSlug === slug) closeModal($("#popDlg")); // like the other bottom buttons: done, back to the board
+    return say(r.ok ? "" : r.msg, r.ok ? "" : "bad");
   }
   if (act === "merge") {
     if (!(await ask(`Check and merge “${all.find((x) => x.slug === slug).title}”?`, `${REPO.check ? `Runs ${REPO.check} on the branch and merges` : "There's no check set in cannu.json, so this merges"} it into ${REPO.main || "main"} locally. Nothing is pushed.`, "Check and merge"))) return;
@@ -1804,7 +1831,9 @@ async function onClick(e) {
   if (act === "remove") {
     const f = all.find((x) => x.slug === slug);
     if (!(await ask(`Remove the worktree for “${f.title}”?`, f.status === "dropped" ? "Deletes this dropped feature's folder. Its branch is kept in git." : "Deletes this feature's folder and branch. The feature and its notes stay in the list.", "Remove"))) return;
-    const r = await api(`${base}/remove`, {}); return say(r.msg, r.ok ? "good" : "bad");
+    const r = await api(`${base}/remove`, {});
+    if (r.ok && popSlug === slug) closeModal($("#popDlg"));
+    return say(r.msg, r.ok ? "good" : "bad");
   }
   if (act === "reopen-go" || act === "reopen-plan") {
     const f = all.find((x) => x.slug === slug), plan = act === "reopen-plan";
@@ -1961,9 +1990,9 @@ function defaultsForm(r) {
       <div class="hint">Used by every feature that doesn't pick its own in New feature.</div></div>
     <div class="field"><label class="switch"><input type="checkbox" id="dAuto" ${v.autoContinue ? "checked" : ""}>Carry on by itself after a usage limit resets</label>
       <div class="hint">Agents held by a full 5-hour or weekly limit start or carry on in the background once it resets. Off: their cards offer Carry on instead. Also on the limit banner above the board while a limit is full.</div></div>
-    <div class="field"><label for="dSystem">System prompt${reset("systemPrompt")}</label>
+    <div class="field"><label for="dSystem">System prompt for ${esc(CUR)}${reset("systemPrompt")}</label>
       <textarea id="dSystem" class="tall" placeholder="Empty: agents get Claude Code's own system prompt, plus CLAUDE.md.">${esc(v.systemPrompt)}</textarea>
-      <div class="hint">Added to every agent's system prompt on every run. Slash commands don't run from here, so ask for a skill in words.</div></div>
+      <div class="hint">This repo only: added to the system prompt of every agent in ${esc(CUR)}, on every run. Each repo has its own. Slash commands don't run from here, so ask for a skill in words.</div></div>
     <div class="field"><label>Already in every session</label>
       <div class="hint">The repo's <code>CLAUDE.md</code>, and your Claude Code plugins: ${plugins}.${pony}</div></div>
     <div class="field"><label for="dEnv">Environment variables${reset("env")}</label>
@@ -2038,7 +2067,17 @@ function pickMention(i) {
   closeMention(); t.focus();
   t.dispatchEvent(new Event("input", { bubbles: true })); // keeps the saved draft in step
 }
-document.addEventListener("input", (e) => { if (e.target.matches?.("[data-mention]")) mentionCheck(e.target); });
+// Under each box, which of its @s are real features (linked) and which aren't.
+// Same match as the server's mentions() in repo.js.
+function tagsHtml(text, self) {
+  const slugs = [...new Set([...String(text || "").matchAll(/@([a-z0-9][a-z0-9-]*)/g)].map((m) => m[1]))].filter((x) => x !== self);
+  const ok = slugs.map((x) => all.find((f) => f.slug === x)).filter(Boolean), bad = slugs.filter((x) => !all.some((f) => f.slug === x));
+  return [ok.length && `Linked: ${ok.map((f) => `<span class="ref" title="@${esc(f.slug)}">${esc(f.title)}</span>`).join(", ")}`,
+    bad.length && `<span class="noref">Not linked, no such feature: ${bad.map((x) => "@" + esc(x)).join(", ")}</span>`].filter(Boolean).join(" · ");
+}
+function showTags(t) { const box = (t.closest(".chat") || t.parentElement).querySelector("[data-tags]"); if (box) box.innerHTML = tagsHtml(t.value, t.dataset.self); }
+document.addEventListener("input", (e) => { if (e.target.matches?.("[data-mention]")) { mentionCheck(e.target); showTags(e.target); } });
+document.addEventListener("focusin", (e) => { if (e.target.matches?.("[data-mention]")) showTags(e.target); });
 document.addEventListener("keydown", (e) => {
   if (menu.hidden || e.target !== mTarget) return;
   if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); mOn = (mOn + (e.key === "ArrowDown" ? 1 : mItems.length - 1)) % mItems.length; mentionCheck(e.target); }
