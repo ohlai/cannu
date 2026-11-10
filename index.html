@@ -432,7 +432,7 @@
       <div class="banner" id="limitNew" hidden></div>
     </div>
     <footer class="row"><button data-close title="Keeps what you've typed here for next time, in this browser tab. Nothing is saved to the repo.">Close</button><span class="msg" id="addMsg"></span><span class="grow" style="min-width:0"></span>
-      <button class="second" id="addPlan" title="Records it on main without a branch or agent. Start it later from its card. Enter in the name saves it.">Save as planned</button><button class="primary" id="add">Start agent</button></footer>
+      <button class="second" id="addPlan" title="Records it on main without a branch or agent. Start it later from its card.">Save as planned</button><button class="primary" id="add">Start agent</button></footer>
   </div>
 </dialog>
 
@@ -794,14 +794,14 @@ function simpleCard(f, inPop) {
     ${actions(planned
       ? `${inPop ? "" : `<button data-act="edit">${s.edit ? "Cancel edit" : "Edit"}</button>`}<button data-act="drop" title="Keep it on record as dropped">Drop</button>`
       : `<button data-act="reopen">${s.reopen ? "Cancel reopen" : "Reopen"}</button>`,
-      planned ? `${s.edit && !inPop ? `<button class="second" data-act="edit-save" title="Save the name and description on main. Enter in the name saves.">Save</button>` : ""}<button class="primary" data-act="start" title="Make its branch and start an agent on what it says. ${MAC ? "⌘" : "Ctrl"}+Enter in its boxes starts it.">Start agent</button>`
+      planned ? `${s.edit && !inPop ? `<button class="second" data-act="edit-save" title="Save the name and description on main">Save</button>` : ""}<button class="primary" data-act="start" title="Make its branch and start an agent on what it says. ${MAC ? "⌘" : "Ctrl"}+Enter in its boxes starts it.">Start agent${s.edit || inPop ? keysHint(true) : ""}</button>`
       : leftover ? `<button class="primary" data-act="remove" title="Delete its folder. The unmerged branch is kept, so the work is still in git.">Remove worktree</button>` : "")}
     ${s.reopen ? `<div style="margin-top:10px; display:grid; gap:8px">
       <div class="hint">A new feature that continues this one. Start agent makes a new branch from current main with a new session, and the agent reads this feature's notes first. Save as planned records it to start later.</div>
       <input type="text" data-field="rtitle" value="${esc(s.rtitle || f.title + " (continued)")}">
       <textarea data-field="rprompt" data-mention data-self="${f.slug}" placeholder="What you want changed this time, and why.">${esc(s.rprompt)}</textarea>
       ${MENTION_HINT}
-      <div class="row"><button class="second" data-act="reopen-plan" title="Records it on main without a branch or agent. Start it later from its card. Enter in the name saves it.">Save as planned</button><button class="primary" data-act="reopen-go" title="${MAC ? "⌘" : "Ctrl"}+Enter starts it">Start agent</button></div>
+      <div class="row"><button class="second" data-act="reopen-plan" title="Records it on main without a branch or agent. Start it later from its card.">Save as planned</button><button class="primary" data-act="reopen-go" title="${MAC ? "⌘" : "Ctrl"}+Enter starts it">Start agent${keysHint(true)}</button></div>
     </div>` : ""}
     ${msgBlock(s)}
   </div>`;
@@ -1297,8 +1297,8 @@ function renderPop() {
 }
 
 const TYPED = ["draft", "etitle", "eprompt", "rtitle", "rprompt"];
-// Each box: [what Enter does, what Ctrl+Enter does]. null leaves it a new line.
-const KEYS = { draft: [null, "send"], etitle: ["edit-save", "start"], eprompt: [null, "start"], rtitle: ["reopen-plan", "reopen-go"], rprompt: [null, "reopen-go"] };
+// What Ctrl+Enter in each box presses. Plain Enter is never a save.
+const KEYS = { draft: "send", etitle: "start", eprompt: "start", rtitle: "reopen-go", rprompt: "reopen-go" };
 
 // The + slides open into a box; Enter makes the label and puts this feature in it.
 const shutLabel = (box) => { const w = box.closest(".newlabel"); w.classList.remove("open"); box.value = ""; box.blur(); };
@@ -1328,16 +1328,12 @@ host.addEventListener("input", (e) => {
 });
 host.addEventListener("click", onClick);
 // Ctrl+Enter (or Cmd+Enter) does the main thing: send, or start the agent.
-// Plain Enter in a name box saves: the reopen as planned, the edit on the board.
-// In the popup a planned feature saves when it closes, so Enter there closes it.
 host.addEventListener("keydown", (e) => {
-  const keys = KEYS[e.target.dataset?.field];
-  if (e.key !== "Enter" || !keys || e.isComposing) return;
-  const act = keys[e.ctrlKey || e.metaKey ? 1 : 0]; if (!act) return;
+  const act = KEYS[e.target.dataset?.field];
+  if (e.key !== "Enter" || !(e.ctrlKey || e.metaKey) || !act || e.isComposing) return;
   e.preventDefault();
   const scope = host.id === "popDlg" ? host : e.target.closest("[data-slug]");
-  const b = scope.querySelector(`[data-act="${act}"]`);
-  if (b) b.click(); else if (act === "edit-save" && host.id === "popDlg") closeModal(host);
+  scope.querySelector(`[data-act="${act}"]`)?.click();
 });
 }
 $("#chips").addEventListener("click", (e) => { const b = e.target.closest("[data-filter]"); if (!b) return; filter = b.dataset.filter; store.set("filter", filter); render(all); });
@@ -1577,15 +1573,12 @@ async function addFeature(plan) {
 }
 $("#add").onclick = () => addFeature(false);
 $("#addPlan").onclick = () => addFeature(true);
-$("#addPlan").insertAdjacentHTML("beforeend", keysHint(false));
 $("#add").insertAdjacentHTML("beforeend", keysHint(true));
 $("#add").title = `${MAC ? "⌘" : "Ctrl"}+Enter starts it`;
-// Enter in a one-line box saves (Save as planned here); Ctrl+Enter anywhere
-// does the main button. A disabled (busy) button ignores both.
-for (const [d, save] of [["#newDlg", "#addPlan"], ["#repoDlg", "#repoAdd"], ["#defaultsDlg", "#defaultsSave"]]) $(d).addEventListener("keydown", (e) => {
-  if (e.key !== "Enter" || e.isComposing) return;
-  const b = e.ctrlKey || e.metaKey ? $(d).querySelector("footer .primary") : e.target.matches("input[type=text]") && $(save);
-  if (b) { e.preventDefault(); b.click(); }
+// Ctrl+Enter anywhere in these presses the main button. A disabled (busy) one ignores it.
+for (const d of ["#newDlg", "#repoDlg", "#defaultsDlg"]) $(d).addEventListener("keydown", (e) => {
+  if (e.key !== "Enter" || !(e.ctrlKey || e.metaKey) || e.isComposing) return;
+  e.preventDefault(); $(d).querySelector("footer .primary").click();
 });
 
 // Agent defaults. Everything the dashboard sends an agent is listed: what you
