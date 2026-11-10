@@ -379,6 +379,7 @@ function heldTick(f, st) {
   if (st.state !== "limited" || !st.held || !hasWorktree(f)) return;
   const full = fullLimit();
   if (full) { if (st.limitResets !== full.resets) writeState(f.slug, { limitResets: full.resets }); return; }
+  if (!defaults().autoContinue) return;
   if (st.limitResets ? Date.parse(st.limitResets) > Date.now() : Date.now() - (st.limitTried || 0) < 10 * 60e3) return;
   continueHeld(f);
 }

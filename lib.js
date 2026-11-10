@@ -173,6 +173,9 @@ export const BUILT_IN = {
   systemPrompt: "",
   // Sent when Oli presses Carry on after an agent was cut off mid-turn.
   resumeText: "You were interrupted mid-turn (the dashboard or the PC restarted, or the session was closed). Check git status and your log.md, work out where you got to, then carry on with what you were doing.",
+  // Agents held by a full usage limit carry on by themselves once it resets.
+  // Off: their cards offer Carry on instead.
+  autoContinue: true,
   // Sent when a session's saved conversation is gone and a new one starts. {title} and {slug} are filled in.
   freshText: "Feature: {title}. The previous Claude session for this feature can't be reopened, so this is a new one. Read {notes}/{slug}/prompts.md, log.md and decisions.md, and git log on this branch, then tell me in a few lines where the feature is up to and what's left, and wait for me.",
   // Filled into the chat box when Check and merge hits a conflict. {files} is filled in.

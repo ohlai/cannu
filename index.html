@@ -328,12 +328,16 @@
   .green { --c:var(--u-green); } .orange { --c:var(--u-orange); } .red { --c:var(--u-red); } .grey { --c:var(--mute); }
   .urings .fill, .udot { stroke:var(--c); background:var(--c); }
   .ucenter { position:absolute; inset:0; display:grid; place-content:center; font-size:8px; font-weight:700; letter-spacing:-.02em; opacity:0; transition:opacity .2s; }
-  .upanel { position:absolute; right:calc(100% + 12px); top:50%; transform:translateY(-50%); z-index:5; background:var(--bg);
-    display:grid; grid-template-columns:0fr; transition:grid-template-columns .35s cubic-bezier(.16,1,.3,1); }
-  .uin { min-width:0; overflow:hidden; white-space:nowrap; opacity:0; transition:opacity .2s; }
-  .rings:is(:hover, :focus-within, .pinned) .upanel { grid-template-columns:1fr; }
-  .rings:is(:hover, :focus-within, .pinned) .uin, .rings:is(:hover, :focus-within, .pinned) .ucenter { opacity:1; }
-  .rings:is(:hover, :focus-within, .pinned) .urings { transform:scale(1.3); }
+  /* The panel touches the rings (padding, not a gap) so the pointer can move
+     onto its switch without the hover ending. Clicking doesn't hold it open:
+     only keyboard focus does, besides hover and a limit that needs saying. */
+  .upanel { position:absolute; right:100%; top:50%; transform:translateY(-50%); z-index:5; padding:4px 14px 4px 0; background:var(--bg); }
+  .uin { max-width:0; overflow:hidden; white-space:nowrap; opacity:0; transition:max-width .4s cubic-bezier(.16,1,.3,1), opacity .2s; }
+  .rings:is(:hover, :focus-visible, :has(:focus-visible), .pinned) .uin { max-width:460px; opacity:1; }
+  .rings:is(:hover, :focus-visible, :has(:focus-visible), .pinned) .ucenter { opacity:1; }
+  .rings:is(:hover, :focus-visible, :has(:focus-visible), .pinned) .urings { transform:scale(1.3); }
+  .rings:not(:hover, :focus-visible, :has(:focus-visible), .pinned) .upanel { pointer-events:none; }
+  .uauto { display:flex; justify-content:flex-end; margin-top:3px; font-size:11px; color:var(--mute); }
   .uline { display:flex; align-items:center; justify-content:flex-end; gap:6px; font-size:12px; line-height:1.55; }
   .uline b { min-width:30px; text-align:right; }
   .uline small, .unote { color:var(--mute); font-size:11px; }
@@ -628,18 +632,34 @@ function renderUsage() {
   const full = limitFull(), held = all.filter((f) => f.worktree && f.live?.state === "limited");
   const wait = held.map(heldUntil).filter(Boolean).sort().at(-1);
   const n = held.length, ones = `${n} ${n === 1 ? "feature" : "features"}`;
-  const note = full ? `<b>${cap(LIMIT_NAME[full.which])} limit full.</b> No agents start until it resets${n ? `. ${ones} held` : ""}; they carry on by themselves then.`
-    : wait ? `<b>${ones} held</b> until ${resetTime(wait)}, then they carry on by themselves.`
-    : n ? `<b>Limit reset.</b> ${ones} held, carrying on by themselves shortly. <button data-act="continueall">Carry on now</button>` : "";
+  const auto = DEF?.autoContinue !== false, then = auto ? "they carry on by themselves then" : "then their cards offer Carry on";
+  const note = full ? `<b>${cap(LIMIT_NAME[full.which])} limit full.</b> No agents start until it resets${n ? `. ${ones} held` : ""}; ${then}.`
+    : wait ? `<b>${ones} held</b> until ${resetTime(wait)}; ${then}.`
+    : n ? `<b>Limit reset.</b> ${ones} held${auto ? ", carrying on by themselves shortly" : ""}. <button data-act="continueall">Carry on now</button>` : "";
   box.classList.toggle("pinned", !!note);
-  const html = `<div class="upanel"><div class="uin">${line("session", "5 hours")}${line("weekly", "week")}${note ? `<div class="unote">${note}</div>` : ""}</div></div>${usageRings()}`;
+  const html = `<div class="upanel"><div class="uin">${line("session", "5 hours")}${line("weekly", "week")}${note ? `<div class="unote">${note}</div>` : ""}
+    <div class="uauto"><label class="switch" title="Agents held by a full limit carry on by themselves once it resets. Also in Agent defaults."><input type="checkbox" data-act="autocont" ${auto ? "checked" : ""}>Carry on by itself after a reset</label></div></div></div>${usageRings()}`;
   if (box.dataset.html !== html) { box.innerHTML = html; box.dataset.html = html; }
   const ln = $("#limitNew");
   ln.hidden = !full;
-  if (full) ln.textContent = `Your ${LIMIT_NAME[full.which]} Claude limit is full until ${resetAt(full.resets)}. Start agent sets the feature up now and its agent waits, then starts by itself once the limit resets.`;
+  if (full) ln.textContent = `Your ${LIMIT_NAME[full.which]} Claude limit is full until ${resetAt(full.resets)}. Start agent sets the feature up now and its agent waits, then ${DEF?.autoContinue !== false ? "starts by itself" : "its card offers Start"} once the limit resets.`;
 }
-async function loadUsage() { try { USAGE = await (await fetch("/api/usage")).json(); } catch {} renderUsage(); }
+// ?fakelimit shows the board as if the 5-hour limit were full, to see how
+// that looks. Only this page is fooled: the server still starts agents.
+const FAKE = new URLSearchParams(location.search).has("fakelimit");
+async function loadUsage() {
+  try { USAGE = await (await fetch("/api/usage")).json(); } catch {}
+  if (FAKE) USAGE = { ...USAGE, session: { percent: 100, resets: new Date(Date.now() + 72 * 60e3).toISOString() } };
+  renderUsage();
+}
 loadUsage(); setInterval(loadUsage, 30e3);
+$("#rings").addEventListener("change", async (e) => {
+  if (e.target.dataset.act !== "autocont") return;
+  // Defaults are saved whole, so send the current ones with this changed.
+  const r = await api("/api/defaults", { ...(await loadDefaults()).values, autoContinue: e.target.checked });
+  if (r.values) setModels(r);
+  renderUsage(); refresh();
+});
 $("#rings").addEventListener("click", async (e) => {
   if (e.target.dataset.act !== "continueall") return;
   e.target.disabled = true;
@@ -693,7 +713,7 @@ function card(f, inPop) {
   const prev = f.continues && all.find((x) => x.slug === f.continues);
   let banner = "";
   if (setupStuck) banner = `<div class="banner">${f.setup.startsWith("failed") ? esc(f.setup) : "Setup was cut off (the dashboard or PC restarted)."} Retry picks up from the step it stopped at. <button data-act="retry">Retry setup</button></div>`;
-  else if (cls === "interrupted" || cls === "error") banner = `<div class="banner">${cls === "error" ? "The last background run failed or was stopped. Its output is below." : "This agent stopped mid-turn: the dashboard, the PC or its terminal closed before it finished."} Anything it changed is still there, but may not be committed.${limitFull() ? ` Your Claude usage limit is full until ${resetAt(limitFull().resets)}: Carry on in the background waits for that, then runs by itself.` : ""}<div class="row" style="margin-top:8px"><button class="primary" data-act="resume-bg">Carry on in the background</button><button data-act="resume-term">Carry on in a terminal</button></div></div>`;
+  else if (cls === "interrupted" || cls === "error") banner = `<div class="banner">${cls === "error" ? "The last background run failed or was stopped. Its output is below." : "This agent stopped mid-turn: the dashboard, the PC or its terminal closed before it finished."} Anything it changed is still there, but may not be committed.${limitFull() ? ` Your Claude usage limit is full until ${resetAt(limitFull().resets)}: Carry on in the background waits for that${DEF?.autoContinue !== false ? ", then runs by itself" : ""}.` : ""}<div class="row" style="margin-top:8px"><button class="primary" data-act="resume-bg">Carry on in the background</button><button data-act="resume-term">Carry on in a terminal</button></div></div>`;
   else if (cls === "stuck") {
     const w = f.stuck.waitingOn, quiet = ago(f.stuck.since).replace(" ago", "");
     banner = `<div class="banner">No activity from this agent for ${quiet}${f.stuck.on ? `. Last thing it did: ${esc(f.stuck.on)}` : ""}.
@@ -702,9 +722,9 @@ function card(f, inPop) {
       <div class="row" style="margin-top:8px">${w ? `<button class="primary" data-act="unstick" data-pid="${w.pid}">End that step</button>` : ""}${f.live.background ? `<button data-act="stopturn">Stop the turn</button>` : ""}</div></div>`;
   }
   else if (cls === "limited") {
-    const full = limitFull(), wait = heldUntil(f), what = st.held?.first ? "start" : "carry on";
-    banner = wait ? `<div class="banner">Held by your ${full ? LIMIT_NAME[full.which] + " " : ""}Claude usage limit. It resets ${resetAt(wait)}, and then this agent will ${what} by itself.</div>`
-      : `<div class="banner">Held by your Claude usage limit, which should have reset. This agent will ${what} by itself shortly. <button class="primary" data-act="continue">${cap(what)} now</button></div>`;
+    const full = limitFull(), wait = heldUntil(f), what = st.held?.first ? "start" : "carry on", auto = DEF?.autoContinue !== false;
+    banner = wait ? `<div class="banner">Held by your ${full ? LIMIT_NAME[full.which] + " " : ""}Claude usage limit. It resets ${resetAt(wait)}, and then ${auto ? `this agent will ${what} by itself` : `this card offers to ${what}`}.</div>`
+      : `<div class="banner">Held by your Claude usage limit, which should have reset.${auto ? ` This agent will ${what} by itself shortly.` : ""} <button class="primary" data-act="continue">${cap(what)}${auto ? " now" : ""}</button></div>`;
   }
   else if (cls === "not-started") banner = `<div class="banner">The terminal for this feature never started a session. <button data-act="resume-term">Start it now</button></div>`;
   const c = !inPop && collapsed.has(f.slug);
@@ -1579,6 +1599,8 @@ function defaultsForm(r) {
   return `
     <div class="field"><label for="dModel">Model</label><select id="dModel">${modelOptions(v.model, false)}</select>
       <div class="hint">Used by every feature that doesn't pick its own in New feature.</div></div>
+    <div class="field"><label class="switch"><input type="checkbox" id="dAuto" ${v.autoContinue ? "checked" : ""}>Carry on by itself after a usage limit resets</label>
+      <div class="hint">Agents held by a full 5-hour or weekly limit start or carry on in the background once it resets. Off: their cards offer Carry on instead. Also under the usage rings.</div></div>
     <div class="field"><label for="dSystem">System prompt${reset("systemPrompt")}</label>
       <textarea id="dSystem" class="tall" placeholder="Empty: agents get Claude Code's own system prompt, plus CLAUDE.md.">${esc(v.systemPrompt)}</textarea>
       <div class="hint">Added to every agent's system prompt on every run. Slash commands don't run from here, so ask for a skill in words.</div></div>
@@ -1617,7 +1639,7 @@ $("#defaultsBody").addEventListener("click", (e) => {
 $("#defaultsSave").onclick = async () => {
   const list = (id) => $(id).value.split("\n").map((x) => x.trim()).filter(Boolean);
   const env = Object.fromEntries(list("#dEnv").filter((l) => l.includes("=")).map((l) => [l.slice(0, l.indexOf("=")).trim(), l.slice(l.indexOf("=") + 1).trim()]));
-  const body = { model: $("#dModel").value, systemPrompt: $("#dSystem").value.trim(), env, allowedTools: list("#dAllow"), disallowedTools: list("#dDeny") };
+  const body = { model: $("#dModel").value, autoContinue: $("#dAuto").checked, systemPrompt: $("#dSystem").value.trim(), env, allowedTools: list("#dAllow"), disallowedTools: list("#dDeny") };
   for (const [k] of TEXTS) body[k] = $("#d_" + k).value.trim();
   const r = await api("/api/defaults", body);
   if (r.msg) { $("#defaultsMsg").textContent = r.msg; return; }
