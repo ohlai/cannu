@@ -200,7 +200,7 @@ function writeSettings(f) {
   fs.mkdirSync(path.join(f.dir, ".claude"), { recursive: true });
   exclude(".claude/settings.local.json");
   const hook = () => ({ hooks: [{ type: "command", command: `node "${path.join(META, "hook.js")}"`, timeout: 10 }] });
-  const events = ["SessionStart", "UserPromptSubmit", "PreToolUse", "Notification", "Stop", "SessionEnd"];
+  const events = ["SessionStart", "UserPromptSubmit", "PreToolUse", "Notification", "Stop", "StopFailure", "SessionEnd"];
   fs.writeFileSync(path.join(f.dir, ".claude", "settings.local.json"), JSON.stringify({
     env: {
       ...defaults().env, // Oli's extra variables; the ones below win, the dashboard relies on them
@@ -301,11 +301,11 @@ function withMentions(f, text) {
 // process list, which is cached and can miss a run that only just started.
 const running = new Set();
 // While a Claude usage limit is full, a turn isn't started: it's held, and
-// the card offers Continue once the limit resets. A turn that runs into the
-// limit part way is held the same way, to carry on from where it stopped.
-const LIMIT_HIT = /usage limit|hit your (\w+ )?limit|limit reached|limit · resets/i;
+// carried on by itself once the limit resets (see heldTick). A turn that runs
+// into the limit part way is held the same way, to carry on from where it
+// stopped.
 function hold(f, held, resets) {
-  writeState(f.slug, { state: "limited", activity: "", headlessPid: null, held, limitResets: resets || null });
+  writeState(f.slug, { state: "limited", activity: "", headlessPid: null, held, limitResets: resets || null, limitTried: Date.now() });
 }
 function headless(f, text, label, first = false) {
   const full = fullLimit();
@@ -333,7 +333,8 @@ function headless(f, text, label, first = false) {
       const saved = fs.existsSync(path.join(transcriptDir(f), `${f.sessionId}.jsonl`));
       hold(f, first && !saved ? { text, label, first } : { text: resumeText(), label: "carrying on after the usage limit" }, fullLimit()?.resets);
       writeState(f.slug, { lastReply: reply });
-      refreshUsage();
+      // The usage we had may not show the limit as full yet: fetch it, for the reset time.
+      refreshUsage().then(() => { if (fullLimit()) writeState(f.slug, { limitResets: fullLimit().resets }); });
       return;
     }
     writeState(f.slug, { state: code === 0 ? "idle" : "error", activity: "", headlessPid: null, lastReply: reply, denied });
@@ -360,7 +361,7 @@ function pump(slug) {
   const live = liveStatus(st);
   if (running.has(slug)) return "busy";
   if (live.background || live.state === "working" || live.state === "needs-you" || st.state === "starting") return live.open ? "busy-terminal" : "busy";
-  if (fullLimit()) return "limited"; // kept queued, and sent once the limit resets
+  if (fullLimit() || st.state === "limited") return "limited"; // kept queued, and sent once the limit resets and the held turn has run
   if (live.open && st.pid) {
     killTree(st.pid);
     writeState(slug, { pid: null });
@@ -370,7 +371,25 @@ function pump(slug) {
   headless(f, next, "your message from the dashboard");
   return "sent";
 }
-setInterval(() => { for (const f of loadFeatures()) if (readState(f.slug).queue?.length) pump(f.slug); }, 3000);
+// A held turn carries on by itself once its limit resets. It waits for the
+// reset time it was held with, even if the usage we have says it's free (that
+// can be stale). Without a known reset time it tries every 10 minutes; a try
+// that's too early just hits the limit and is held again.
+function heldTick(f, st) {
+  if (st.state !== "limited" || !st.held || !hasWorktree(f)) return;
+  const full = fullLimit();
+  if (full) { if (st.limitResets !== full.resets) writeState(f.slug, { limitResets: full.resets }); return; }
+  if (!defaults().autoContinue) return;
+  if (st.limitResets ? Date.parse(st.limitResets) > Date.now() : Date.now() - (st.limitTried || 0) < 10 * 60e3) return;
+  continueHeld(f);
+}
+setInterval(() => {
+  for (const f of loadFeatures()) {
+    const st = readState(f.slug);
+    heldTick(f, st);
+    if (st.queue?.length) pump(f.slug);
+  }
+}, 3000);
 
 // The conversation so far, from Claude Code's saved transcript: what was
 // sent, and the agent's last words in each turn.
@@ -420,6 +439,8 @@ function continueHeld(f) {
   if (st.state !== "limited" || !st.held) return { ok: false, msg: "Nothing is waiting on the usage limit." };
   const full = fullLimit();
   if (full) return { ok: false, msg: `Your ${full.which === "session" ? "5-hour" : "weekly"} Claude limit is still full.` };
+  // Hit in a terminal: that session is still open, and one session can't run in two places.
+  if (st.pid && liveStatus(st).open) { killTree(st.pid); writeState(f.slug, { pid: null }); }
   headless(f, st.held.text, st.held.label, st.held.first);
   return { ok: true, msg: "Carrying on in the background." };
 }
