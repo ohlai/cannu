@@ -329,9 +329,8 @@
   .urings .fill, .udot { stroke:var(--c); background:var(--c); }
   /* --uw is the lines' real width, set by renderUsage, so the slide runs the
      whole way at the eased speed instead of racing to a guessed maximum.
-     The two lines are one grid, so label, dot, % and reset each line up in a
-     column; the % is right-aligned with even-width digits, the reset text
-     right-aligned at the end. */
+     The two lines are one grid, so label, reset, dot and % each line up in a
+     column; the reset text and % are right-aligned, % with even-width digits. */
   .uin { display:grid; grid-template-columns:auto auto auto auto; align-items:center; gap:0 6px; padding-right:14px; font-size:12px; line-height:1.5;
     max-width:0; overflow:hidden; white-space:nowrap; opacity:0; transition:max-width .35s cubic-bezier(.65,0,.35,1), opacity .3s ease-in-out; }
   .rings:is(:hover, :focus-visible) .uin { max-width:var(--uw, 300px); opacity:1; }
@@ -339,7 +338,7 @@
   .uline { display:contents; }
   .uline .ulab { font-size:10.5px; font-weight:700; color:var(--mute); }
   .uline b { text-align:right; font-variant-numeric:tabular-nums; }
-  .uline small { color:var(--mute); font-size:11px; margin-left:10px; justify-self:end; }
+  .uline small { color:var(--mute); font-size:11px; margin:0 4px 0 10px; justify-self:end; }
   .udot { width:7px; height:7px; border-radius:50%; flex:none; }
   #limitMsg { display:flex; align-items:center; flex-wrap:wrap; gap:8px 14px; }
   #limitMsg[hidden] { display:none; }
@@ -626,7 +625,7 @@ function renderUsage() {
   const box = $("#rings");
   const line = (k, label) => {
     const p = known(k), l = USAGE?.[k];
-    return `<div class="uline"><span class="ulab">${label}</span><span class="udot ${p == null ? "grey" : tone(p)}"></span><b>${p == null ? "–" : p + "%"}</b><small>${p == null ? (l?.resets ? "reset, not checked since" : "not known yet") : l.resets ? `resets ${resetAt(l.resets)}` : ""}</small></div>`;
+    return `<div class="uline"><span class="ulab">${label}</span><small>${p == null ? (l?.resets ? "reset, not checked since" : "not known yet") : l.resets ? `resets ${resetAt(l.resets)}` : ""}</small><span class="udot ${p == null ? "grey" : tone(p)}"></span><b>${p == null ? "–" : p + "%"}</b></div>`;
   };
   const html = `${usageRings()}<div class="uin">${line("session", "5H")}${line("weekly", "7D")}</div>`;
   if (box.dataset.html !== html) { box.innerHTML = html; box.dataset.html = html; box.style.setProperty("--uw", box.lastChild.scrollWidth + "px"); }
