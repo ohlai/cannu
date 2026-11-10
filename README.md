@@ -30,6 +30,14 @@ that was done.
   terminal) is held. Held agents carry on by themselves once it resets. It
   reads Claude Code's login from `~/.claude/.credentials.json`; without that
   file the rings stay grey.
+- Schedule a planned feature to start by itself: at a time, or some minutes
+  before the 5-hour or weekly limit resets, so what's left of it isn't
+  wasted. Pick **When** in New feature, or **Schedule** on a planned card.
+  The card and its tile say when it starts. Cannu has to be running to start
+  it: if the computer was off or asleep at that time, it doesn't start late by
+  itself. The card says it was missed and when, with Start now. A limit's
+  reset time comes from the usage reading, so with none the card says it's
+  waiting on one, and with no 5-hour window running it starts straight away.
 - A small HTTP API, so another agent (Hermes) can drive it. See `hermes/`.
 
 ![A feature's popup with its chat: the agent's last reply and the message box](screenshots/feature-chat.png)

@@ -9,7 +9,7 @@ import crypto from "node:crypto";
 import os from "node:os";
 import { spawn, execFile, execFileSync } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
-import { CLAUDE_SETTINGS, META, APP, WORKTREES, STATE, FEATURES_DIR, REPO_FILE, MAIN, NOTES, COMMIT_NOTES, notesDir, repo, repoRaw, BUILT_IN, MODELS, defaults, fill, MD_KEYS, config, loadFeatures, saveRuntime, featureMd, readState, writeState, stamp, claudeBaseArgs, liveStatus, killTree, AUTO, resumeText, FEEDBACK, forget, watchUsage, fullLimit, refreshUsage } from "./lib.js";
+import { CLAUDE_SETTINGS, META, APP, WORKTREES, STATE, FEATURES_DIR, REPO_FILE, MAIN, NOTES, COMMIT_NOTES, notesDir, repo, repoRaw, BUILT_IN, MODELS, defaults, fill, MD_KEYS, config, loadFeatures, saveRuntime, featureMd, readState, writeState, stamp, claudeBaseArgs, liveStatus, killTree, AUTO, resumeText, FEEDBACK, forget, watchUsage, fullLimit, refreshUsage, planUsage } from "./lib.js";
 watchUsage();
 
 const WIN = process.platform === "win32";
@@ -166,11 +166,58 @@ function startFeature(f, message) {
   const port = Math.max(config.firstFeaturePort - 1, ...list.map((x) => x.port || 0)) + 1;
   const started = stamp();
   Object.assign(f, { status: "building", started, branch: `feat/${f.slug}` });
-  saveRuntime(f.slug, { port, dir: path.join(WORKTREES, f.slug), sessionId: crypto.randomUUID(), setup: "starting", launchPrompt: f.prompt + contextBlock(f, started), removed: null });
+  saveRuntime(f.slug, { port, dir: path.join(WORKTREES, f.slug), sessionId: crypto.randomUUID(), setup: "starting", launchPrompt: f.prompt + contextBlock(f, started), removed: null, schedule: null });
   writeFeature(f, message);
   const full = loadFeatures().find((x) => x.slug === f.slug);
   startSetup(full);
   return full;
+}
+
+// ---------- scheduled starts ----------
+//
+// A planned feature can start by itself at a time ({ at }), or some minutes
+// before the 5-hour or weekly limit resets ({ before, mins }), to use up what
+// would otherwise go to waste. It's this machine's, so it's in the runtime,
+// with `due` (when it will start, once known) and `missed`. The 3s tick below
+// starts it. A due time over 2 minutes gone means Cannu wasn't running then
+// (the computer was off or asleep): that start is marked missed and doesn't
+// run late by itself, since it would land at a time nobody picked.
+const LATE = 2 * 60e3;
+function dueAt(s) {
+  if (s.at) return s.at;
+  const l = planUsage()?.[s.before];
+  if (!l) return null; // no usage reading, so the reset time isn't known
+  if (!l.resets) return new Date().toISOString(); // no window running: nothing to use up, so now
+  if (Date.parse(l.resets) <= Date.now()) return null; // just reset: wait for the next reading
+  return new Date(Math.max(Date.now(), Date.parse(l.resets) - s.mins * 60e3)).toISOString();
+}
+// { at } or { before, mins } from the page, checked. Throws what's wrong.
+function parseSchedule(b) {
+  if (b.before) {
+    if (!["session", "weekly"].includes(b.before)) throw new Error("Unknown limit.");
+    return { before: b.before, mins: Math.max(0, Math.min(24 * 60, Math.round(Number(b.mins) || 0))) };
+  }
+  const t = Date.parse(b.at);
+  if (!t) throw new Error("Pick a time to start it.");
+  if (t <= Date.now()) throw new Error("That time has already passed.");
+  return { at: new Date(t).toISOString() };
+}
+function setSchedule(f, b) {
+  if (!b) { saveRuntime(f.slug, { schedule: null }); return { ok: true, msg: "Not scheduled any more." }; }
+  if (!f.prompt?.trim()) return { ok: false, msg: "It needs a prompt saying what you want before it can be scheduled." };
+  const s = parseSchedule(b);
+  saveRuntime(f.slug, { schedule: { ...s, due: dueAt(s) } });
+  return { ok: true, msg: "Scheduled." };
+}
+function scheduleTick(f) {
+  const s = f.schedule;
+  if (f.status !== "planned" || !s || s.missed) return;
+  if (s.due && Date.now() - Date.parse(s.due) > LATE) return saveRuntime(f.slug, { schedule: { ...s, missed: s.due } });
+  const due = dueAt(s);
+  if (due !== s.due) saveRuntime(f.slug, { schedule: { ...s, due } });
+  if (!due || Date.parse(due) > Date.now()) return;
+  try { startFeature(f, `Start feature (scheduled): ${f.title}`); }
+  catch (e) { saveRuntime(f.slug, { schedule: { ...s, due, missed: due, why: e.message } }); }
 }
 
 // Every step checks whether it's already done, so setup can be re-run after
@@ -387,6 +434,7 @@ function heldTick(f, st) {
 }
 setInterval(() => {
   for (const f of loadFeatures()) {
+    scheduleTick(f);
     const st = readState(f.slug);
     heldTick(f, st);
     if (st.queue?.length) pump(f.slug);
@@ -989,7 +1037,7 @@ const server = http.createServer(async (req, res) => {
     // A short list for scripts and other agents (Hermes): what each feature
     // is, where it's at, and the start of its agent's last reply.
     if (req.method === "GET" && url.pathname === "/api/status") {
-      const brief = (await overview()).map((f) => ({ slug: f.slug, title: f.title, status: f.status, label: f.label || "", agent: f.worktree ? f.live?.state || "" : "", activity: f.st?.activity || "", lastReply: String(f.st?.lastReply || "").slice(0, 600), queued: f.st?.queue?.length || 0, ahead: f.ahead || 0, pr: f.prInfo ? { number: f.pr, url: f.prUrl, state: f.prInfo.state, checks: f.prInfo.checks } : null, previewPort: f.worktree ? f.port : null }));
+      const brief = (await overview()).map((f) => ({ slug: f.slug, title: f.title, status: f.status, label: f.label || "", agent: f.worktree ? f.live?.state || "" : "", activity: f.st?.activity || "", lastReply: String(f.st?.lastReply || "").slice(0, 600), queued: f.st?.queue?.length || 0, ahead: f.ahead || 0, pr: f.prInfo ? { number: f.pr, url: f.prUrl, state: f.prInfo.state, checks: f.prInfo.checks } : null, previewPort: f.worktree ? f.port : null, schedule: f.status === "planned" ? f.schedule || null : null }));
       return send(res, 200, brief);
     }
     if (req.method === "GET" && url.pathname === "/api/repo") return send(res, 200, { name: config.name, repo: APP, main: MAIN, ...repo(), agent: undefined, hasConfig: fs.existsSync(REPO_FILE), platform: process.platform });
@@ -1010,12 +1058,17 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === "POST" && url.pathname === "/api/features") {
       fresh();
-      const { title, prompt, plan, model, label } = await body(req);
+      const { title, prompt, plan, model, label, schedule } = await body(req);
       if (!title?.trim()) return send(res, 400, { msg: "Needs a name." });
-      if (!plan && !prompt?.trim()) return send(res, 400, { msg: "Needs a starting prompt to start an agent. Or save it as planned." });
+      if (!plan && !prompt?.trim()) return send(res, 400, { msg: `Needs a starting prompt to ${schedule ? "schedule" : "start"} an agent. Or save it as planned.` });
+      let sched = null;
+      if (schedule) try { sched = parseSchedule(schedule); } catch (e) { return send(res, 400, { msg: e.message }); }
       const lab = cleanLabel(label), l = readLabels();
       if (lab && !(lab in l)) newLabel(lab); // saved like any other, so its column stays if the feature leaves it
-      return send(res, 200, createFeature(title.trim(), String(prompt || "").trim(), { refs: mentions(prompt), plan: !!plan, model, label: lab }));
+      // Scheduled: saved as planned, and the tick starts it when it's due.
+      const made = createFeature(title.trim(), String(prompt || "").trim(), { refs: mentions(prompt), plan: !!plan || !!sched, model, label: lab });
+      if (sched) saveRuntime(made.slug, { schedule: { ...sched, due: dueAt(sched) } });
+      return send(res, 200, made);
     }
     // Continue every feature a usage limit held back.
     if (req.method === "POST" && url.pathname === "/api/continue") {
@@ -1061,6 +1114,8 @@ const server = http.createServer(async (req, res) => {
     if (action === "remove" && f.status === "dropped" && f.dir && !f.removed) return send(res, 200, await removeFeature(f));
     if (f.status === "planned") {
       if (action === "start") return send(res, 200, startFeature(f, `Start feature: ${f.title}`));
+      // { schedule: { at } or { before, mins } }, or { schedule: null } to clear it.
+      if (action === "schedule") { try { return send(res, 200, setSchedule(f, b.schedule)); } catch (e) { return send(res, 200, { ok: false, msg: e.message }); } }
       if (action === "edit") {
         const title = String(b.title || "").trim() || f.title;
         if (title !== f.title && loadFeatures().some((x) => x.slug !== f.slug && x.title.toLowerCase() === title.toLowerCase())) return send(res, 400, { msg: "A feature already has that name." });

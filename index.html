@@ -497,7 +497,9 @@
       <textarea id="prompt" class="tall" data-mention placeholder="What you want and why. Saved word for word in the feature's notes. Optional if you're only planning it."></textarea>
       <div class="hint">@ to tag a related feature. The agent reads their notes first.</div>
       <div class="hint" data-tags></div>
-      <div class="field"><label for="newModel">Model</label><select id="newModel"></select></div>      <div class="banner" id="limitNew" hidden></div>
+      <div class="field"><label for="newModel">Model</label><select id="newModel"></select></div>
+      <div class="field"><label for="new_swhen">When</label><div class="row" id="newWhen" style="flex-wrap:wrap"></div></div>
+      <div class="banner" id="limitNew" hidden></div>
     </div>
     <div class="dmsg" id="addMsg"></div>
     <footer class="row"><button data-close title="Keeps what you've typed here for next time, in this browser tab. Nothing is saved to the repo.">Close</button><span class="grow" style="min-width:0"></span>
@@ -637,7 +639,7 @@ function errBlock(s, key, text) {
 
 // [status, detail]. The detail (needs you, background…) shows after it.
 function kind(f) {
-  if (!f.worktree) return f.status === "building" ? ["waiting", ""] : [f.status, ""];
+  if (!f.worktree) return f.status === "building" ? ["waiting", ""] : [f.status, schedOf(f) ? (schedOf(f).missed ? "missed its start" : "scheduled") : ""];
   const [cls, label] = status(f);
   if (cls === "merged") return ["merged", ""];
   if (cls === "working") return ["working", f.settingUp ? label : f.live?.background ? "background" : ""];
@@ -670,6 +672,39 @@ const resetTime = (iso) => {
 };
 const until = (iso) => { const ms = new Date(iso) - Date.now(), h = Math.floor(ms / 36e5); return h >= 24 ? `${Math.floor(h / 24)}d ${h % 24}h` : dur(ms); };
 const resetAt = (iso) => `${resetTime(iso)} (in ${until(iso)})`;
+
+// ---------- scheduled starts ----------
+// A planned feature can start by itself at a time, or some minutes before a
+// limit resets. The server keeps { at } or { before, mins }, with `due` once
+// it's known and `missed` if Cannu wasn't running when it was due.
+const schedOf = (f) => (f.status === "planned" && f.schedule) || null;
+const schedWhat = (s) => (s.at ? "" : `${s.mins} min before your ${LIMIT_NAME[s.before]} limit resets`);
+// One line for the tile and the card: when it starts, or that it didn't.
+function schedText(f) {
+  const s = schedOf(f); if (!s) return "";
+  const what = schedWhat(s);
+  if (s.missed) return `Didn't start: it was due ${resetTime(s.missed)}`;
+  if (!s.due) return `Starts ${what}. Waiting on a usage reading to know when that is.`;
+  return Date.parse(s.due) <= Date.now() ? "Starting now" : `Starts ${resetAt(s.due)}${what ? `, ${what}` : ""}`;
+}
+function schedBanner(f) {
+  const s = schedOf(f); if (!s) return "";
+  if (!s.missed) return `<div class="meta sched">⏰ ${esc(schedText(f))}</div>`;
+  const what = schedWhat(s);
+  return `<div class="banner">Was meant to start at ${resetTime(s.missed)}${what ? ` (${what})` : ""}, but ${s.why ? "couldn't: " + esc(s.why) : "Cannu wasn't running then: the computer was off or asleep"}. It hasn't started, and won't by itself.
+    <div class="row" style="margin-top:8px"><button class="primary" data-act="start">Start now</button><button data-act="sched">Pick a new time</button><button data-act="unschedule">Clear</button></div></div>`;
+}
+// The When controls. `attr` names each box (data-field on a card, an id in
+// New feature); `now` adds "Start now" first.
+const schedFields = (v, attr, now) => `<select ${attr("swhen")}>${[...(now ? [["", "Start now"]] : []), ["at", "At a time"], ["session", "Before the 5-hour limit resets"], ["weekly", "Before the weekly limit resets"]].map(([k, t]) => `<option value="${k}" ${v.swhen === k ? "selected" : ""}>${t}</option>`).join("")}</select>
+  <input type="datetime-local" ${attr("sat")} value="${esc(v.sat ?? "")}" ${v.swhen === "at" ? "" : "hidden"}>
+  <label class="row" style="gap:6px" ${v.swhen === "session" || v.swhen === "weekly" ? "" : "hidden"}><input type="number" min="0" step="5" ${attr("smins")} value="${esc(v.smins ?? 30)}" style="width:5.5em"> min before</label>`;
+// What the server takes. The time is sent with its zone, so a server in another zone gets it right.
+const schedBody = (when, at, mins) => !when ? null : when === "at" ? { at: at ? new Date(at).toISOString() : "" } : { before: when, mins: Number(mins) };
+// A datetime-local value for an ISO time, in this browser's zone.
+const localInput = (iso) => { const d = new Date(iso); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); };
+// A card's When boxes: what's typed, else its current schedule, else blank (30 min for a limit).
+const schedVals = (f, s) => { const c = schedOf(f); return { swhen: s.swhen ?? (c?.before || "at"), sat: s.sat ?? (c?.at ? localInput(c.at) : ""), smins: s.smins ?? c?.mins ?? 30 }; };
 // Mirrors the server: full at 100%, free again once its reset time passes.
 function limitFull() {
   for (const which of ["session", "weekly"]) {
@@ -887,6 +922,7 @@ function simpleCard(f, inPop) {
       </div>
       ${head(f, cls, label, "")}
     </div>
+    ${schedBanner(f)}
     ${planned && !edit && f.prompt ? `<div class="plan md">${md(f.prompt)}</div>` : ""}
     ${edit ? `<div style="margin-top:10px; display:grid; gap:8px">
       <input type="text" data-field="etitle" value="${esc(s.etitle ?? f.title)}">
@@ -894,10 +930,13 @@ function simpleCard(f, inPop) {
       ${mentionHint(s.eprompt ?? f.prompt, f.slug)}${linkedFrom(f, "hint")}
     </div>` : ""}
     ${actions(planned
-      ? `${inPop ? "" : `<button data-act="edit">${s.edit ? "Cancel edit" : "Edit"}</button>`}<button data-act="drop" title="Keep it on record as dropped">Drop</button>`
+      ? `${inPop ? "" : `<button data-act="edit">${s.edit ? "Cancel edit" : "Edit"}</button>`}<button data-act="drop" title="Keep it on record as dropped">Drop</button><button data-act="sched" title="Start it by itself at a time, or just before a usage limit resets so what's left of it isn't wasted">${s.sched ? "Cancel schedule" : schedOf(f) ? "Reschedule" : "Schedule"}</button>`
       : `<button data-act="reopen">${s.reopen ? "Cancel reopen" : "Reopen"}</button>`,
       planned ? `${s.edit && !inPop ? `<button class="second" data-act="edit-save" title="Save the name and description on main">Save</button>` : ""}<button class="primary" data-act="start" title="Make its branch and start an agent on what it says. ${MAC ? "⌘" : "Ctrl"}+Enter in its boxes starts it.">Start agent${s.edit || inPop ? keysHint(true) : ""}</button>`
       : leftover ? `<button class="primary" data-act="remove" title="Delete its folder. The unmerged branch is kept, so the work is still in git.">Remove worktree</button>` : "")}
+    ${planned && s.sched ? `<div class="row" style="margin-top:10px; gap:8px; flex-wrap:wrap">${schedFields(schedVals(f, s), (k) => `data-field="${k}"`)}
+      <span class="grow" style="min-width:0"></span>${schedOf(f) ? `<button data-act="unschedule">Clear schedule</button>` : ""}<button class="primary" data-act="sched-save">Save schedule</button></div>
+      <div class="hint">Cannu starts it then if it's running. If the computer is off or asleep at that time, it doesn't start late by itself: the card says it was missed.</div>` : ""}
     ${s.reopen ? `<div style="margin-top:10px; display:grid; gap:8px">
       <div class="hint">A new feature that continues this one. Start agent makes a new branch from current main with a new session, and the agent reads this feature's notes first. Save as planned records it to start later.</div>
       <input type="text" data-field="rtitle" value="${esc(s.rtitle || f.title + " (continued)")}">
@@ -960,7 +999,7 @@ function render(features) {
   const ms = live.reduce((a, f) => a + f.usage.ms, 0), cost = live.reduce((a, f) => a + f.usage.cost, 0);
   // The totals go on their own line under the tagline.
   $("#totals").innerHTML = `One branch, folder and Claude session per feature.${ms || cost ? `<br>All features: ${dur(ms)} agent time, ≈$${cost.toFixed(2)} at API prices.` : ""}`;
-  const typing = document.activeElement?.closest?.("#list") && document.activeElement.matches("textarea, input[type=text]");
+  const typing = document.activeElement?.closest?.("#list") && document.activeElement.matches("textarea, input[type=text], input[type=datetime-local], input[type=number]");
   // Filter chips, with how many features each would show.
   const inGroup = (f, g) => g === "all" || kind(f)[0] === g;
   $("#chips").innerHTML = ["all", ...CHIPS].map((g) => `<button data-filter="${g}" title="${KIND_TIPS[g]}" class="${g === filter ? "on" : ""}">${cap(g)}<span class="n">${features.filter((f) => inGroup(f, g)).length}</span></button>`).join("");
@@ -1189,6 +1228,7 @@ function tile(f) {
     <div class="t">${esc(f.title)}</div>
     ${st.activity && cls === "working" ? `<div class="activity">${esc(st.activity)}</div>` : ""}
     ${k === "waiting" && st.lastReply ? `<div class="snip">${esc(st.lastReply.replace(/[#*`>|]/g, "").trim().slice(0, 240))}</div>` : ""}
+    ${schedOf(f) ? `<div class="activity">⏰ ${esc(schedText(f))}</div>` : ""}
     <div class="foot">${view === "label" ? pill : f.label ? tagHtml(f.label) : ""}${f.merged && k !== "merged" ? `<span class="meta">merged</span>` : ""}<span class="when">${when}</span></div>
     ${u(f.slug).msg ? `<div class="msg ${u(f.slug).cls}">${esc(u(f.slug).msg)}</div>` : ""}</div>`;
 }
@@ -1598,7 +1638,7 @@ function renderPop() {
   // isn't a change to redraw for. Every refresh redrew it, which threw the
   // cursor out of the box you were typing in.
   const typed = Object.fromEntries(TYPED.map((k) => [k, s[k]]));
-  Object.assign(s, { draft: "", etitle: null, eprompt: null, rtitle: "", rprompt: "" });
+  Object.assign(s, { draft: "", etitle: null, eprompt: null, rtitle: "", rprompt: "", sat: null, smins: null });
   const html = (f.worktree ? card(f, true) : simpleCard(f, true)) + "\u0000" + lab;
   Object.assign(s, typed);
   const top = $("#popTop");
@@ -1636,7 +1676,7 @@ function renderPop() {
   const plan = top.querySelector('[data-field="eprompt"]');
   if (plan) fitPlan(plan);
   const back = ta0 && top.querySelector(`[data-field="${ta0.dataset.field}"]`);
-  if (back) { back.focus(); [back.selectionStart, back.selectionEnd, back.scrollTop] = sel0; }
+  if (back) { back.focus(); try { [back.selectionStart, back.selectionEnd, back.scrollTop] = sel0; } catch {} } // a time or number box has no selection
   boxes().forEach((b, i) => { if (tops[i]) b.scrollTop = tops[i]; });
 }
 
@@ -1661,7 +1701,7 @@ document.addEventListener("focusin", (e) => {
   for (const v of [...past.slice(1), now]) { el.select(); document.execCommand(v ? "insertText" : "delete", false, v); }
 });
 
-const TYPED = ["draft", "etitle", "eprompt", "rtitle", "rprompt"];
+const TYPED = ["draft", "etitle", "eprompt", "rtitle", "rprompt", "sat", "smins"];
 // What Ctrl+Enter in each box presses. Plain Enter is never a save.
 const KEYS = { draft: "send", etitle: "start", eprompt: "start", rtitle: "reopen-go", rprompt: "reopen-go" };
 
@@ -1690,6 +1730,7 @@ host.addEventListener("input", (e) => {
   if (e.target.dataset.field) s[e.target.dataset.field] = e.target.value;
   if (e.target.closest(".compose")) fitCompose(e.target);
   if (e.target.dataset.field === "eprompt") fitPlan(e.target);
+  if (e.target.dataset.field === "swhen") render(all); // shows the time box or the minutes box
 });
 host.addEventListener("click", onClick);
 // Ctrl+Enter (or Cmd+Enter) does the main thing: send, or start the agent.
@@ -1804,15 +1845,28 @@ async function onClick(e) {
     if (r.msg) { bubble?.remove(); s.draft = text; if (box) { box.value = text; fitCompose(box); } return after(r.msg, "bad"); }
     return after(r.sent ? "" : { "busy-terminal": "Waiting: the agent is mid-turn in its terminal. Your message goes as soon as it finishes.", busy: "Waiting: the agent is mid-turn. Your message goes as soon as it finishes.", "not-started": "Waiting: the agent hasn't started yet. Your message goes once it has.", limited: "Waiting: your Claude usage limit is full. Your message goes as soon as it resets." }[r.why] || "");
   }
+  // Mid-edit: save what's in the boxes first, so the agent starts (or is
+  // scheduled) on what you just wrote. False if saving failed.
+  const saveTyped = async () => {
+    if (s.etitle == null && s.eprompt == null) return true;
+    const f = all.find((x) => x.slug === slug);
+    const saved = await api(`${base}/edit`, { title: s.etitle ?? f.title, prompt: s.eprompt ?? f.prompt ?? "" });
+    if (saved.msg) { say(saved.msg, "bad"); return false; }
+    remember(f, s.etitle ?? f.title, s.eprompt ?? f.prompt ?? "");
+    Object.assign(s, { edit: false, etitle: null, eprompt: null });
+    return true;
+  };
+  if (act === "sched") { s.sched = !s.sched; Object.assign(s, { swhen: null, sat: null, smins: null }); return render(all); }
+  if (act === "unschedule") { const r = await api(`${base}/schedule`, { schedule: null }); s.sched = false; return say(r.msg, r.ok ? "" : "bad"); }
+  if (act === "sched-save") {
+    if (!(await saveTyped())) return;
+    const f = all.find((x) => x.slug === slug);
+    const v = schedVals(f, s), r = await api(`${base}/schedule`, { schedule: schedBody(v.swhen, v.sat, v.smins) });
+    if (r.ok) s.sched = false;
+    return say(r.ok ? "Scheduled. It starts by itself when it's due." : r.msg, r.ok ? "good" : "bad");
+  }
   if (act === "start") {
-    // Mid-edit: save what's in the boxes first, so the agent starts on what you just wrote.
-    if (s.etitle != null || s.eprompt != null) {
-      const f = all.find((x) => x.slug === slug);
-      const saved = await api(`${base}/edit`, { title: s.etitle ?? f.title, prompt: s.eprompt ?? f.prompt ?? "" });
-      if (saved.msg) return say(saved.msg, "bad");
-      remember(f, s.etitle ?? f.title, s.eprompt ?? f.prompt ?? "");
-      Object.assign(s, { edit: false, etitle: null, eprompt: null });
-    }
+    if (!(await saveTyped())) return;
     // Back to the board: the card moves to Working and shows setup. A failure keeps the popup, with the error.
     say("Starting: making its branch and folder…");
     const r = await api(`${base}/start`, {});
@@ -1967,19 +2021,30 @@ $("#newOpen").onclick = () => openNew();
 async function addFeature(plan) {
   const typed = $("#newLabels [data-newpick]")?.value.replace(/\s+/g, " ").trim(); // typed in the + box but Enter never pressed: still meant
   const title = $("#title").value.trim(), prompt = $("#prompt").value.trim(), model = $("#newModel").value, label = typed || newLabel;
+  // A schedule goes with Start agent only: Save as planned is for no start at all.
+  const schedule = plan ? null : schedBody($("#new_swhen").value, $("#new_sat").value, $("#new_smins").value);
   if (!title || (!plan && !prompt)) { dlgMsg("#addMsg", plan ? "Needs a name." : "Needs a name and what you want. Or save it as planned.", "bad"); return; }
+  if (schedule && "at" in schedule && !schedule.at) { dlgMsg("#addMsg", "Pick a time to start it.", "bad"); return; }
   const keep = { title: $("#title").value, prompt: $("#prompt").value };
   closeModal($("#newDlg"));
   $("#title").value = ""; $("#prompt").value = ""; $("#newModel").value = ""; newLabel = ""; newDraft = {};
   try { sessionStorage.removeItem(NEW_KEY); } catch {}
-  const r = await api("/api/features", { title, prompt, plan, model, label }).catch(() => ({ msg: "Couldn't reach Cannu, or it sent back something unexpected." }));
+  const r = await api("/api/features", { title, prompt, plan, model, label, schedule }).catch(() => ({ msg: "Couldn't reach Cannu, or it sent back something unexpected." }));
   if (r.msg) {
     if ($("#title").value || $("#prompt").value) return boardSay(`Couldn't create “${title}”: ${r.msg}`); // already typing the next one
     $("#title").value = keep.title; $("#prompt").value = keep.prompt; newDraft = { model }; newLabel = label; saveNew();
     await openNew(); dlgMsg("#addMsg", r.msg, "bad"); return;
   }
+  setWhen(""); // the When boxes were kept for a retry; the next feature starts now unless told otherwise
   refresh();
 }
+// New feature's When: Start now, or a schedule. With one, the black button says Schedule.
+function setWhen(swhen) {
+  $("#newWhen").innerHTML = schedFields({ swhen }, (k) => `id="new_${k}"`, true);
+  $("#add").firstChild.textContent = swhen ? "Schedule" : "Start agent";
+}
+setWhen("");
+$("#newWhen").addEventListener("change", (e) => { if (e.target.id === "new_swhen") setWhen(e.target.value); });
 $("#add").onclick = () => addFeature(false);
 $("#addPlan").onclick = () => addFeature(true);
 $("#add").insertAdjacentHTML("beforeend", keysHint(true));
