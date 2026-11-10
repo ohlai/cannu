@@ -101,7 +101,12 @@
   .chips button { border-radius:8px; padding:4px 11px; font-size:12.5px; }
   .chips button.on { background:var(--fg); color:var(--bg); border-color:var(--fg); }
   .chips .n { opacity:.6; margin-left:4px; }
-  #search { width:320px; max-width:100%; }
+  .searchbox { position:relative; width:320px; max-width:100%; }
+  #search { padding-right:30px; }
+  #search::-webkit-search-cancel-button { -webkit-appearance:none; }
+  #searchClear { position:absolute; right:4px; top:50%; transform:translateY(-50%); width:24px; height:24px; padding:0; border:0; border-radius:50%; background:none; color:var(--mute); font-size:16px; line-height:1; cursor:pointer; }
+  #searchClear:hover { color:var(--fg); }
+  #search:placeholder-shown + #searchClear { display:none; }
   #chips { flex:none; }
   .planned .dot { background:var(--work); opacity:.5; } .dropped .dot { background:var(--mute); }
   .dropped { opacity:.75; }
@@ -416,7 +421,7 @@
     <label class="switch" id="hideWrap" title="Hide merged and dropped features"><input type="checkbox" id="hideDone">Hide completed</label>
     <div class="chips" id="chips"></div>
     <span class="grow" id="gap" style="min-width:0"></span>
-    <input type="search" id="search" placeholder="Search features">
+    <span class="searchbox"><input type="search" id="search" placeholder="Search features"><button type="button" id="searchClear" title="Clear search" aria-label="Clear search">×</button></span>
   </div>
   <div class="msg bad" id="boardMsg" hidden style="margin-bottom:10px"></div>
   <div id="board"></div>
@@ -1494,6 +1499,7 @@ host.addEventListener("keydown", (e) => {
 }
 $("#chips").addEventListener("click", (e) => { const b = e.target.closest("[data-filter]"); if (!b) return; filter = b.dataset.filter; store.set("filter", filter); render(all); });
 $("#search").addEventListener("input", () => render(all));
+$("#searchClear").onclick = () => { $("#search").value = ""; $("#search").focus(); render(all); };
 
 async function copyErr(b) {
   try { await navigator.clipboard.writeText(b.closest(".err").querySelector("pre").textContent); b.lastChild.textContent = "Copied"; } catch { b.lastChild.textContent = "Couldn't copy"; }
