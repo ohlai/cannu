@@ -246,12 +246,25 @@ export function liveStatus(st, running = false) {
 // this machine's Claude Code login. Claude Code keeps that token fresh; if it
 // has expired, or there's no login file (macOS keeps it in the keychain),
 // usage is just unknown and nothing is held. Refreshed every minute.
+// Every Cannu process on this machine (the dashboard, each repo, each feature's
+// own copy) shares one reading through USAGE_FILE: one fetch a minute between
+// them all, a rate limit backs them all off for 5 minutes, and a restart shows
+// the last reading straight away. Polling separately got the endpoint to
+// refuse them all, and a restarted one then had nothing.
+const USAGE_FILE = path.join(os.tmpdir(), "cannu-usage.json");
 let usageNow = null;
-async function readUsage() {
+async function readUsage(force = false) {
+  let c = {};
+  try { c = JSON.parse(fs.readFileSync(USAGE_FILE, "utf8")); } catch {}
+  if (c.usage) usageNow = c.usage;
+  if (Date.now() < (force ? c.backoff || 0 : c.next || 0)) return;
+  const save = (o) => { try { fs.writeFileSync(USAGE_FILE, JSON.stringify({ usage: usageNow, ...o })); } catch {} };
+  save({ next: Date.now() + 55e3 }); // claimed: the others wait for this fetch
   try {
     const tok = JSON.parse(fs.readFileSync(path.join(os.homedir(), ".claude", ".credentials.json"), "utf8")).claudeAiOauth?.accessToken;
     if (!tok) return;
     const r = await fetch("https://api.anthropic.com/api/oauth/usage", { headers: { authorization: `Bearer ${tok}`, "anthropic-beta": "oauth-2025-04-20" }, signal: AbortSignal.timeout(10e3) });
+    if (r.status === 429) return save({ next: Date.now() + 5 * 60e3, backoff: Date.now() + 5 * 60e3 });
     if (!r.ok) return;
     const j = await r.json();
     // limits[] carries the severity the apps colour by; five_hour and seven_day are the fallback.
@@ -261,12 +274,15 @@ async function readUsage() {
       return j[old] ? { percent: j[old].utilization, severity: "", resets: j[old].resets_at } : null;
     };
     usageNow = { session: pick("session", "five_hour"), weekly: pick("weekly_all", "seven_day"), at: Date.now() };
+    save({ next: Date.now() + 55e3 });
   } catch {}
 }
-export const refreshUsage = readUsage;
+// Straight after a turn hits the limit: fetch now, unless rate limited.
+export const refreshUsage = () => readUsage(true);
 // Only server.js and repo.js watch it: hook.js and launch.js import this file
-// too, and mustn't wait on a fetch.
-export function watchUsage() { readUsage(); setInterval(readUsage, 60e3); }
+// too, and mustn't wait on a fetch. Checking the shared file is cheap, so
+// every 20s; the fetch itself is still once a minute.
+export function watchUsage() { readUsage(); setInterval(readUsage, 20e3); }
 export function planUsage() { return usageNow; }
 // How Claude words a turn cut off by a usage limit.
 export const LIMIT_HIT = /usage limit|hit your (\w+ )?limit|limit reached|limit · resets/i;
