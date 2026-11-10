@@ -445,6 +445,10 @@
       <button data-val="status" title="A board with a column per status. Cards move as their agents change">Status</button>
       <button data-val="label" title="A board with a column per label. Drag a card to another column to relabel it">Labels</button>
     </div>
+    <div class="seg text" id="doneSeg"><span class="thumb"></span>
+      <button data-val="show" title="Every feature, merged and dropped too">Show All</button>
+      <button data-val="hide" title="Hide merged and dropped features">Hide Completed</button>
+    </div>
     <div class="seg text" id="densSeg"><span class="thumb"></span>
       <button data-val="detailed" title="Status, label, what the agent is doing and its last reply on every card">Detailed</button>
       <button data-val="compact" title="One line per feature">Compact</button>
@@ -452,10 +456,6 @@
     <div class="repopick" id="sortPick">
       <button id="sortBtn" aria-haspopup="true" aria-expanded="false" title="How cards are ordered, in every column and the list"><span id="sortName"></span><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
       <div class="repomenu" id="sortMenu" hidden style="left:0; right:auto"></div>
-    </div>
-    <div class="seg text" id="doneSeg"><span class="thumb"></span>
-      <button data-val="show" title="Every feature, merged and dropped too">Show All</button>
-      <button data-val="hide" title="Hide merged and dropped features">Hide Completed</button>
     </div>
     <div class="chips" id="chips"></div>
     <span class="grow" id="gap" style="min-width:0"></span>
