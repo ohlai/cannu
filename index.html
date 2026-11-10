@@ -999,10 +999,11 @@ async function loadChat(slug) {
   const count = el.children.length, y = el.scrollTop;
   el.innerHTML = r.messages?.length ? r.messages.map((m) => `<div class="bubble ${m.who}">
       <div class="md">${md(m.who === "dashboard" ? m.text.replace(/^\[Added by the dashboard, not my words\]\s*/, "") : m.text)}</div>
-      <div class="who">${{ me: "You", agent: "Agent", dashboard: "Sent by the dashboard" }[m.who]}${m.queued ? " · waiting to send" : m.at ? " · " + new Date(m.at).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : ""}</div>
+      <div class="who">${{ me: "You", agent: "Agent", dashboard: "Sent by the dashboard" }[m.who]}${m.queued ? " · waiting to send" : m.sending ? " · sending…" : m.at ? " · " + new Date(m.at).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : ""}</div>
     </div>`).join("") : `<div class="hint">${r.saved === false ? "This session has no saved conversation yet." : "No messages yet."}</div>`;
   el.dataset.loaded = "1";
-  el.dataset.at = String(f?.st?.at) + (f?.st?.queue?.length || 0);
+  // Still sending: no state change marks it landing, so reload on every refresh until it has.
+  el.dataset.at = r.messages?.some((m) => m.sending) ? "" : String(f?.st?.at) + (f?.st?.queue?.length || 0);
   const saved = chatSpot[slug];
   if (first && typeof saved === "number") el.scrollTop = saved;
   else if (following && (first || el.children.length !== count)) toNewest(el);
