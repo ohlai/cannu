@@ -1257,8 +1257,12 @@ function shift(el, parent, before) {
 function follow() {
   const { el, px, py } = held;
   if (el.matches(".col")) { // among the label columns, which come before Unlabelled
-    const cols = [...board().querySelectorAll(".col[data-col]")].filter((c) => c.dataset.col && c !== el);
-    shift(el, board(), cols.find((c) => { const L = lay(c); return px < L.x + L.w / 2; }) || board().querySelector('.col[data-col=""]'));
+    const cols = [...board().querySelectorAll(".col[data-col]")].filter((c) => c.dataset.col), me = cols.indexOf(el);
+    // Where the column's middle would be if it followed the pointer fully. It swaps
+    // once that is a fifth of the way into the next column, wherever you grabbed it.
+    const mid = px - held.gx + el.offsetWidth / 2;
+    const at = cols.find((c, i) => { if (c === el) return false; const L = lay(c); return mid < L.x + L.w * (i > me ? 0.2 : 0.8); });
+    shift(el, board(), at || board().querySelector('.col[data-col=""]'));
   } else {
     const cols = [...board().querySelectorAll(".board > .col")];
     // a status board's columns follow the agents, so a card only moves up and down in its own
@@ -1276,7 +1280,8 @@ function follow() {
   const L = lay(el);
   const dx = px - held.gx - L.x, dy = py - held.gy - L.y;
   const [x, y] = el.matches(".col") ? [lean(dx, 24, 0.25), 0] // columns only go sideways
-    : sortBy === "manual" ? [dx * PULL, dy * PULL] : [lean(dx, 8, 0.15), lean(dy, 8, 0.15)];
+    // cards stay tied to their column sideways; once they hop to another column dx starts again from that slot
+    : [lean(dx, 8, 0.12), sortBy === "manual" ? dy * PULL : lean(dy, 8, 0.15)];
   el.style.transform = `translate(${x}px, ${y}px)`;
 }
 $("#board").addEventListener("pointerdown", (e) => {
