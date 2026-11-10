@@ -130,8 +130,8 @@ function describe(t, since) {
   const status = t.status === "building" ? `not merged yet, on ${t.branch}` : t.merged ? `merged ${day(t.merged)}` : t.status;
   return `- "${t.title}" (${status}): read ${notesRef(t, since)} (prompts.md, log.md, decisions.md)`;
 }
-// Text added after Oli's own words, clearly marked, so prompts.md keeps
-// exactly what Oli wrote. Only the starting prompt passes a title.
+// Text added after the user's own words, clearly marked, so prompts.md keeps
+// exactly what they wrote. Only the starting prompt passes a title.
 function contextBlock({ title, continues, refs }, since) {
   const all = loadFeatures();
   const lines = title ? [`Feature: ${title}`] : [];
@@ -203,7 +203,7 @@ function writeSettings(f) {
   const events = ["SessionStart", "UserPromptSubmit", "PreToolUse", "Notification", "Stop", "StopFailure", "SessionEnd"];
   fs.writeFileSync(path.join(f.dir, ".claude", "settings.local.json"), JSON.stringify({
     env: {
-      ...defaults().env, // Oli's extra variables; the ones below win, the dashboard relies on them
+      ...defaults().env, // the user's extra variables; the ones below win, the dashboard relies on them
       FEATURE_SLUG: f.slug, PORT: String(f.port), DATA_DIR: path.join(f.dir, "data"), APP_URL: `http://localhost:${f.port}`, CANNU_URL: `http://127.0.0.1:${config.port}`,
       // So hook.js and launch.js, run by the agent, know which repo they belong to.
       CANNU_REPO: config.name, ...(process.env.CANNU_CONFIG ? { CANNU_CONFIG: process.env.CANNU_CONFIG } : {}),
@@ -286,7 +286,7 @@ async function setup(f) {
 
 // ---------- talking to the agent ----------
 
-// @slug in what Oli writes tags a related feature: the agent reads its notes.
+// @slug in what the user writes tags a related feature: the agent reads its notes.
 function mentions(text, self) {
   const all = loadFeatures();
   return [...new Set([...String(text || "").matchAll(/@([a-z0-9][a-z0-9-]*)/g)].map((m) => m[1]))].filter((s) => s !== self && all.some((x) => x.slug === s));
@@ -997,7 +997,7 @@ const server = http.createServer(async (req, res) => {
       if (req.method === "POST") {
         const b = await body(req);
         // Store only what differs from the built-in value, so improvements to
-        // the built-in text reach anything Oli hasn't changed.
+        // the built-in text reach anything the user hasn't changed.
         const keep = {};
         for (const k of Object.keys(BUILT_IN)) if (k in b && JSON.stringify(b[k]) !== JSON.stringify(BUILT_IN[k])) keep[k] = b[k];
         const raw = repoRaw();

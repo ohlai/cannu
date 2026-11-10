@@ -493,7 +493,7 @@
     <header><h2>New feature</h2></header>
     <div class="body">
       <div class="labels" id="newLabels" style="margin-top:0"></div>
-      <input type="text" id="title" placeholder="Feature name, e.g. Client can hide Training now">
+      <input type="text" id="title" placeholder="Name">
       <textarea id="prompt" class="tall" data-mention placeholder="What you want and why. Saved word for word in the feature's notes. Optional if you're only planning it."></textarea>
       <div class="hint">@ to tag a related feature. The agent reads their notes first.</div>
       <div class="hint" data-tags></div>
@@ -598,7 +598,7 @@ const collapsed = new Set(store.get("collapsed", []));
 let turned = null; // the card just folded or unfolded, so only its arrow animates
 const ago = (iso) => { if (!iso) return ""; const s = (Date.now() - new Date(iso)) / 1000; return s < 60 ? "just now" : s < 3600 ? Math.round(s/60) + "m ago" : s < 86400 ? Math.round(s/3600) + "h ago" : Math.round(s/86400) + "d ago"; };
 const day = (iso) => (iso ? iso.slice(0, 10) : "");
-// Which repo this tab shows: from the address (#macros), else the last one
+// Which repo this tab shows: from the address (#my-project), else the last one
 // picked, else the first. Every /api call goes to that repo's Cannu.
 let REPOS = [], CUR = decodeURIComponent(location.hash.slice(1)) || store.get("repo", "");
 const api = async (url, body) => {

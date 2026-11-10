@@ -3,11 +3,7 @@
 # Cannu: parallel agent management
 
 Cannu runs Claude Code agents in parallel, one per feature, on any git repo,
-and shows them all on one board. Node built-ins only, nothing to install. It
-started as the tool I used to build Spotter for COMP4020, and moved here once
-that was done.
-
-![The Cannu board, features in columns by status](screenshots/board.png)
+and shows them all on one board. Node built-ins only, nothing to install.
 
 **What it does**
 
@@ -31,8 +27,6 @@ that was done.
   reads Claude Code's login from `~/.claude/.credentials.json`; without that
   file the rings stay grey.
 - A small HTTP API, so another agent (Hermes) can drive it. See `hermes/`.
-
-![A feature's popup with its chat: the agent's last reply and the message box](screenshots/feature-chat.png)
 
 **Why it's called Cannu.** It's named after Can Nü (蠶女), the silkworm girl of
 Chinese myth and the goddess of silkworms and silk. Each agent is a silkworm
@@ -59,7 +53,7 @@ its own `cannu.json`, or Cannu's guess from its lockfile, `package.json` and
 default) and commits it on its main branch. The bin next to a repo takes it
 off the board. Nothing on disk is deleted, so adding it back picks up where it
 left off.
-Each repo's board has its own address (`http://localhost:4000/#macros`), so
+Each repo's board has its own address (`http://localhost:4000/#my-project`), so
 you can keep one tab per repo.
 
 Behind the board, `server.js` runs a `repo.js` for each repo on its own
@@ -87,7 +81,7 @@ at login. Restart after changing `config.json` or any `.js` file.
 
 Cannu has no login and can start agents that run commands, so it listens on
 `127.0.0.1` only. To reach it from other machines, set `"host"` in
-`config.json` to a list such as `["127.0.0.1", "100.94.103.45"]` (a Tailscale
+`config.json` to a list such as `["127.0.0.1", "100.64.0.1"]` (a Tailscale
 address), or put a reverse proxy in front. Never use `0.0.0.0` on a network
 you don't control.
 
@@ -98,12 +92,12 @@ machine and lists the repos.
 
 | Key | Default | What |
 | --- | --- | --- |
-| `repos` | | The repos, each `{ "repo": "../macros" }`. Paths are relative to this file. A repo can also set `name` (its picker label and address, default the folder's name), `worktrees` (default `<repo>-worktrees`) and `firstFeaturePort` |
+| `repos` | | The repos, each `{ "repo": "../my-project" }`. Paths are relative to this file. A repo can also set `name` (its picker label and address, default the folder's name), `worktrees` (default `<repo>-worktrees`) and `firstFeaturePort` |
 | `port` | `4000` | The board. Each repo's own Cannu takes the next ports up (4001, 4002, ...), on localhost only |
 | `firstFeaturePort` | `8100` | Feature apps get ports from here, in a block of 100 per repo, so repos never clash |
 | `host` | `127.0.0.1` | Where the board listens. A string or a list |
 | `claudeSettings` | | A settings file passed to Claude with `--settings`, such as one holding an API key, so Cannu never reads the key |
-| `launchPrefix` | | Put before the Open session command, such as `ssh atlas ` |
+| `launchPrefix` | | Put before the Open session command, such as `ssh myserver ` |
 
 **`cannu.json`** lives in the repo's root and is committed there. It says how
 to work on this repo. Every key is optional; leave one out and Cannu uses the

@@ -147,7 +147,7 @@ export const stamp = (d = new Date()) => {
 };
 
 // Anything the dashboard adds to a prompt starts with this, so prompts.md
-// shows what was Oli's words and what was added.
+// shows what was the user's words and what was added.
 export const AUTO = "[Added by the dashboard, not my words]";
 
 // ---------- agent defaults ----------
@@ -156,7 +156,7 @@ export const MODELS = { "": "Claude Code's default", "claude-opus-5-5": "Opus 5.
 export const BUILT_IN = {
   model: "",
   systemPrompt: "",
-  // Sent when Oli presses Carry on after an agent was cut off mid-turn.
+  // Sent when the user presses Carry on after an agent was cut off mid-turn.
   resumeText: "You were interrupted mid-turn (the dashboard or the PC restarted, or the session was closed). Check git status and your log.md, work out where you got to, then carry on with what you were doing.",
   // Agents held by a full usage limit carry on by themselves once it resets.
   // Off: their cards offer Carry on instead.

@@ -1,6 +1,6 @@
 ---
 name: cannu
-description: Start, check on, message and ship feature agents in Cannu, the dashboard that runs one Claude Code agent per feature on its own branch. Use when Oli asks to start a feature, asks what the agents are doing, wants to tell a feature's agent something, or wants a feature merged or a PR opened.
+description: Start, check on, message and ship feature agents in Cannu, the dashboard that runs one Claude Code agent per feature on its own branch. Use when the user asks to start a feature, asks what the agents are doing, wants to tell a feature's agent something, or wants a feature merged or a PR opened.
 ---
 
 # Cannu
@@ -8,7 +8,7 @@ description: Start, check on, message and ship feature agents in Cannu, the dash
 Cannu runs on this machine at `http://127.0.0.1:4000` (change the port if
 its `config.json` says otherwise) and serves several repos. `GET /api/repos`
 lists them. Every other call goes under `/r/<repo>`, so `/api/status` below
-means `http://127.0.0.1:4000/r/macros/api/status` for the macros repo. If Oli
+means `http://127.0.0.1:4000/r/my-project/api/status` for the my-project repo. If the user
 doesn't say which repo and there's more than one, ask. Every call is plain
 HTTP with JSON, so use `curl -s`.
 
@@ -21,7 +21,7 @@ HTTP with JSON, so use `curl -s`.
   message, `pr` the pull request and its checks.
 - `GET /api/features/<slug>/chat`: the whole conversation with one agent.
 
-When Oli asks what's going on, lead with what needs him: needs-you, stuck,
+When the user asks what's going on, lead with what needs them: needs-you, stuck,
 error, interrupted, then finished turns (closed) with a line from each
 `lastReply`.
 
@@ -31,7 +31,7 @@ All `POST`, with a JSON body.
 
 - `/api/features` `{"title": "...", "prompt": "..."}` starts a new feature
   and its agent. Add `"plan": true` to only record it. The prompt is what the
-  agent starts on, so pass on Oli's words, not a summary of them.
+  agent starts on, so pass on the user's words, not a summary of them.
 - `/api/features/<slug>/start` `{}` starts a planned feature.
 - `/api/features/<slug>/feedback` `{"text": "..."}` messages the agent. If
   it's mid-turn, the message waits for the turn to end.
@@ -40,7 +40,7 @@ All `POST`, with a JSON body.
 - `/api/features/<slug>/pr` `{}` pushes the branch and opens (or updates)
   its pull request.
 
-## Ask Oli first
+## Ask the user first
 
 These can't be undone from here, so say what you're about to do and wait
 for a yes in the same thread:

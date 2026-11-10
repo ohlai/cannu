@@ -23,7 +23,7 @@ services:
       # Same paths inside and out: worktrees record absolute paths, and
       # Claude Code names each transcript folder after the working directory.
       - ${PWD}:${PWD}
-      - ${CANNU_REPOS:-/home/oli/cannu-repos}:${CANNU_REPOS:-/home/oli/cannu-repos}
-      - ${HOME_DIR:-/home/oli}/.claude:/home/node/.claude
-      - ${HOME_DIR:-/home/oli}/.claude.json:/home/node/.claude.json
-      - ${HOME_DIR:-/home/oli}/.config/gh:/home/node/.config/gh
+      - ${CANNU_REPOS:-/home/you/cannu-repos}:${CANNU_REPOS:-/home/you/cannu-repos}
+      - ${HOME_DIR:-/home/you}/.claude:/home/node/.claude
+      - ${HOME_DIR:-/home/you}/.claude.json:/home/node/.claude.json
+      - ${HOME_DIR:-/home/you}/.config/gh:/home/node/.config/gh
