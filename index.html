@@ -212,13 +212,26 @@
   .col .desccol { min-height:58px; resize:vertical; font-size:12.5px; }
   .col .namerow { display:flex; gap:8px; align-items:center; margin-bottom:6px; }
   .col .namerow .namecol { margin:0; flex:1; min-width:0; }
-  /* The colour circle: the native picker, drawn as a round swatch. */
-  .colorcol { flex:none; width:24px; height:24px; padding:0; border:1px solid var(--line); border-radius:50%; background:none; cursor:pointer; overflow:hidden; }
-  .colorcol:hover { border-color:var(--mute); }
-  .colorcol:focus-visible { outline:2px solid var(--work); outline-offset:1px; }
-  .colorcol::-webkit-color-swatch-wrapper { padding:0; }
-  .colorcol::-webkit-color-swatch { border:0; border-radius:50%; }
-  .colorcol::-moz-color-swatch { border:0; border-radius:50%; }
+  /* The colour circle, and the picker it opens to its right. */
+  .colorcol { flex:none; width:24px; height:24px; padding:0; border:2px solid var(--card); border-radius:50%; background:var(--h); box-shadow:0 0 0 1px var(--line); cursor:pointer; }
+  .colorcol:hover, .colorcol[aria-expanded=true] { box-shadow:0 0 0 1px var(--mute); }
+  .colorcol:focus-visible { outline:2px solid var(--work); outline-offset:2px; }
+  .cpick { position:fixed; z-index:20; width:204px; padding:10px; display:grid; gap:10px; background:var(--card); border:1px solid var(--line); border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,.16); }
+  .cpick[hidden] { display:none; }
+  .cpick .sv { position:relative; height:120px; border-radius:8px; cursor:crosshair; touch-action:none; background:linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, hsl(var(--hue) 100% 50%)); }
+  .cpick .sv:focus-visible { outline:2px solid var(--work); outline-offset:2px; }
+  .cpick .sv i { position:absolute; left:var(--s); top:var(--v); width:14px; height:14px; margin:-7px; border:2px solid #fff; border-radius:50%; box-shadow:0 0 0 1px rgba(0,0,0,.35); pointer-events:none; }
+  .cpick .huebar { appearance:none; -webkit-appearance:none; width:100%; height:12px; margin:0; border-radius:6px; cursor:pointer; background:linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); }
+  .cpick .huebar::-webkit-slider-thumb { -webkit-appearance:none; width:16px; height:16px; border-radius:50%; background:#fff; box-shadow:0 0 0 1px rgba(0,0,0,.3), 0 1px 3px rgba(0,0,0,.3); }
+  .cpick .huebar::-moz-range-thumb { width:16px; height:16px; border:0; border-radius:50%; background:#fff; box-shadow:0 0 0 1px rgba(0,0,0,.3), 0 1px 3px rgba(0,0,0,.3); }
+  .cpick .huebar:focus-visible { outline:2px solid var(--work); outline-offset:2px; }
+  .cpick .sw { display:grid; grid-template-columns:repeat(8, 1fr); gap:6px; }
+  .cpick .sw button { padding:0; aspect-ratio:1; border:0; border-radius:50%; background:var(--h); }
+  .cpick .sw button:hover { transform:scale(1.15); }
+  .cpick .sw button.on { box-shadow:0 0 0 2px var(--card), 0 0 0 3.5px var(--fg); }
+  .cpick .hexrow { display:flex; gap:8px; align-items:center; }
+  .cpick .hexrow span { flex:none; width:28px; height:28px; border-radius:7px; background:var(--h); }
+  .cpick .hex { padding:5px 8px; font-family:ui-monospace, monospace; font-size:12.5px; text-transform:lowercase; }
   .col .colform { padding-bottom:4px; }
   .colhead .editcol { cursor:text; border-radius:6px; }
   .colhead .editcol:hover .tag { outline:1px solid var(--mute); }
@@ -1147,26 +1160,96 @@ let naming = null;
 function colForm(host, { name = "", desc = "", color = "", go }, save) {
   const me = {}; naming = me;
   host.innerHTML = `<div class="namerow"><input type="text" class="namecol" maxlength="40" placeholder="Label name" aria-label="Label name" value="${esc(name)}">
-    <input type="color" class="colorcol" value="${color || hue(name)}" title="Label colour" aria-label="Label colour"></div>
+    <button type="button" class="colorcol" title="Label colour" aria-label="Label colour" aria-haspopup="dialog" aria-expanded="false"></button></div>
+    <div class="cpick" role="dialog" aria-label="Pick a colour" hidden>
+      <div class="sv" tabindex="0" role="slider" aria-label="Saturation and brightness, arrow keys to move"><i></i></div>
+      <input type="range" class="huebar" min="0" max="359" aria-label="Hue">
+      <div class="sw">${HUES.map((c) => `<button type="button" style="--h:${c}" data-c="${c}" aria-label="Colour ${c}"></button>`).join("")}</div>
+      <div class="hexrow"><span></span><input type="text" class="hex" maxlength="7" spellcheck="false" aria-label="Hex colour"></div>
+    </div>
     <textarea class="desccol" placeholder="Description (optional)" aria-label="Label description">${esc(desc)}</textarea>
     <button class="primary namego" data-namego>${go}</button>`;
-  const box = host.querySelector(".namecol"), pick = host.querySelector(".colorcol"), ta = host.querySelector("textarea");
-  let picked = !!color;
-  pick.addEventListener("input", () => { picked = true; });
+  const box = host.querySelector(".namecol"), ta = host.querySelector("textarea");
+  let picked = !!color, value = color || hue(name);
+  const pick = colourPicker(host.querySelector(".colorcol"), host.querySelector(".cpick"), value, (c) => { value = c; picked = true; });
   box.focus(); box.select();
   const done = (keep) => {
     if (naming !== me) return; naming = null; $("#board")._html = "";
     const v = box.value.trim();
-    if (keep && v) save(v, ta.value.trim(), picked ? pick.value : ""); else render(all);
+    pick.close();
+    if (keep && v) save(v, ta.value.trim(), picked ? value : ""); else render(all);
   };
   host.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && (e.target === box || e.ctrlKey || e.metaKey)) { e.preventDefault(); done(true); }
+    if (e.key === "Escape" && pick.isOpen()) { e.preventDefault(); pick.close(true); }
+    else if (e.key === "Enter" && (e.target === box || e.ctrlKey || e.metaKey)) { e.preventDefault(); done(true); }
     else if (e.key === "Escape") { e.preventDefault(); done(false); }
   });
   host.querySelector("[data-namego]").addEventListener("click", () => done(true));
-  // Checked a moment later: the colour picker's own window blurs the page but
-  // leaves the circle focused, and that isn't clicking away.
+  // Checked a moment later, once focus has landed somewhere: inside the form
+  // (the picker included) isn't clicking away.
   host.addEventListener("focusout", () => setTimeout(() => { if (!host.contains(document.activeElement)) done(true); }));
+}
+
+// hex <-> hue (0-360), saturation and brightness (0-1).
+const hex2hsv = (hex) => {
+  const n = parseInt(hex.slice(1), 16), r = (n >> 16) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255;
+  const v = Math.max(r, g, b), d = v - Math.min(r, g, b);
+  const h = !d ? 0 : v === r ? ((g - b) / d) % 6 : v === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return [(h * 60 + 360) % 360, v ? d / v : 0, v];
+};
+const hsv2hex = (h, s, v) => "#" + [5, 3, 1].map((n) => { const k = (n + h / 60) % 6; return Math.round(255 * (v - v * s * Math.max(0, Math.min(k, 4 - k, 1)))).toString(16).padStart(2, "0"); }).join("");
+
+// The colour circle's picker: a saturation/brightness square, a hue bar, the
+// label swatches and a hex box, opening to the circle's right. onPick gets
+// each colour as it changes. Hue is kept apart from the hex so dragging to
+// grey or black doesn't lose it.
+function colourPicker(btn, panel, start, onPick) {
+  const sv = panel.querySelector(".sv"), bar = panel.querySelector(".huebar"), hex = panel.querySelector(".hex");
+  let [h, s, v] = hex2hsv(start), cur = start;
+  const paint = (from) => {
+    for (const el of [btn, panel.querySelector(".hexrow span")]) el.style.setProperty("--h", cur);
+    sv.style.setProperty("--hue", h); sv.style.setProperty("--s", s * 100 + "%"); sv.style.setProperty("--v", (1 - v) * 100 + "%");
+    sv.setAttribute("aria-valuetext", `saturation ${Math.round(s * 100)}%, brightness ${Math.round(v * 100)}%`);
+    if (from !== bar) bar.value = Math.round(h);
+    if (from !== hex) hex.value = cur;
+    for (const b of panel.querySelectorAll(".sw button")) b.classList.toggle("on", b.dataset.c === cur);
+  };
+  const set = (from) => { cur = hsv2hex(h, s, v); paint(from); onPick(cur); };
+  const setHex = (c, from) => { cur = c; const [nh, ns, nv] = hex2hsv(c); if (ns && nv) h = nh; s = ns; v = nv; paint(from); onPick(cur); };
+  paint();
+
+  const at = (e) => { const r = sv.getBoundingClientRect(); s = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)); v = 1 - Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)); set(); };
+  sv.addEventListener("pointerdown", (e) => { sv.setPointerCapture(e.pointerId); sv.focus(); at(e); });
+  sv.addEventListener("pointermove", (e) => { if (sv.hasPointerCapture(e.pointerId)) at(e); });
+  sv.addEventListener("keydown", (e) => {
+    const step = e.shiftKey ? 0.1 : 0.02, d = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, step], ArrowDown: [0, -step] }[e.key];
+    if (!d) return; e.preventDefault();
+    s = Math.min(1, Math.max(0, s + d[0])); v = Math.min(1, Math.max(0, v + d[1])); set();
+  });
+  bar.addEventListener("input", () => { h = +bar.value; set(bar); });
+  hex.addEventListener("input", () => { const c = hex.value.trim().toLowerCase().replace(/^#?/, "#"); if (/^#[0-9a-f]{6}$/.test(c)) setHex(c, hex); });
+  hex.addEventListener("blur", () => { hex.value = cur; });
+  panel.querySelector(".sw").addEventListener("click", (e) => { const b = e.target.closest("[data-c]"); if (b) setHex(b.dataset.c); });
+
+  // Fixed, so the board's scrolling columns don't clip it. To the circle's
+  // right; flipped to its left if that runs off the window.
+  const place = () => {
+    const r = btn.getBoundingClientRect(), w = panel.offsetWidth, hgt = panel.offsetHeight;
+    const left = r.right + 10 + w <= innerWidth - 8 ? r.right + 10 : r.left - 10 - w;
+    panel.style.left = Math.max(8, left) + "px";
+    panel.style.top = Math.max(8, Math.min(r.top - 8, innerHeight - hgt - 8)) + "px";
+  };
+  const isOpen = () => !panel.hidden;
+  const close = (refocus) => { if (!isOpen()) return; panel.hidden = true; btn.setAttribute("aria-expanded", "false"); removeEventListener("scroll", onScroll, true); if (refocus) btn.focus(); };
+  const onScroll = (e) => { if (!panel.contains(e.target)) close(); };
+  btn.addEventListener("click", () => {
+    if (isOpen()) return close();
+    panel.hidden = false; btn.setAttribute("aria-expanded", "true"); place(); sv.focus();
+    addEventListener("scroll", onScroll, true);
+  });
+  // A click elsewhere in the form closes it.
+  btn.closest(".colform").addEventListener("pointerdown", (e) => { if (!panel.contains(e.target) && !btn.contains(e.target)) close(); });
+  return { isOpen, close };
 }
 
 // Clicked, or dropped on, the new label column: the label is made empty, or
