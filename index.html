@@ -191,13 +191,13 @@
   .switch input:focus-visible { outline:2px solid var(--work); outline-offset:2px; }
   @media (prefers-reduced-motion: reduce) { .switch input, .switch input::after { transition:none; } }
   /* ---------- board ---------- */
-  /* Everything but the board keeps the page's width, so switching views moves nothing above it. */
+  /* The header, filters and board span the window; the rest keeps the page's width. Switching views moves nothing above the board. */
   main { max-width:none; }
-  main > *:not(#board) { max-width:1068px; margin-left:auto; margin-right:auto; }
+  main > *:not(#board, #top, .filters) { max-width:1068px; margin-left:auto; margin-right:auto; }
   /* The board's own gap from the window edges, on top of the page's 16px. */
   #board { padding:0 16px; }
-  /* The header is the app bar: full width, edges in line with the board's, like Todoist's. */
-  main > #top { max-width:none; padding:0 16px; }
+  /* Header and filters: edges in line with the board's, like Todoist's app bar. */
+  #top, .filters { padding:0 16px; }
   /* The view switcher, colours flipped: a black box, the picked view on a white square. */
   #viewSeg { background:var(--fg); border-color:var(--fg); }
   #viewSeg .thumb { background:var(--bg); }
