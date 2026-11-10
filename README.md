@@ -158,13 +158,18 @@ There are three views, picked with the switcher left of the search box:
 - **By status**: a column per status (Waiting, Working, Planned, Merged,
   Dropped). Cards move on their own as agents change.
 - **By label**: a column per label, plus Unlabelled. Drag a card to another
-  column to relabel it.
+  column to relabel it, or drag a column's header to move the column (the
+  order is saved in `labels.json`).
 - **List**: cards in a list with a filter per status.
 
 On the board, **Detailed** cards show the label (or the status, in the label
 view), what a working agent is doing and the start of a waiting agent's last
 reply. **Compact** is one line per feature. **Hide completed** hides merged
 and dropped features. All three are remembered per browser.
+
+**Sort** (next to them) orders the cards in every column and the list at once:
+needs you first (the default), last active, newest, name, or manual. In manual,
+drag a card up or down to place it; that order is kept per browser.
 
 Clicking a board card opens it in a popup with the cursor in the message box,
 so a card moving underneath never moves what you're doing. The popup has the
