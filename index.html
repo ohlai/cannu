@@ -213,8 +213,9 @@
   .col .namerow { display:flex; gap:8px; align-items:center; margin-bottom:6px; }
   .col .namerow .namecol { margin:0; flex:1; min-width:0; }
   /* The colour swatch left of the name (a rounded square, like a label's dot), and the picker it opens to its right. */
-  .colorcol { flex:none; width:24px; height:24px; padding:0; border:2px solid var(--card); border-radius:7px; background:var(--h); box-shadow:0 0 0 1px var(--line); cursor:pointer; }
-  .colorcol:hover, .colorcol[aria-expanded=true] { box-shadow:0 0 0 1px var(--mute); }
+  .colorcol { flex:none; width:22px; height:22px; padding:0; border:0; border-radius:6px; background:var(--h); cursor:pointer; transition:filter .15s; }
+  .colorcol:hover, .colorcol[aria-expanded=true] { filter:brightness(.9); }
+  .colorcol:focus:not(:focus-visible) { outline:none; }
   .colorcol:focus-visible { outline:2px solid var(--work); outline-offset:2px; }
   .cpick { position:fixed; z-index:20; width:204px; padding:10px; display:grid; gap:10px; background:var(--card); border:1px solid var(--line); border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,.16); }
   .cpick[hidden] { display:none; }
@@ -1202,9 +1203,9 @@ const hex2hsv = (hex) => {
 const hsv2hex = (h, s, v) => "#" + [5, 3, 1].map((n) => { const k = (n + h / 60) % 6; return Math.round(255 * (v - v * s * Math.max(0, Math.min(k, 4 - k, 1)))).toString(16).padStart(2, "0"); }).join("");
 
 // The colour circle's picker: a saturation/brightness square, a hue bar, the
-// label swatches and a hex box, opening to the swatch's right. Save (or
-// clicking away) hands the colour to onPick; Cancel or Escape puts back the
-// one it opened with. Hue is kept apart from the hex so dragging to
+// label swatches and a hex box, opening to the swatch's right. Save hands
+// the colour to onPick; Cancel or Escape puts back the
+// one it opened with, and so does clicking away. Hue is kept apart from the hex so dragging to
 // grey or black doesn't lose it.
 function colourPicker(btn, panel, start, onPick) {
   const sv = panel.querySelector(".sv"), bar = panel.querySelector(".huebar"), hex = panel.querySelector(".hex");
@@ -1244,7 +1245,7 @@ function colourPicker(btn, panel, start, onPick) {
   };
   const isOpen = () => !panel.hidden;
   let was;
-  const close = (keep = true, refocus) => {
+  const close = (keep = false, refocus) => {
     if (!isOpen()) return;
     if (!keep) { [h, s, v, cur] = was; paint(); } else if (cur !== was[3]) onPick(cur);
     panel.hidden = true; btn.setAttribute("aria-expanded", "false"); removeEventListener("scroll", onScroll, true); if (refocus) btn.focus();
@@ -1256,7 +1257,7 @@ function colourPicker(btn, panel, start, onPick) {
     addEventListener("scroll", onScroll, true);
   });
   panel.querySelector(".btns").addEventListener("click", (e) => { const b = e.target.closest("[data-cp]"); if (b) close(b.dataset.cp === "save", true); });
-  // A click elsewhere in the form closes it, keeping the colour.
+  // A click elsewhere in the form, or a scroll, closes it as Cancel.
   btn.closest(".colform").addEventListener("pointerdown", (e) => { if (!panel.contains(e.target) && !btn.contains(e.target)) close(); });
   return { isOpen, close };
 }
