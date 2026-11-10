@@ -637,13 +637,13 @@ function renderUsage() {
   const full = limitFull(), held = all.filter((f) => f.worktree && f.live?.state === "limited");
   const wait = held.map(heldUntil).filter(Boolean).sort().at(-1);
   const n = held.length, ones = `${n} ${n === 1 ? "feature" : "features"}`;
-  const auto = DEF?.autoContinue !== false, then = auto ? "they carry on by themselves then" : "then their cards offer Carry on";
-  const note = full ? `Your ${LIMIT_NAME[full.which]} Claude limit is full. It resets ${resetAt(full.resets)}. Until then Cannu doesn't start agents: new features are set up and wait, and messages stay queued${n ? `. ${ones} held` : ""}; ${then}.`
-    : wait ? `${ones} held by your Claude usage limit until ${resetAt(wait)}; ${then}.`
+  const auto = DEF?.autoContinue !== false, then = auto ? "Held agents carry on by themselves once it resets." : "Once it resets, held agents' cards offer Carry on.";
+  const note = full ? `Your ${LIMIT_NAME[full.which]} Claude limit is full. It resets ${resetAt(full.resets)}.<br>Until then Cannu doesn't start agents: new features are set up and wait, and messages stay queued.${n ? ` ${ones} ${n === 1 ? "is" : "are"} held.` : ""} ${then}`
+    : wait ? `${ones} ${n === 1 ? "is" : "are"} held by your Claude usage limit until ${resetAt(wait)}. ${then}`
     : n ? `Your Claude limit has reset. ${ones} held${auto ? ", carrying on by themselves shortly" : ""}. <button class="primary" data-act="continueall">Carry on now</button>` : "";
   const lm = $("#limitMsg");
   lm.hidden = !note;
-  const banner = note && `${note}<label class="switch" title="Also in Agent defaults."><input type="checkbox" data-act="autocont" ${auto ? "checked" : ""}>Carry on by itself after a reset</label>`;
+  const banner = note && `<span>${note}</span><label class="switch" title="Also in Agent defaults."><input type="checkbox" data-act="autocont" ${auto ? "checked" : ""}>Carry on by itself after a reset</label>`;
   if (note && lm.dataset.html !== banner) { lm.innerHTML = banner; lm.dataset.html = banner; }
   const ln = $("#limitNew");
   ln.hidden = !full;
