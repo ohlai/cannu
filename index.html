@@ -98,7 +98,7 @@
   .chips button { border-radius:8px; padding:4px 11px; font-size:12.5px; }
   .chips button.on { background:var(--fg); color:var(--bg); border-color:var(--fg); }
   .chips .n { opacity:.6; margin-left:4px; }
-  #search { width:200px; }
+  #search { width:320px; max-width:100%; }
   #chips { flex:none; }
   .planned .dot { background:var(--work); opacity:.5; } .dropped .dot { background:var(--mute); }
   .dropped { opacity:.75; }
@@ -191,11 +191,13 @@
   .switch input:focus-visible { outline:2px solid var(--work); outline-offset:2px; }
   @media (prefers-reduced-motion: reduce) { .switch input, .switch input::after { transition:none; } }
   /* ---------- board ---------- */
-  /* Everything but the board keeps the page's width, so switching views moves nothing above it. */
+  /* The header, filters and board span the window; the rest keeps the page's width. Switching views moves nothing above the board. */
   main { max-width:none; }
-  main > *:not(#board) { max-width:1068px; margin-left:auto; margin-right:auto; }
+  main > *:not(#board, #top, .filters) { max-width:1068px; margin-left:auto; margin-right:auto; }
   /* The board's own gap from the window edges, on top of the page's 16px. */
   #board { padding:0 16px; }
+  /* Header and filters: edges in line with the board's, like Todoist's app bar. */
+  #top, .filters { padding:0 16px; }
   /* The view switcher, colours flipped: a black box, the picked view on a white square. */
   #viewSeg { background:var(--fg); border-color:var(--fg); }
   #viewSeg .thumb { background:var(--bg); }
@@ -348,7 +350,7 @@
 </head>
 <body>
 <main>
-  <div class="row" style="margin-bottom:36px">
+  <div class="row" id="top" style="margin-bottom:36px">
     <div class="grow">
       <div class="brand"><img src="/logo.png?v=2" alt=""><h1>Cannu <span>Parallel agent management</span></h1></div>
       <p class="sub" style="margin:12px 0 0" id="totals">One branch, folder and Claude session per feature.</p>
