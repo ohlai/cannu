@@ -455,12 +455,11 @@
   <div class="panel">
     <header><h2>New feature</h2></header>
     <div class="body">
+      <div class="labels" id="newLabels" style="margin-top:0"></div>
       <input type="text" id="title" placeholder="Feature name, e.g. Client can hide Training now">
       <textarea id="prompt" class="tall" data-mention placeholder="What you want and why. Saved word for word in the feature's notes. Optional if you're only planning it."></textarea>
       <div class="hint">@ to tag a related feature. The agent reads their notes first.</div>
-      <div class="field"><label for="newModel">Model</label><select id="newModel"></select></div>
-      <div class="field"><label>Label</label><div class="labels" id="newLabels" style="margin-top:0"></div></div>
-      <div class="banner" id="limitNew" hidden></div>
+      <div class="field"><label for="newModel">Model</label><select id="newModel"></select></div>      <div class="banner" id="limitNew" hidden></div>
     </div>
     <div class="dmsg" id="addMsg"></div>
     <footer class="row"><button data-close title="Keeps what you've typed here for next time, in this browser tab. Nothing is saved to the repo.">Close</button><span class="grow" style="min-width:0"></span>
