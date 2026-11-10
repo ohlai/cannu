@@ -305,6 +305,17 @@
   .found button small { color:var(--mute); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; direction:rtl; }
   .found button.on { border-color:var(--fg); }
   .colhead .pill { border:0; padding:0; }
+  /* Claude usage: a ring per limit, filling as it's used. Yellow when the
+     limit warns it's close, red when it's full. */
+  .rings { display:flex; gap:10px; align-items:center; }
+  .ring { display:flex; align-items:center; gap:5px; font-size:11.5px; color:var(--mute); cursor:default; }
+  .ring svg { width:22px; height:22px; transform:rotate(-90deg); }
+  .ring circle { fill:none; stroke-width:3; }
+  .ring .track { stroke:var(--line); }
+  .ring .fill { stroke:var(--fg); stroke-linecap:round; transition:stroke-dashoffset .4s, stroke .4s; }
+  .ring.warn .fill { stroke:#eab308; } .ring.full .fill { stroke:var(--bad); }
+  .ring.full { color:var(--bad); }
+  .limited .dot { background:var(--bad); }
 </style>
 </head>
 <body>
@@ -314,6 +325,7 @@
       <div class="brand"><img src="/logo.png?v=2" alt=""><h1>Cannu <span>Parallel agent management</span></h1></div>
       <p class="sub" style="margin:12px 0 0" id="totals">One branch, folder and Claude session per feature.</p>
     </div>
+    <div class="rings" id="rings" hidden></div>
     <button id="defaultsOpen" title="Model, system prompt and everything else every agent is given">Agent defaults</button>
     <div class="seg" id="notify">
       <span class="thumb"></span>
@@ -344,6 +356,7 @@
     <span class="grow" id="gap" style="min-width:0"></span>
     <input type="search" id="search" placeholder="Search features">
   </div>
+  <div class="banner" id="limitMsg" hidden style="margin:0 0 14px"></div>
   <div class="msg bad" id="boardMsg" hidden style="margin-bottom:10px"></div>
   <div id="board"></div>
   <div id="list"></div>
@@ -384,6 +397,7 @@
       <textarea id="prompt" class="tall" data-mention placeholder="What you want and why. Saved word for word in the feature's notes. Optional if you're only planning it."></textarea>
       <div class="hint">@ to tag a related feature. The agent reads their notes first.</div>
       <div class="field"><label for="newModel">Model</label><select id="newModel"></select></div>
+      <div class="banner" id="limitNew" hidden></div>
     </div>
     <footer class="row"><button data-close>Close</button><span class="msg" id="addMsg"></span><span class="grow" style="min-width:0"></span>
       <button id="addPlan" title="Records it on main without a branch or agent. Start it later from its card.">Save as planned</button><button class="primary" id="add">Start agent</button></footer>
@@ -537,8 +551,54 @@ function status(f) {
   // Merged and nothing new since: done. New commits on its branch (from a chat
   // after merging) put it back to waiting, with Check and merge to ship them.
   if (f.merged && !f.ahead && !["working", "needs-you", "interrupted", "error", "stuck"].includes(s)) return ["merged", "merged"];
-  return [s, { working: f.live.background ? "working (background)" : "working", stuck: "stuck", "needs-you": "needs you", idle: "idle, open", closed: "idle", error: "error", interrupted: "interrupted", "not-started": "never started" }[s] || "no session"];
+  return [s, { working: f.live.background ? "working (background)" : "working", stuck: "stuck", "needs-you": "needs you", idle: "idle, open", closed: "idle", error: "error", interrupted: "interrupted", "not-started": "never started", limited: limitFull() ? "usage limit" : "limit reset" }[s] || "no session"];
 }
+
+// ---------- Claude usage ----------
+
+// The 5 hour and weekly limits, refreshed by Cannu every minute.
+let USAGE = null;
+const LIMIT_NAME = { session: "5-hour", weekly: "weekly" };
+const resetAt = (iso) => {
+  const d = new Date(iso), t = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return (d.toDateString() === new Date().toDateString() ? t : d.toLocaleDateString([], { weekday: "short" }) + " " + t) + ` (in ${dur(d - Date.now())})`;
+};
+// Mirrors the server: full at 100%, free again once its reset time passes.
+function limitFull() {
+  for (const which of ["session", "weekly"]) {
+    const l = USAGE?.[which];
+    if (l && l.percent >= 100 && !(Date.parse(l.resets) <= Date.now())) return { which, resets: l.resets };
+  }
+  return null;
+}
+function renderUsage() {
+  const box = $("#rings");
+  box.hidden = !USAGE;
+  if (USAGE) box.innerHTML = [["session", "5h"], ["weekly", "Week"]].filter(([k]) => USAGE[k]).map(([k, short]) => {
+    const l = USAGE[k], p = Math.max(0, Math.min(100, l.percent)), C = 2 * Math.PI * 9;
+    const tone = p >= 100 ? "full" : l.severity && l.severity !== "normal" ? "warn" : !l.severity && p >= 80 ? "warn" : "";
+    return `<div class="ring ${tone}" title="${cap(LIMIT_NAME[k])} limit: ${Math.round(l.percent)}% used${l.resets ? ` · resets ${resetAt(l.resets)}` : ""}">
+      <svg viewBox="0 0 22 22"><circle class="track" cx="11" cy="11" r="9"/><circle class="fill" cx="11" cy="11" r="9" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - p / 100)}"/></svg>${short}</div>`;
+  }).join("");
+  // Over the board: a full limit, or features waiting to carry on after one.
+  const full = limitFull(), held = all.filter((f) => f.worktree && f.live?.state === "limited").length;
+  const lm = $("#limitMsg");
+  lm.hidden = !full && !held;
+  lm.innerHTML = full ? `Your ${LIMIT_NAME[full.which]} Claude limit is full. It resets ${resetAt(full.resets)}. Until then Cannu doesn't start agents: new features are set up and wait, and messages stay queued.${held ? ` ${held} ${held === 1 ? "feature is" : "features are"} waiting.` : ""}`
+    : held ? `Your Claude limit has reset. ${held} ${held === 1 ? "feature is" : "features are"} waiting to carry on. <button class="primary" data-act="continueall">Continue ${held === 1 ? "it" : "all"}</button>` : "";
+  const ln = $("#limitNew");
+  ln.hidden = !full;
+  if (full) ln.textContent = `Your ${LIMIT_NAME[full.which]} Claude limit is full until ${resetAt(full.resets)}. Start agent sets the feature up now and its agent waits; its card offers Continue once the limit resets.`;
+}
+async function loadUsage() { try { USAGE = await (await fetch("/api/usage")).json(); } catch {} renderUsage(); }
+loadUsage(); setInterval(loadUsage, 30e3);
+$("#limitMsg").addEventListener("click", async (e) => {
+  if (e.target.dataset.act !== "continueall") return;
+  e.target.disabled = true;
+  const r = await api("/api/continue", {});
+  if (!r.ok) { $("#boardMsg").textContent = r.msg; $("#boardMsg").hidden = false; }
+  refresh();
+});
 
 const MENTION_HINT = `<div class="hint">@ to tag a related feature. The agent reads their notes first.</div>`;
 const port = (slug) => all.find((x) => x.slug === slug).port;
@@ -592,6 +652,11 @@ function card(f, inPop) {
       ${w ? `It's still waiting on this, which has probably hung:<div class="meta" style="word-break:break-all; margin-top:4px"><code>${esc(w.cmd)}</code></div>`
         : f.live.background ? "Nothing is running under it." : `It may be waiting for you to approve something in its terminal ("${esc(f.slug)}").`}
       <div class="row" style="margin-top:8px">${w ? `<button class="primary" data-act="unstick" data-pid="${w.pid}">End that step</button>` : ""}${f.live.background ? `<button data-act="stopturn">Stop the turn</button>` : ""}</div></div>`;
+  }
+  else if (cls === "limited") {
+    const full = limitFull(), what = st.held?.first ? "start" : "carry on";
+    banner = full ? `<div class="banner">Waiting on your ${LIMIT_NAME[full.which]} Claude limit, which is full. It resets ${resetAt(full.resets)}, and then this card offers to ${what}.</div>`
+      : `<div class="banner">Your Claude limit has reset, so this agent can ${what}. <button class="primary" data-act="continue">${cap(what)}</button></div>`;
   }
   else if (cls === "not-started") banner = `<div class="banner">The terminal for this feature never started a session. <button data-act="resume-term">Start it now</button></div>`;
   const c = !inPop && collapsed.has(f.slug);
@@ -704,6 +769,7 @@ function notifyChanges(features) {
       : now === "stuck" ? "looks stuck"
       : was === "working" && (now === "idle" || now === "closed") ? "finished its turn"
       : now === "error" ? "background run failed"
+      : now === "limited" ? "is waiting on your Claude usage limit"
       : now === "interrupted" && was !== "not-started" ? "was interrupted" : "";
     if (!what || !(mode === "all" || (mode === "select" && bells.has(f.slug)))) continue;
     if (window.Notification?.permission === "granted") {
@@ -888,7 +954,7 @@ function fitCompose(ta, instant) {
 
 // By status (waiting first, dropped last). Among waiting ones, needing you
 // comes before being cut off, then finished. Then newest first.
-const URGENT = { "needs-you": 0, stuck: 0, interrupted: 1, "not-started": 1, failed: 1, error: 2 };
+const URGENT = { "needs-you": 0, stuck: 0, interrupted: 1, limited: 1, "not-started": 1, failed: 1, error: 2 };
 const rank = (f) => KINDS.indexOf(kind(f)[0]) * 10 + (URGENT[status(f)[0]] ?? 5);
 const newest = (f) => String(f.merged || f.dropped || f.started || f.created || "");
 const byUrgency = (a, b) => rank(a) - rank(b) || newest(b).localeCompare(newest(a));
@@ -1189,7 +1255,7 @@ function markShortErrors() {
     e.title = short ? "" : "Click to show more";
   }
 }
-async function refresh() { try { const [fs, ls] = await Promise.all([api("/api/features"), api("/api/labels")]); LABELS = ls; render(fs); markShortErrors(); } catch {} }
+async function refresh() { try { const [fs, ls] = await Promise.all([api("/api/features"), api("/api/labels")]); LABELS = ls; render(fs); markShortErrors(); renderUsage(); } catch {} }
 
 for (const host of [$("#list"), $("#popDlg")]) {
 host.addEventListener("input", (e) => {
@@ -1269,6 +1335,7 @@ async function onClick(e) {
   }
   if (act === "retry") { await api(`${base}/retry`, {}); return say("Retrying setup."); }
   if (act === "unstick" || act === "stopturn") { const r = await api(`${base}/${act}`, { pid: b.dataset.pid }); return say(r.msg, r.ok ? "good" : "bad"); }
+  if (act === "continue") { const r = await api(`${base}/continue`, {}); return say(r.msg, r.ok ? "good" : "bad"); }
   if (act === "resume-bg" || act === "resume-term") { const r = await api(`${base}/resume`, { where: act === "resume-bg" ? "background" : "terminal" }); return say(r.msg, r.ok ? "good" : "bad"); }
   if (act === "send") {
     const text = s.draft.trim(); if (!text) return;
@@ -1290,7 +1357,7 @@ async function onClick(e) {
     if (box) { box.value = ""; fitCompose(box); }
     const r = await api(`${base}/feedback`, { text });
     if (r.msg) { bubble?.remove(); s.draft = text; if (box) { box.value = text; fitCompose(box); } return after(r.msg, "bad"); }
-    return after(r.sent ? "" : { "busy-terminal": "Waiting: the agent is mid-turn in its terminal. Your message goes as soon as it finishes.", busy: "Waiting: the agent is mid-turn. Your message goes as soon as it finishes.", "not-started": "Waiting: the agent hasn't started yet. Your message goes once it has." }[r.why] || "");
+    return after(r.sent ? "" : { "busy-terminal": "Waiting: the agent is mid-turn in its terminal. Your message goes as soon as it finishes.", busy: "Waiting: the agent is mid-turn. Your message goes as soon as it finishes.", "not-started": "Waiting: the agent hasn't started yet. Your message goes once it has.", limited: "Waiting: your Claude usage limit is full. Your message goes as soon as it resets." }[r.why] || "");
   }
   if (act === "start") {
     // Mid-edit: save what's in the boxes first, so the agent starts on what you just wrote.
@@ -1430,7 +1497,7 @@ async function addFeature(plan) {
   if (r.msg) { $("#addMsg").textContent = r.msg; return; }
   $("#title").value = ""; $("#prompt").value = ""; $("#newModel").value = ""; newDraft = {};
   try { sessionStorage.removeItem(NEW_KEY); } catch {}
-  $("#addMsg").textContent = plan ? "Saved as planned." : `Started ${r.branch}.`;
+  $("#addMsg").textContent = plan ? "Saved as planned." : limitFull() ? `Setting up ${r.branch}. Its agent waits for the limit to reset.` : `Started ${r.branch}.`;
   setTimeout(() => closeModal($("#newDlg")), 700);
   refresh();
 }

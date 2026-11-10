@@ -9,7 +9,8 @@ import crypto from "node:crypto";
 import os from "node:os";
 import { spawn, execFile, execFileSync } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
-import { CLAUDE_SETTINGS, META, APP, WORKTREES, STATE, FEATURES_DIR, REPO_FILE, MAIN, NOTES, COMMIT_NOTES, notesDir, repo, repoRaw, BUILT_IN, MODELS, defaults, fill, MD_KEYS, config, loadFeatures, saveRuntime, featureMd, readState, writeState, stamp, claudeBaseArgs, liveStatus, killTree, AUTO, resumeText, FEEDBACK, forget } from "./lib.js";
+import { CLAUDE_SETTINGS, META, APP, WORKTREES, STATE, FEATURES_DIR, REPO_FILE, MAIN, NOTES, COMMIT_NOTES, notesDir, repo, repoRaw, BUILT_IN, MODELS, defaults, fill, MD_KEYS, config, loadFeatures, saveRuntime, featureMd, readState, writeState, stamp, claudeBaseArgs, liveStatus, killTree, AUTO, resumeText, FEEDBACK, forget, watchUsage, fullLimit, refreshUsage } from "./lib.js";
+watchUsage();
 
 const WIN = process.platform === "win32";
 
@@ -299,10 +300,19 @@ function withMentions(f, text) {
 // Background runs this dashboard has going, by slug. Checked before the
 // process list, which is cached and can miss a run that only just started.
 const running = new Set();
+// While a Claude usage limit is full, a turn isn't started: it's held, and
+// the card offers Continue once the limit resets. A turn that runs into the
+// limit part way is held the same way, to carry on from where it stopped.
+const LIMIT_HIT = /usage limit|hit your (\w+ )?limit|limit reached|limit · resets/i;
+function hold(f, held, resets) {
+  writeState(f.slug, { state: "limited", activity: "", headlessPid: null, held, limitResets: resets || null });
+}
 function headless(f, text, label, first = false) {
+  const full = fullLimit();
+  if (full) return hold(f, { text, label, first }, full.resets);
   running.add(f.slug);
   const st = readState(f.slug);
-  writeState(f.slug, { state: "working", activity: label, denied: [] });
+  writeState(f.slug, { state: "working", activity: label, denied: [], held: null });
   const session = first ? ["--session-id", f.sessionId] : ["--resume", st.session_id || f.sessionId];
   const d = defaults();
   const args = ["-p", ...session, "-n", f.slug, ...claudeBaseArgs(f),
@@ -315,9 +325,18 @@ function headless(f, text, label, first = false) {
     onSpawn: (pid) => writeState(f.slug, { headlessPid: pid }),
   }).then(({ code, out }) => {
     let reply = tail(out), denied = [];
-    try { const j = JSON.parse(out.slice(out.indexOf("{"))); reply = j.result ?? reply; denied = (j.permission_denials || []).map((d) => `${d.tool_name} ${JSON.stringify(d.tool_input).slice(0, 120)}`); } catch {}
-    writeState(f.slug, { state: code === 0 ? "idle" : "error", activity: "", headlessPid: null, lastReply: reply, denied });
+    let failed = code !== 0;
+    try { const j = JSON.parse(out.slice(out.indexOf("{"))); reply = j.result ?? reply; failed ||= !!j.is_error; denied = (j.permission_denials || []).map((d) => `${d.tool_name} ${JSON.stringify(d.tool_input).slice(0, 120)}`); } catch {}
     running.delete(f.slug);
+    if (failed && LIMIT_HIT.test(String(reply).slice(0, 400))) {
+      // If the session never got saved, start it again; otherwise carry it on.
+      const saved = fs.existsSync(path.join(transcriptDir(f), `${f.sessionId}.jsonl`));
+      hold(f, first && !saved ? { text, label, first } : { text: resumeText(), label: "carrying on after the usage limit" }, fullLimit()?.resets);
+      writeState(f.slug, { lastReply: reply });
+      refreshUsage();
+      return;
+    }
+    writeState(f.slug, { state: code === 0 ? "idle" : "error", activity: "", headlessPid: null, lastReply: reply, denied });
     pump(f.slug); // send the next waiting message straight away
   });
 }
@@ -341,6 +360,7 @@ function pump(slug) {
   const live = liveStatus(st);
   if (running.has(slug)) return "busy";
   if (live.background || live.state === "working" || live.state === "needs-you" || st.state === "starting") return live.open ? "busy-terminal" : "busy";
+  if (fullLimit()) return "limited"; // kept queued, and sent once the limit resets
   if (live.open && st.pid) {
     killTree(st.pid);
     writeState(slug, { pid: null });
@@ -392,6 +412,16 @@ function readChat(file) {
   }
   flush();
   return { messages: out.slice(-80), saved: lines.length > 1 };
+}
+
+// Runs the turn a usage limit held back.
+function continueHeld(f) {
+  const st = readState(f.slug);
+  if (st.state !== "limited" || !st.held) return { ok: false, msg: "Nothing is waiting on the usage limit." };
+  const full = fullLimit();
+  if (full) return { ok: false, msg: `Your ${full.which === "session" ? "5-hour" : "weekly"} Claude limit is still full.` };
+  headless(f, st.held.text, st.held.label, st.held.first);
+  return { ok: true, msg: "Carrying on in the background." };
 }
 
 function resume(f, where) {
@@ -949,6 +979,13 @@ const server = http.createServer(async (req, res) => {
       if (!plan && !prompt?.trim()) return send(res, 400, { msg: "Needs a starting prompt to start an agent. Or save it as planned." });
       return send(res, 200, createFeature(title.trim(), String(prompt || "").trim(), { refs: mentions(prompt), plan: !!plan, model }));
     }
+    // Continue every feature a usage limit held back.
+    if (req.method === "POST" && url.pathname === "/api/continue") {
+      fresh();
+      const held = loadFeatures().filter((f) => hasWorktree(f) && readState(f.slug).state === "limited");
+      const r = held.map((f) => continueHeld(f));
+      return send(res, 200, { ok: r.every((x) => x.ok), msg: r.find((x) => !x.ok)?.msg || `Carrying on with ${held.length} ${held.length === 1 ? "feature" : "features"}.` });
+    }
     if (req.method === "GET" && url.pathname === "/api/labels") return send(res, 200, readLabels());
     // { name } plus, for edit, { to, description }. Errors come back as { msg }.
     const lm = req.method === "POST" && url.pathname.match(/^\/api\/labels\/(new|edit|duplicate|delete)$/);
@@ -1006,6 +1043,7 @@ const server = http.createServer(async (req, res) => {
     if (action === "apprestart") { await stopApp(f); await new Promise((r) => setTimeout(r, 300)); return send(res, 200, await startApp(f)); }
     if (action === "feedback") return send(res, 200, feedback(f, String(b.text || "").trim()));
     if (action === "resume") return send(res, 200, resume(f, b.where));
+    if (action === "continue") return send(res, 200, continueHeld(f));
     if (action === "retry") { startSetup(f); return send(res, 200, { ok: true }); }
     if (action === "unstick") return send(res, 200, unstick(f, b.pid));
     if (action === "stopturn") return send(res, 200, stopTurn(f));

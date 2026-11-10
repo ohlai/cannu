@@ -7,7 +7,8 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { spawn, execFileSync } from "node:child_process";
-import { META, CONFIG, all, repos, repoEntry, parseJsonc } from "./lib.js";
+import { META, CONFIG, all, repos, repoEntry, parseJsonc, watchUsage, planUsage } from "./lib.js";
+watchUsage();
 
 const PORT = all.port || 4000;
 const LOGS = path.join(META, "local");
@@ -175,6 +176,8 @@ const handler = async (req, res) => {
     res.writeHead(200, { "content-type": "image/png", "cache-control": "max-age=3600" });
     return res.end(fs.readFileSync(path.join(META, "logo.png")));
   }
+  // Claude plan usage for the rings: one account for every repo, so served here.
+  if (url.pathname === "/api/usage") return json(res, planUsage());
   if (url.pathname === "/api/repos/found") return json(res, found());
   if (url.pathname === "/api/repos/inspect") return json(res, inspect(url.searchParams.get("dir")));
   if (url.pathname === "/api/repos/remove" && req.method === "POST") return json(res, await removeRepo((await readBody(req)).name));
