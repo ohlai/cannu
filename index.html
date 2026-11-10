@@ -636,7 +636,7 @@ function renderUsage() {
   const full = limitFull(), held = all.filter((f) => f.worktree && f.live?.state === "limited");
   const wait = held.map(heldUntil).filter(Boolean).sort().at(-1);
   const n = held.length, ones = `${n} ${n === 1 ? "feature" : "features"}`;
-  const auto = DEF?.autoContinue !== false, then = auto ? "Held agents carry on by themselves once it resets." : "Once it resets, held agents' cards offer Carry on.";
+  const auto = DEF?.autoContinue !== false, then = auto ? "Held agents carry on by themselves once it resets." : "Once it resets, agents will wait for you to click resume.";
   const note = full ? `Your ${LIMIT_NAME[full.which]} Claude limit is full. It resets ${resetAt(full.resets)}.<br>Until then Cannu doesn't start agents: new features are set up and wait, and messages stay queued.${n ? ` ${ones} ${n === 1 ? "is" : "are"} held.` : ""} ${then}`
     : wait ? `${ones} ${n === 1 ? "is" : "are"} held by your Claude usage limit until ${resetAt(wait)}. ${then}`
     : n ? `Your Claude limit has reset. ${ones} held${auto ? ", carrying on by themselves shortly" : ""}. <button class="primary" data-act="continueall">Carry on now</button>` : "";
