@@ -323,7 +323,7 @@
   .repopick > button span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .repopick > button svg { width:12px; height:12px; flex:none; fill:none; stroke:currentColor; stroke-width:2.5; transition:transform .15s; }
   .repopick > button[aria-expanded="true"] svg { transform:rotate(180deg); }
-  .repomenu { position:absolute; right:0; top:calc(100% + 6px); z-index:20; min-width:220px; max-width:340px; padding:5px; background:var(--card); border:1px solid var(--line); border-radius:9px; box-shadow:0 8px 24px rgba(0,0,0,.12); }
+  .repomenu { position:absolute; right:0; top:calc(100% + 6px); z-index:20; min-width:220px; max-width:340px; padding:5px; background:var(--card); border:1px solid color-mix(in srgb, var(--fg) 70%, var(--line)); border-radius:9px; box-shadow:0 8px 24px rgba(0,0,0,.12); }
   .repomenu button { display:flex; width:100%; align-items:center; gap:8px; border:0; background:none; text-align:left; padding:7px 9px; border-radius:6px; }
   .repomenu button:hover, .repomenu button:focus-visible { background:var(--bg); outline:none; }
   .repomenu button .tick { width:14px; flex:none; }
@@ -1228,7 +1228,10 @@ async function labelAction(name, act) {
 // held card leans toward the pointer but stays tied to its slot, and once the
 // pointer passes the next card's middle it jumps there and the others slide
 // into the gap.
-const PULL = 0.3; // how much of the pointer's travel the held card follows
+const PULL = 0.3; // manual sort: how much of the pointer's travel the held card follows
+// Elsewhere it barely leaves its slot: starts at `slope` of the pointer's travel
+// and gives less and less the further you go, never past `max` px.
+const lean = (d, max, slope) => max * Math.tanh(d * slope / max);
 let dragging = null, held = null;
 const board = () => $("#board .board");
 // Where an element sits in the layout, leaving out transforms, so cards mid-slide don't jitter.
@@ -1271,7 +1274,10 @@ function follow() {
     }
   }
   const L = lay(el);
-  el.style.transform = `translate(${(px - held.gx - L.x) * PULL}px, ${(py - held.gy - L.y) * PULL}px)`;
+  const dx = px - held.gx - L.x, dy = py - held.gy - L.y;
+  const [x, y] = el.matches(".col") ? [lean(dx, 24, 0.25), 0] // columns only go sideways
+    : sortBy === "manual" ? [dx * PULL, dy * PULL] : [lean(dx, 8, 0.15), lean(dy, 8, 0.15)];
+  el.style.transform = `translate(${x}px, ${y}px)`;
 }
 $("#board").addEventListener("pointerdown", (e) => {
   if (e.button !== 0 || naming || !board()) return;
