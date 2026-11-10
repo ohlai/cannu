@@ -180,6 +180,12 @@ export const BUILT_IN = {
   freshText: "Feature: {title}. The previous Claude session for this feature can't be reopened, so this is a new one. Read {notes}/{slug}/prompts.md, log.md and decisions.md, and git log on this branch, then tell me in a few lines where the feature is up to and what's left, and wait for me.",
   // Filled into the chat box when Check and merge hits a conflict. {files} is filled in.
   conflictText: "Main has moved on and merging your branch conflicts in: {files}. Merge main into your branch, resolve the conflicts keeping both sides' intent, run the check, log what you did, and commit.",
+  // Filled into the chat box when shipping is blocked by uncommitted changes.
+  commitText: "I tried to ship this feature but your folder has uncommitted changes. Commit what belongs to the feature, delete anything that doesn't (scratch files, stray output), log it, and leave git status clean.",
+  // Filled into the chat box when Check and merge's check fails. {check} and {out} are filled in.
+  checkText: "Check and merge ran the check ({check}) on your branch and it failed. The end of its output:\n\n{out}\n\nFix what fails, run the check again, log what you did, and commit.",
+  // Filled into the chat box from a pull request with failing checks or a conflict. {pr} and {problems} are filled in.
+  prFixText: "Pull request #{pr} has problems: {problems}. If it conflicts, merge main into your branch and resolve it keeping both sides' intent. Fix what fails, run the check, log what you did, and commit. Cannu pushes it.",
   // What a background turn may do without asking. Anything else is refused and listed on the card.
   allowedTools: ["Read", "Edit", "Write", "Glob", "Grep", "Bash(git status:*)", "Bash(git diff:*)", "Bash(git log:*)", "Bash(git add:*)", "Bash(git commit:*)", "Bash(ls:*)", "Bash(cat:*)", "Bash(grep:*)", "Bash(head:*)", "Bash(tail:*)", "Bash(wc:*)", "Bash(echo:*)", "Bash(curl:*)", "Bash(node:*)", "Bash(npm:*)", "Bash(pnpm:*)"],
   disallowedTools: ["Bash(git push:*)", "Bash(git checkout:*)", "Bash(git switch:*)", "Bash(git reset:*)"],

@@ -212,11 +212,14 @@ comes from its name.
 - **Check and merge**: commits the hook's `prompts.md` and refuses if the
   feature or main has uncommitted changes. Then it starts the branch's own app
   on port + 1000, runs the `check` against it, and runs
-  `git merge --no-ff` into main. On a conflict it aborts and fills in a
-  message asking the agent to merge main in. It never pushes.
+  `git merge --no-ff` into main. It never pushes. When the agent can fix
+  what stopped it (uncommitted changes in the feature, a failed check, a
+  conflict), it fills in a message asking the agent to, for you to check and
+  send.
 - **Open PR / Push / Merge PR**: Open PR pushes the branch and opens a pull
   request with `gh`. The card then shows the PR's CI checks, review and
-  conflicts, refreshed every 30 seconds. **Push** sends new commits to the PR.
+  conflicts, refreshed every 30 seconds. With failing checks or a conflict,
+  **Ask the agent to fix** fills in a message for it. **Push** sends new commits to the PR.
   **Merge PR** merges it on GitHub, pulls main down, records the feature as
   merged and pushes that record. A PR merged directly on GitHub is picked up
   the same way.
@@ -240,7 +243,8 @@ comes from its name.
   feature's notes (recorded as Related in `feature.md`).
 - **Agent defaults** (a popup): everything the dashboard sends an agent. That
   covers the default model, the system prompt, extra environment variables,
-  the carry on, new session and merge conflict messages, and what background
+  the carry on, new session, uncommitted changes, failed check, merge conflict
+  and pull request fix messages, and what background
   turns may and may never do. Only what differs from the built-in values is
   saved, under `agent` in `cannu.json`, and committed on main.
 - **Bells**: notifications when an agent needs me, finishes, fails or is

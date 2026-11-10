@@ -593,13 +593,14 @@ function claudeDefault() {
 // ---------- merge, done, remove ----------
 
 // Commits the hook's prompts.md (it's written after the agent's last
-// commit), then says why the branch can't go anywhere yet, or "".
+// commit), then says why the branch can't go anywhere yet (with a message
+// for the agent when it can fix it), or null.
 function readyToShip(f) {
   const pf = `${NOTES}/${f.slug}/prompts.md`;
   if (tryGit(f.dir, "status", "--porcelain", "--", pf).out) { git(f.dir, "add", pf); git(f.dir, "commit", "-q", "-m", `${f.title}: record prompts`); }
-  if (tryGit(f.dir, "status", "--porcelain").out) return "The feature has uncommitted changes. Ask the agent to commit first.";
-  if (git(APP, "rev-list", "--count", `${MAIN}..${f.branch}`) === "0") return `Nothing to ship: the branch has no commits ${MAIN} doesn't have.`;
-  return "";
+  if (tryGit(f.dir, "status", "--porcelain").out) return { msg: "The feature has uncommitted changes.", draft: defaults().commitText };
+  if (git(APP, "rev-list", "--count", `${MAIN}..${f.branch}`) === "0") return { msg: `Nothing to ship: the branch has no commits ${MAIN} doesn't have.` };
+  return null;
 }
 
 // cannu.json "check", against a fresh copy of the app started from the
@@ -618,12 +619,12 @@ async function runCheck(f) {
 
 async function merge(f) {
   const why = readyToShip(f);
-  if (why) return { ok: false, step: "feature", msg: why };
+  if (why) return { ok: false, step: "feature", ...why };
   if (tryGit(APP, "status", "--porcelain").out) return { ok: false, step: "main", msg: `${MAIN} has uncommitted changes in the repo folder. Commit or stash them first.` };
   if (git(APP, "branch", "--show-current") !== MAIN) return { ok: false, step: "main", msg: `The repo folder isn't on ${MAIN}.` };
 
   const check = await runCheck(f);
-  if (check.code !== 0) return { ok: false, step: "check", msg: `The check (${repo().check}) failed on the feature branch.`, out: tail(check.out) };
+  if (check.code !== 0) return { ok: false, step: "check", msg: `The check (${repo().check}) failed on the feature branch.`, out: tail(check.out), draft: fill(defaults().checkText, { check: repo().check, out: tail(check.out) }) };
 
   const m = tryGit(APP, "merge", "--no-ff", "-q", f.branch, "-m", `Merge ${f.branch}: ${f.title}`);
   if (!m.ok) {
@@ -648,7 +649,7 @@ const gh = (...args) => run("gh", args, { cwd: APP, timeout: 60000 });
 
 async function openPR(f) {
   const why = readyToShip(f);
-  if (why) return { ok: false, msg: why };
+  if (why) return { ok: false, ...why };
   const push = await run("git", ["push", "-u", "origin", f.branch], { cwd: APP, timeout: 120000 });
   if (push.code !== 0) return { ok: false, msg: "git push failed.", out: tail(push.out) };
   if (f.pr) { prPoll(f, true); return { ok: true, msg: `Pushed. Pull request #${f.pr} is updated.` }; }

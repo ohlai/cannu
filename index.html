@@ -822,6 +822,19 @@ function card(f, inPop) {
   </div>`;
 }
 
+// Something went wrong that the agent can fix: put the server's (or our)
+// message for it in its chat box, for Oli to check and send. Returns the
+// line saying so, or "".
+function drafted(s, r) {
+  if (!r.draft) return "";
+  s.draft = r.draft; s.fb = true;
+  return "\n\nI've filled in a message asking the agent to fix it. Check it and press Send.";
+}
+// What's wrong with a PR that the agent could fix.
+function prProblems(f) {
+  const p = f.prInfo || {};
+  return [p.checks === "failing" ? "checks failing" + (p.failed?.length ? " (" + p.failed.join(", ") + ")" : "") : "", p.mergeable === "CONFLICTING" ? `it conflicts with ${REPO.main || "main"}` : ""].filter(Boolean);
+}
 // The pull request, once there is one: its number, what CI says, and review.
 function prLine(f) {
   if (!f.pr) return "";
@@ -830,7 +843,8 @@ function prLine(f) {
   const rv = { APPROVED: "approved", CHANGES_REQUESTED: "changes requested", REVIEW_REQUIRED: "review required" }[p.review];
   return `<div class="prline"><a href="${esc(f.prUrl || p.url || "#")}" target="_blank" rel="noopener">PR #${f.pr} ↗</a>
     ${p.error ? `<span class="ck">${esc(p.error)}</span>` : ck ? `<span class="ck ${p.checks}">${esc(ck)}</span>` : `<span class="ck">checking GitHub…</span>`}
-    ${rv ? `<span class="ck">${rv}</span>` : ""}${p.mergeable === "CONFLICTING" ? `<span class="ck failing">conflicts with ${esc(REPO.main || "main")}</span>` : ""}</div>`;
+    ${rv ? `<span class="ck">${rv}</span>` : ""}${p.mergeable === "CONFLICTING" ? `<span class="ck failing">conflicts with ${esc(REPO.main || "main")}</span>` : ""}
+    ${prProblems(f).length ? `<button data-act="prfix" title="Fill in a message asking the agent to fix this, for you to check and send">Ask the agent to fix</button>` : ""}</div>`;
 }
 // Both ways to ship are always there. cannu.json's "merge" picks which one
 // is the black button; the other sits beside it.
@@ -1727,7 +1741,11 @@ async function onClick(e) {
     if (!f.pr && !(await ask(`Open a pull request for “${f.title}”?`, `Pushes ${f.branch} to GitHub and opens a pull request into ${REPO.main || "main"}. The repo's CI runs on it and the result shows on this card.`, "Open PR"))) return;
     say(f.pr ? "Pushing…" : "Pushing and opening the pull request…");
     const r = await api(`${base}/pr`, {});
-    return say(r.msg + (r.out ? "\n\n" + r.out : ""), r.ok ? "good" : "bad");
+    return say(r.msg + (r.out ? "\n\n" + r.out : "") + drafted(s, r), r.ok ? "good" : "bad");
+  }
+  if (act === "prfix") {
+    const f = all.find((x) => x.slug === slug);
+    return say(drafted(s, { draft: DEF.prFixText.replace("{pr}", f.pr).replace("{problems}", prProblems(f).join("; ")) }).trim());
   }
   if (act === "prmerge") {
     const f = all.find((x) => x.slug === slug), p = f.prInfo || {};
@@ -1797,9 +1815,8 @@ async function onClick(e) {
     say(REPO.check ? `Checking (${REPO.check})…` : "Merging…");
     const r = await api(`${base}/merge`, {});
     if (r.ok) { if (popSlug === slug) closeModal($("#popDlg")); return say(r.msg, "good"); }
-    let m = r.msg; if (r.files) m += "\nConflicting files:\n  " + r.files.join("\n  ") + "\n\nI've filled in a message asking the agent to fix it. Check it and press Send."; if (r.out) m += "\n\n" + r.out;
-    if (r.files) { s.draft = r.draft; s.fb = true; }
-    return say(m, "bad");
+    let m = r.msg; if (r.files) m += "\nConflicting files:\n  " + r.files.join("\n  "); if (r.out) m += "\n\n" + r.out;
+    return say(m + drafted(s, r), "bad");
   }
   if (act === "remove") {
     const f = all.find((x) => x.slug === slug);
@@ -1948,6 +1965,9 @@ const TEXTS = [
   ["resumeText", "Carry on message", "Sent when you press Carry on after an agent was cut off mid-turn."],
   ["freshText", "New session message", "Sent when a feature's saved conversation is gone and a new session starts. {title} and {slug} are filled in."],
   ["conflictText", "Merge conflict message", "Filled into the chat box when Check and merge hits a conflict, for you to check and send. {files} is filled in."],
+  ["commitText", "Uncommitted changes message", "Filled into the chat box when Check and merge or Open PR finds uncommitted changes, for you to check and send."],
+  ["checkText", "Failed check message", "Filled into the chat box when Check and merge's check fails, for you to check and send. {check} and {out} are filled in."],
+  ["prFixText", "Pull request fix message", "Filled into the chat box by Ask the agent to fix on a pull request with failing checks or a conflict. {pr} and {problems} are filled in."],
 ];
 const FIELD_EL = { systemPrompt: "#dSystem", env: "#dEnv", allowedTools: "#dAllow", disallowedTools: "#dDeny" };
 function defaultsForm(r) {
