@@ -746,6 +746,7 @@ function render(features) {
   const html = shown.length ? shown.map((f) => (f.worktree ? card(f) : simpleCard(f)))
     : [`<div class="card empty">${q ? "Nothing matches that search." : filter === "all" ? "No features yet. Add one with + New feature." : `Nothing is ${filter} right now.`}</div>`];
   patchList(html);
+  for (const t of document.querySelectorAll('#list [data-field="eprompt"]')) fitPlan(t);
   for (const f of shown) {
     const s = u(f.slug);
     const slot = s.fb && $(`[data-slug="${f.slug}"] [data-chat]`);
@@ -822,6 +823,17 @@ function toNewest(el) {
 // Where you'd scrolled each feature's chat to when you closed it, kept for this
 // tab. false (or nothing) means you were at the newest message, so open there.
 const chatSpot = {};
+
+// A description being edited grows to show all of it, but no taller than
+// keeps the popup from scrolling: past that the box scrolls instead.
+function fitPlan(ta) {
+  const box = ta.closest(".body"), y = box?.scrollTop;
+  ta.style.height = "auto";
+  ta.style.height = ta.scrollHeight + 2 + "px"; // +2: the border
+  const over = box ? box.scrollHeight - box.clientHeight : 0;
+  if (over > 0) ta.style.height = Math.max(70, ta.offsetHeight - over) + "px";
+  if (box) box.scrollTop = y;
+}
 
 // One line: Send sits to the right. Once the text wraps (measured at the
 // one-line width, so it doesn't flick back and forth), the box takes the full
@@ -971,7 +983,7 @@ function openPop(slug) {
   const ta = $("#popTop .compose textarea"), plan = $('#popTop [data-field="eprompt"]');
   // Sized now it's on screen: measured while hidden, it came out half a line tall.
   if (ta) { fitCompose(ta, true); ta.focus(); ta.selectionStart = ta.selectionEnd = ta.value.length; }
-  else if (plan) { plan.focus(); plan.selectionStart = plan.selectionEnd = plan.value.length; }
+  else if (plan) { fitPlan(plan); plan.focus(); plan.selectionStart = plan.selectionEnd = plan.value.length; }
   else $("#popDlg [data-close]").focus();
 }
 // Closing a planned feature's popup (Close, Escape, a click outside) saves
@@ -1037,6 +1049,8 @@ function renderPop() {
   for (const el of top.querySelectorAll("[data-field]")) if (s[el.dataset.field] != null) el.value = s[el.dataset.field];
   const ta = top.querySelector(".compose textarea");
   if (ta) fitCompose(ta, true);
+  const plan = top.querySelector('[data-field="eprompt"]');
+  if (plan) fitPlan(plan);
   const back = ta0 && top.querySelector(`[data-field="${ta0.dataset.field}"]`);
   if (back) { back.focus(); [back.selectionStart, back.selectionEnd, back.scrollTop] = sel0; }
   boxes().forEach((b, i) => { if (tops[i]) b.scrollTop = tops[i]; });
@@ -1068,6 +1082,7 @@ host.addEventListener("input", (e) => {
   const c = e.target.closest("[data-slug]"); if (!c) return; const s = u(c.dataset.slug);
   if (e.target.dataset.field) s[e.target.dataset.field] = e.target.value;
   if (e.target.closest(".compose")) fitCompose(e.target);
+  if (e.target.dataset.field === "eprompt") fitPlan(e.target);
 });
 host.addEventListener("click", onClick);
 // Ctrl+Enter (or Cmd+Enter) in a chat box sends.
