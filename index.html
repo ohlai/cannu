@@ -1746,7 +1746,8 @@ async function openNew(label) {
 $("#newOpen").onclick = () => openNew();
 // Closes at once; the server's work happens behind it. If it says no, it reopens with what you'd typed and why.
 async function addFeature(plan) {
-  const title = $("#title").value.trim(), prompt = $("#prompt").value.trim(), model = $("#newModel").value, label = newLabel;
+  const typed = $("#newLabels [data-newpick]")?.value.replace(/\s+/g, " ").trim(); // typed in the + box but Enter never pressed: still meant
+  const title = $("#title").value.trim(), prompt = $("#prompt").value.trim(), model = $("#newModel").value, label = typed || newLabel;
   if (!title || (!plan && !prompt)) { dlgMsg("#addMsg", plan ? "Needs a name." : "Needs a name and what you want. Or save it as planned.", "bad"); return; }
   const keep = { title: $("#title").value, prompt: $("#prompt").value };
   closeModal($("#newDlg"));
