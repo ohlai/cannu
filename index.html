@@ -883,7 +883,7 @@ function simpleCard(f, inPop) {
       <div class="grow">
         <div class="title">${esc(f.title)}${f.label ? tagHtml(f.label) : ""}</div>
         <div class="meta">${when}${spent(f.usage) ? " · " + spent(f.usage) : ""}${prev ? ` · continues “${esc(prev.title)}”` : ""}${later.length ? " · continued in " + later.map((x) => "“" + esc(x.title) + "”").join(", ") : ""}</div>
-        ${linksHtml(f, !edit)}
+        ${edit ? "" : linksHtml(f)}
       </div>
       ${head(f, cls, label, "")}
     </div>
@@ -891,7 +891,7 @@ function simpleCard(f, inPop) {
     ${edit ? `<div style="margin-top:10px; display:grid; gap:8px">
       <input type="text" data-field="etitle" value="${esc(s.etitle ?? f.title)}">
       <textarea data-field="eprompt" data-mention data-self="${f.slug}" placeholder="What you want and why. This is what the agent starts on.">${esc(s.eprompt ?? f.prompt ?? "")}</textarea>
-      ${mentionHint(s.eprompt ?? f.prompt, f.slug)}
+      ${mentionHint(s.eprompt ?? f.prompt, f.slug)}${linkedFrom(f, "hint")}
     </div>` : ""}
     ${actions(planned
       ? `${inPop ? "" : `<button data-act="edit">${s.edit ? "Cancel edit" : "Edit"}</button>`}<button data-act="drop" title="Keep it on record as dropped">Drop</button>`
@@ -2074,10 +2074,13 @@ function tagsHtml(text, self) {
 const refList = (fs) => fs.map((f) => `<span class="ref" data-goto="${f.slug}" title="Open it">${esc(f.title)}</span>`).join(", ");
 // A feature's saved links both ways: the features its description @s, and those that @ it.
 // Each line only when there's something on it. to=false when the live line under its box already shows them.
-function linksHtml(f, to = true) {
-  const out = to ? (f.refs || []).map((x) => all.find((y) => y.slug === x)).filter(Boolean) : [];
+function linkedFrom(f, cls = "meta") {
   const from = all.filter((x) => x.slug !== f.slug && x.refs?.includes(f.slug));
-  return (out.length ? `<div class="meta">Linked to: ${refList(out)}</div>` : "") + (from.length ? `<div class="meta">Linked from: ${refList(from)}</div>` : "");
+  return from.length ? `<div class="${cls}">Linked from: ${refList(from)}</div>` : "";
+}
+function linksHtml(f) {
+  const out = (f.refs || []).map((x) => all.find((y) => y.slug === x)).filter(Boolean);
+  return (out.length ? `<div class="meta">Linked to: ${refList(out)}</div>` : "") + linkedFrom(f);
 }
 // Clicking a linked feature: the popup you're in closes (saving any edit), then the linked one opens.
 function gotoFeature(slug) {
