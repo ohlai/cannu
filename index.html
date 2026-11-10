@@ -113,9 +113,11 @@
   /* Message box: its own rounded box with Send on its right. Once the text
      wraps, the box widens into Send's place and Send drops below it. */
   .compose { position:relative; margin:4px 10px 0; transition:padding-bottom .28s cubic-bezier(.16,1,.3,1) .08s; }
-  .compose textarea { display:block; min-height:0; resize:none; line-height:20px; padding:7px 12px; border-radius:10px; width:calc(100% - 72px); max-height:262px; overflow-y:auto;
+  .compose textarea { display:block; min-height:0; resize:none; line-height:20px; padding:7px 12px; border-radius:10px; width:calc(100% - 118px); max-height:262px; overflow-y:auto;
     transition:width .28s cubic-bezier(.16,1,.3,1), height .18s ease; }
-  .compose .send { position:absolute; right:0; bottom:0; width:62px; height:36px; padding:0; }
+  .compose .send { position:absolute; right:0; bottom:0; width:108px; height:36px; padding:0; display:flex; align-items:center; justify-content:center; gap:8px; }
+  .send small { display:flex; align-items:center; gap:3px; font-size:11px; opacity:.65; }
+  .send small svg { width:11px; height:9px; fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
   .compose.multi { padding-bottom:44px; transition-delay:0s; }
   .compose.multi textarea { width:100%; transition-delay:.08s, 0s; }
   .chat .hint { padding:6px 10px 10px; }
@@ -269,7 +271,7 @@
   .pop .chat { display:flex; flex-direction:column; height:min(58vh, 560px); }
   .pop .thread { flex:1; min-height:0; max-height:none; }
   .pop .compose, .pop .compose.multi { flex:none; padding-bottom:0; }
-  .pop .compose textarea, .pop .compose.multi textarea { width:calc(100% - 72px); }
+  .pop .compose textarea, .pop .compose.multi textarea { width:calc(100% - 118px); }
   .pop .compose { margin:4px 10px 0; }
   .pop .chev, .pop [data-act="fb"], .pop .title .tag { display:none; }
   .pop footer .actions { margin:0; }
@@ -458,6 +460,7 @@ function md(src) {
 }
 // Filled bell: stem, body, clapper. Waves for "all", a slash for "silent".
 const bell = '<rect x="11.1" y="1.5" width="1.8" height="3.5" rx=".9"/><path d="M12 4c-3.6 0-6 2.9-6 6.4v3.4l-1.8 2.3c-.5.7-.1 1.4.7 1.4h14.2c.8 0 1.2-.7.7-1.4L18 13.8v-3.4C18 6.9 15.6 4 12 4z"/><path d="M9.3 19h5.4a2.7 2.7 0 0 1-5.4 0z"/>';
+const MAC = /Mac|iPhone|iPad/.test(navigator.platform);
 const svg = (p) => `<svg class="i" viewBox="0 0 24 24">${p}</svg>`;
 const ICON = {
   off: svg(`<mask id="cut"><rect width="24" height="24" fill="#fff"/><path d="M3 2l19 19" stroke="#000" stroke-width="5"/></mask><g mask="url(#cut)">${bell}</g><path class="w" d="M3 2l19 19"/>`),
@@ -568,8 +571,8 @@ function chatBox(f, s, cls) {
   return `<div class="chat">
       <div class="thread" data-chat></div>
       <div class="compose ${s.multi ? "multi" : ""}">
-        <textarea data-field="draft" data-mention rows="1" placeholder="Message the agent. Ctrl+Enter sends.">${esc(s.draft)}</textarea>
-        <button class="primary send" data-act="send">Send</button>
+        <textarea data-field="draft" data-mention rows="1" placeholder="Message the agent. ${MAC ? "⌘" : "Ctrl"}+Enter sends.">${esc(s.draft)}</textarea>
+        <button class="primary send" data-act="send" title="${MAC ? "⌘+Enter" : "Ctrl+Enter"} sends">Send<small aria-hidden="true">${MAC ? "⌘" : "Ctrl +"}<svg viewBox="0 0 12 10"><path d="M10.5 1v3.5a1.5 1.5 0 0 1-1.5 1.5H1.5M4.5 3l-3 3 3 3"/></svg></small></button>
       </div>
       <div class="hint">${f.live?.open ? "Its terminal is open. Sending closes that terminal session and carries on here (the conversation is kept). " : f.live?.background || cls === "working" ? "It's mid-turn. Your message waits and goes as soon as this turn ends. " : ""}Saved word for word in its prompts.md. @ to tag a related feature. The agent reads their notes first.</div>
     </div>`;
@@ -867,7 +870,7 @@ function fitCompose(ta, instant) {
   const was = ta.style.height;
   ta.style.transition = c.style.transition = "none";
   const at = (w) => { ta.style.width = w; ta.style.height = "auto"; return ta.scrollHeight; };
-  const narrow = "calc(100% - 72px)";
+  const narrow = "calc(100% - 118px)";
   // In the popup Send stays on the right and the box grows upwards instead.
   s.multi = !ta.closest(".pop") && (ta.value.includes("\n") || at(narrow) > 36);
   const h = Math.min(at(s.multi ? "100%" : narrow), 260) + 2;
