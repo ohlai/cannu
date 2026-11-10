@@ -106,25 +106,43 @@ machine and lists the repos.
 | `launchPrefix` | | Put before the Open session command, such as `ssh atlas ` |
 
 **`cannu.json`** lives in the repo's root and is committed there. It says how
-to work on this repo. Every key is optional. `cannu.example.json` has an example of each, with a
-comment saying what it does and its default; `//` comments are allowed in
-`cannu.json`.
+to work on this repo. Every key is optional; leave one out and Cannu uses the
+default. `cannu.example.json` sets every key, so copy it and delete what you
+don't need. It's plain JSON with no comments: the Agent defaults and Add repo
+popups rewrite the file, so comments wouldn't survive anyway.
 
 | Key | Default | What |
 | --- | --- | --- |
-| `main` | `main` | The branch features start from and merge into |
-| `notes` | `notes/features` | Where each feature's notes folder goes |
-| `commitNotes` | `true` | `false` keeps feature notes out of git entirely. They all live in the main folder, kept out of git through `.git/info/exclude`, so nothing is ever committed or pushed and a fresh clone has none. Agents are told not to `git add` them |
-| `copy` | `[]` | Files and folders git doesn't have (a local database, `.env`), copied from the main folder into each worktree. `.db` and `.sqlite` files are copied safely while open |
-| `setup` | `[]` | Commands run once in a new worktree, such as installing packages |
-| `app` | | The command that runs the app. It gets `PORT`, `DATA_DIR` and `APP_URL`, and must listen on `PORT`. With no app, Preview is greyed out and says why. Cannu's own is `scripts/preview.js`, which runs the feature's copy of Cannu on a demo repo, never your real ones |
-| `seed` | `[]` | Commands run once the app is up, such as loading demo data. They should skip what's already there |
-| `check` | `package.json`'s `check` or `test` script | What Check and merge runs, with `APP_URL` pointing at a fresh copy of the branch's app |
-| `merge` | `local` | Which ship button is the main one: `local` or `pr`. Both are always there |
-| `agent` | | Agent defaults, written by the Agent defaults popup |
+| `main` | `main` | The branch features start from and merge into. Cannu also records each feature (its `feature.md`) on it. Restart after changing |
+| `notes` | `notes/features` | Where each feature's notes go: `<notes>/<slug>/` holds `feature.md`, `prompts.md`, `log.md` and `decisions.md`. Restart after changing |
+| `commitNotes` | `true` | `false` keeps feature notes out of git entirely. They all live in the main folder, kept out of git through `.git/info/exclude`, so nothing is ever committed or pushed and a fresh clone has none. Agents are told not to `git add` them. Restart after changing |
+| `copy` | `[]` | Files and folders git doesn't have (a local database, uploads, `.env`), copied from the main folder into each new worktree. Never overwrites. `.db` and `.sqlite` files are copied safely while open |
+| `setup` | `[]` | Commands run once in a new worktree, in order, before the app starts, such as installing packages. Each gets 10 minutes; one failing stops setup. Retry setup runs them all again, so they should be safe to repeat |
+| `app` | | The command that runs the app. It must listen on `PORT` within 20 seconds. Used by Preview, by agents restarting it after a change, and by Check and merge (a fresh copy on port + 1000). With no app, Preview is greyed out and says why. Cannu's own is `scripts/preview.js`, which runs the feature's copy of Cannu on a demo repo, never your real ones |
+| `seed` | `[]` | Commands run once the app is up (many apps make their tables when they start), such as loading demo data. Each gets 2 minutes. They run again on Retry setup, so they should skip what's already there |
+| `check` | `package.json`'s `check` or `test` script | Has to pass before Check and merge merges, run with `APP_URL` pointing at a fresh copy of the branch's app. Agents are told to run it before they say they're done. `""` means no check |
+| `merge` | `local` | Which ship button is the main (black) one on a card: `local` is Check and merge on this machine, `pr` is Open PR on GitHub with CI shown on the card. Both are always there |
+| `agent` | | Agent defaults, below. The Agent defaults popup writes these, storing only what differs from Cannu's built-in values |
 
-Every command runs in the feature's folder through the shell, with the
-feature's `PORT`, `DATA_DIR`, `APP_URL` and `FEATURE_SLUG` set.
+Every command runs in the feature's folder through the shell, with these set:
+
+| Variable | What |
+| --- | --- |
+| `PORT` | The feature's own port |
+| `DATA_DIR` | `<feature folder>/data`, for the app's database and files |
+| `APP_URL` | `http://localhost:<PORT>` |
+| `FEATURE_SLUG` | The feature's short name, like `dark-mode` |
+
+Keys inside `agent`:
+
+| Key | Default | What |
+| --- | --- | --- |
+| `model` | Claude Code's own default | The model for new features (each can pick its own) |
+| `systemPrompt` | | Added to every agent's system prompt, after Cannu's own short brief |
+| `env` | | Extra environment variables for every agent |
+| `allowedTools` | Reading, editing, and common git, node and npm commands | What a background turn may do without asking, as Claude Code permission rules. Anything else is refused and listed in red on the card |
+| `disallowedTools` | `git push`, `checkout`, `switch` and `reset` | What a background turn may never do |
+| `resumeText`, `freshText`, `conflictText` | Cannu's built-in wording | Messages Cannu sends for you: after an interrupted turn, when a session can't be reopened, and when merging conflicts. `{title}`, `{slug}`, `{notes}` and `{files}` are filled in |
 
 ## What every agent is told
 
