@@ -1559,6 +1559,7 @@ async function saveOnClose(slug) {
   s.etitle = s.eprompt = null;
   if (!f || f.status !== "planned" || (title === f.title && prompt === (f.prompt || "").trim())) return;
   const r = await api(`/api/features/${slug}/edit`, { title, prompt });
+  if (!r.msg) remember(f, title, prompt);
   s.msg = r.msg || "Saved and committed on main."; s.cls = r.msg ? "bad" : "good";
   render(all); refresh();
 }
@@ -1620,6 +1621,27 @@ function renderPop() {
   if (back) { back.focus(); [back.selectionStart, back.selectionEnd, back.scrollTop] = sel0; }
   boxes().forEach((b, i) => { if (tops[i]) b.scrollTop = tops[i]; });
 }
+
+// Ctrl+Z past a save: a closed box takes its undo history with it, so keep
+// what the name and description were before each save. The first focus of a
+// new box replays them through insertText, which the browser records as
+// undoable, so each Ctrl+Z steps back one save.
+// ponytail: forgotten on page reload; localStorage if that matters.
+const PAST = {};
+function remember(f, title, prompt) {
+  for (const [k, was, now] of [["etitle", f.title, title], ["eprompt", f.prompt || "", prompt]])
+    if (was.trim() !== now.trim()) (PAST[f.slug + k] ??= []).push(was);
+}
+document.addEventListener("focusin", (e) => {
+  const el = e.target, k = el.dataset?.field;
+  if ((k !== "etitle" && k !== "eprompt") || el._replayed) return;
+  el._replayed = true;
+  const past = PAST[el.closest("[data-slug]").dataset.slug + k];
+  if (!past?.length) return;
+  const now = el.value;
+  el.value = past[0];
+  for (const v of [...past.slice(1), now]) { el.select(); document.execCommand(v ? "insertText" : "delete", false, v); }
+});
 
 const TYPED = ["draft", "etitle", "eprompt", "rtitle", "rprompt"];
 // What Ctrl+Enter in each box presses. Plain Enter is never a save.
@@ -1770,6 +1792,7 @@ async function onClick(e) {
       const f = all.find((x) => x.slug === slug);
       const saved = await api(`${base}/edit`, { title: s.etitle ?? f.title, prompt: s.eprompt ?? f.prompt ?? "" });
       if (saved.msg) return say(saved.msg, "bad");
+      remember(f, s.etitle ?? f.title, s.eprompt ?? f.prompt ?? "");
       Object.assign(s, { edit: false, etitle: null, eprompt: null });
     }
     // Back to the board: the card moves to Working and shows setup. A failure keeps the popup, with the error.
@@ -1783,6 +1806,7 @@ async function onClick(e) {
     const f = all.find((x) => x.slug === slug);
     const r = await api(`${base}/edit`, { title: s.etitle ?? f.title, prompt: s.eprompt ?? f.prompt ?? "" });
     if (r.msg) return say(r.msg, "bad");
+    remember(f, s.etitle ?? f.title, s.eprompt ?? f.prompt ?? "");
     s.edit = false; return say("Saved and committed on main.", "good");
   }
   if (act === "drop") {
