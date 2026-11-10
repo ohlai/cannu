@@ -367,7 +367,9 @@ function pump(slug) {
     writeState(slug, { pid: null });
   }
   const [next, ...rest] = st.queue;
-  writeState(slug, { queue: rest });
+  // Out of the queue but not in the transcript until Claude starts up: chat()
+  // shows it as sending in that gap, so it doesn't vanish for a second or two.
+  writeState(slug, { queue: rest, sending: { text: next, at: new Date().toISOString() } });
   headless(f, next, "your message from the dashboard");
   return "sent";
 }
@@ -407,8 +409,11 @@ function chat(f) {
   try { const t = fs.statSync(file); key = `${t.mtimeMs}:${t.size}`; } catch {}
   let c = chatCache.get(file);
   if (!c || c.key !== key) { c = { key, ...readChat(file) }; chatCache.set(file, c); }
+  const s = st.sending;
+  const landed = s && c.messages.some((m) => m.who !== "agent" && Date.parse(m.at) >= Date.parse(s.at));
+  const sending = s && !landed ? [{ who: s.text.startsWith(AUTO) ? "dashboard" : "me", text: s.text, sending: true }] : [];
   const queued = (st.queue || []).map((q) => ({ who: "me", text: q, queued: true }));
-  return { messages: [...c.messages, ...queued].slice(-80), saved: c.saved };
+  return { messages: [...c.messages, ...sending, ...queued].slice(-80), saved: c.saved };
 }
 function readChat(file) {
   const out = []; let reply = null;
@@ -1005,10 +1010,12 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === "POST" && url.pathname === "/api/features") {
       fresh();
-      const { title, prompt, plan, model } = await body(req);
+      const { title, prompt, plan, model, label } = await body(req);
       if (!title?.trim()) return send(res, 400, { msg: "Needs a name." });
       if (!plan && !prompt?.trim()) return send(res, 400, { msg: "Needs a starting prompt to start an agent. Or save it as planned." });
-      return send(res, 200, createFeature(title.trim(), String(prompt || "").trim(), { refs: mentions(prompt), plan: !!plan, model }));
+      const lab = cleanLabel(label), l = readLabels();
+      if (lab && !(lab in l)) newLabel(lab); // saved like any other, so its column stays if the feature leaves it
+      return send(res, 200, createFeature(title.trim(), String(prompt || "").trim(), { refs: mentions(prompt), plan: !!plan, model, label: lab }));
     }
     // Continue every feature a usage limit held back.
     if (req.method === "POST" && url.pathname === "/api/continue") {

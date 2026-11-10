@@ -248,7 +248,7 @@ export function liveStatus(st, running = false) {
 // usage is just unknown and nothing is held. Refreshed every minute.
 // Every Cannu process on this machine (the dashboard, each repo, each feature's
 // own copy) shares one reading through USAGE_FILE: one fetch a minute between
-// them all, a rate limit backs them all off for 5 minutes, and a restart shows
+// them all, a rate limit backs them all off (retry-after, at least 1 min), and a restart shows
 // the last reading straight away. Polling separately got the endpoint to
 // refuse them all, and a restarted one then had nothing.
 const USAGE_FILE = path.join(os.tmpdir(), "cannu-usage.json");
@@ -264,7 +264,9 @@ async function readUsage(force = false) {
     const tok = JSON.parse(fs.readFileSync(path.join(os.homedir(), ".claude", ".credentials.json"), "utf8")).claudeAiOauth?.accessToken;
     if (!tok) return;
     const r = await fetch("https://api.anthropic.com/api/oauth/usage", { headers: { authorization: `Bearer ${tok}`, "anthropic-beta": "oauth-2025-04-20" }, signal: AbortSignal.timeout(10e3) });
-    if (r.status === 429) return save({ next: Date.now() + 5 * 60e3, backoff: Date.now() + 5 * 60e3 });
+    // Back off as long as it asks, at least a minute. A flat 5 minutes lost
+    // every slot to anything polling the same login each minute (it sends retry-after: 0).
+    if (r.status === 429) { const t = Date.now() + Math.max(60e3, (+r.headers.get("retry-after") || 0) * 1e3); return save({ next: t, backoff: t }); }
     if (!r.ok) return;
     const j = await r.json();
     // limits[] carries the severity the apps colour by; five_hour and seven_day are the fallback.
