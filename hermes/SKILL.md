@@ -1,6 +1,6 @@
 ---
 name: cannu
-description: Start, check on, message and ship feature agents in Cannu, the dashboard that runs one Claude Code agent per feature on its own branch. Use when the user asks to start a feature, asks what the agents are doing, wants to tell a feature's agent something, or wants a feature merged or a PR opened.
+description: Start, check on, message and ship task agents in Cannu, the dashboard that runs one Claude Code agent per task on its own branch. Use when the user asks to start a task, asks what the agents are doing, wants to tell a task's agent something, or wants a task merged or a PR opened.
 ---
 
 # Cannu
@@ -14,7 +14,7 @@ HTTP with JSON, so use `curl -s`.
 
 ## Look
 
-- `GET /api/status`: every feature, short. `status` is planned, building,
+- `GET /api/status`: every task, short. `status` is planned, building,
   merged or dropped. For a building one, `agent` says what its agent is
   doing: working, idle, closed (finished its turn, your move), needs-you,
   stuck, interrupted or error. `lastReply` is the start of the agent's last
@@ -29,10 +29,10 @@ error, interrupted, then finished turns (closed) with a line from each
 
 All `POST`, with a JSON body.
 
-- `/api/features` `{"title": "...", "prompt": "..."}` starts a new feature
+- `/api/features` `{"title": "...", "prompt": "..."}` starts a new task
   and its agent. Add `"plan": true` to only record it. The prompt is what the
   agent starts on, so pass on the user's words, not a summary of them.
-- `/api/features/<slug>/start` `{}` starts a planned feature.
+- `/api/features/<slug>/start` `{}` starts a planned task.
 - `/api/features/<slug>/feedback` `{"text": "..."}` messages the agent. If
   it's mid-turn, the message waits for the turn to end.
 - `/api/features/<slug>/resume` `{"where": "background"}` carries on an
@@ -50,5 +50,5 @@ for a yes in the same thread:
 - `/api/features/<slug>/prmerge`: merges the pull request on GitHub.
 - `/api/features/<slug>/drop`, `/api/features/<slug>/remove`.
 
-Actions answer with `ok` and `msg` (creating a feature answers with the feature). Pass `msg` on as it is; on a failure, `out`
+Actions answer with `ok` and `msg` (creating a task answers with the task). Pass `msg` on as it is; on a failure, `out`
 has the command's output.

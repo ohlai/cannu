@@ -149,13 +149,13 @@ function contextBlock({ title, continues, refs }, since) {
 // has its feature.md, and only main ever changes it.
 function createFeature(title, prompt, { continues = null, refs = [], plan = false, model = "", label = "" } = {}) {
   const list = loadFeatures();
-  if (list.some((f) => f.title.toLowerCase() === title.toLowerCase())) throw new Error("A feature already has that name. Pick another.");
+  if (list.some((f) => f.title.toLowerCase() === title.toLowerCase())) throw new Error("A task already has that name. Pick another.");
   const base = slugify(title);
   let slug = base;
   for (let n = 2; list.some((f) => f.slug === slug) || fs.existsSync(path.join(FEATURES_DIR, slug)) || fs.existsSync(path.join(WORKTREES, slug)) || branchExists(`feat/${slug}`); n++) slug = `${base}-${n}`;
   const f = { slug, title, prompt, status: "planned", label, created: stamp(), continues, refs, model: model in MODELS ? model : "" };
-  if (plan) { writeFeature(f, `Plan feature: ${title}`); return f; }
-  return startFeature(f, `Start feature: ${title}`);
+  if (plan) { writeFeature(f, `Plan task: ${title}`); return f; }
+  return startFeature(f, `Start task: ${title}`);
 }
 
 // Gives a feature its port, folder, branch and session, records it as
@@ -597,7 +597,7 @@ function claudeDefault() {
 function readyToShip(f) {
   const pf = `${NOTES}/${f.slug}/prompts.md`;
   if (tryGit(f.dir, "status", "--porcelain", "--", pf).out) { git(f.dir, "add", pf); git(f.dir, "commit", "-q", "-m", `${f.title}: record prompts`); }
-  if (tryGit(f.dir, "status", "--porcelain").out) return "The feature has uncommitted changes. Ask the agent to commit first.";
+  if (tryGit(f.dir, "status", "--porcelain").out) return "The task has uncommitted changes. Ask the agent to commit first.";
   if (git(APP, "rev-list", "--count", `${MAIN}..${f.branch}`) === "0") return `Nothing to ship: the branch has no commits ${MAIN} doesn't have.`;
   return "";
 }
@@ -623,7 +623,7 @@ async function merge(f) {
   if (git(APP, "branch", "--show-current") !== MAIN) return { ok: false, step: "main", msg: `The repo folder isn't on ${MAIN}.` };
 
   const check = await runCheck(f);
-  if (check.code !== 0) return { ok: false, step: "check", msg: `The check (${repo().check}) failed on the feature branch.`, out: tail(check.out) };
+  if (check.code !== 0) return { ok: false, step: "check", msg: `The check (${repo().check}) failed on the task's branch.`, out: tail(check.out) };
 
   const m = tryGit(APP, "merge", "--no-ff", "-q", f.branch, "-m", `Merge ${f.branch}: ${f.title}`);
   if (!m.ok) {
@@ -712,7 +712,7 @@ async function afterPRMerged(f) {
 // and branch stay (Remove worktree deletes the folder; an unmerged branch is
 // kept), so the work isn't lost.
 async function dropFeature(f) {
-  if (!["planned", "building"].includes(f.status)) return { ok: false, msg: "Only planned or building features can be dropped." };
+  if (!["planned", "building"].includes(f.status)) return { ok: false, msg: "Only planned or building tasks can be dropped." };
   if (f.dir && !f.removed) {
     const live = liveStatus(readState(f.slug));
     if (live.open || live.background || running.has(f.slug) || settingUp.has(f.slug)) return { ok: false, msg: "The agent is still running. Let it finish or close its session first." };
@@ -732,7 +732,7 @@ async function removeFeature(f) {
     // A dropped feature's half-done work is committed to its branch, which is
     // kept, so deleting the folder loses nothing.
     if (f.status === "dropped" && tryGit(f.dir, "status", "--porcelain").out) { git(f.dir, "add", "-A"); git(f.dir, "commit", "-q", "-m", `${f.title}: dropped, work in progress kept`); }
-    if (tryGit(f.dir, "status", "--porcelain").out) return { ok: false, msg: "The feature has uncommitted changes. Not removing." };
+    if (tryGit(f.dir, "status", "--porcelain").out) return { ok: false, msg: "The task has uncommitted changes. Not removing." };
     await stopApp(f); // a running app holds files in the folder
     // Windows chokes on pnpm's linked node_modules inside git's delete, so clear it first.
     fs.rmSync(path.join(f.dir, "node_modules"), { recursive: true, force: true });
@@ -746,7 +746,7 @@ async function removeFeature(f) {
   // -d refuses an unmerged branch, so a dropped feature's work stays in git.
   const b = tryGit(APP, "branch", "-d", f.branch);
   update(f.slug, { removed: stamp() });
-  return { ok: true, msg: (b.ok ? "Removed the worktree and branch. The feature and its notes stay in the list." : `Removed the worktree. The branch ${f.branch} is kept because it isn't merged, so its work and notes are still in git.`) + leftover };
+  return { ok: true, msg: (b.ok ? "Removed the worktree and branch. The task and its notes stay in the list." : `Removed the worktree. The branch ${f.branch} is kept because it isn't merged, so its work and notes are still in git.`) + leftover };
 }
 
 // ---------- labels ----------
@@ -836,7 +836,7 @@ async function deleteLabel(name) {
   for (const f of feats) { fs.rmSync(path.join(FEATURES_DIR, f.slug), { recursive: true, force: true }); forget(f.slug); }
   delete l[name];
   saveLabels(l, [], `Delete label ${name} and its ${feats.length} features`, feats.map((f) => f.slug));
-  return { ok: true, msg: `Deleted ${name} and ${feats.length} ${feats.length === 1 ? "feature" : "features"}.` };
+  return { ok: true, msg: `Deleted ${name} and ${feats.length} ${feats.length === 1 ? "task" : "tasks"}.` };
 }
 
 // ---------- overview ----------
@@ -1022,7 +1022,7 @@ const server = http.createServer(async (req, res) => {
       fresh();
       const held = loadFeatures().filter((f) => hasWorktree(f) && readState(f.slug).state === "limited");
       const r = held.map((f) => continueHeld(f));
-      return send(res, 200, { ok: r.every((x) => x.ok), msg: r.find((x) => !x.ok)?.msg || `Carrying on with ${held.length} ${held.length === 1 ? "feature" : "features"}.` });
+      return send(res, 200, { ok: r.every((x) => x.ok), msg: r.find((x) => !x.ok)?.msg || `Carrying on with ${held.length} ${held.length === 1 ? "task" : "tasks"}.` });
     }
     if (req.method === "GET" && url.pathname === "/api/labels") return send(res, 200, readLabels());
     // { name } plus, for edit, { to, description }. Errors come back as { msg }.
@@ -1060,15 +1060,15 @@ const server = http.createServer(async (req, res) => {
     if (action === "drop") return send(res, 200, await dropFeature(f));
     if (action === "remove" && f.status === "dropped" && f.dir && !f.removed) return send(res, 200, await removeFeature(f));
     if (f.status === "planned") {
-      if (action === "start") return send(res, 200, startFeature(f, `Start feature: ${f.title}`));
+      if (action === "start") return send(res, 200, startFeature(f, `Start task: ${f.title}`));
       if (action === "edit") {
         const title = String(b.title || "").trim() || f.title;
-        if (title !== f.title && loadFeatures().some((x) => x.slug !== f.slug && x.title.toLowerCase() === title.toLowerCase())) return send(res, 400, { msg: "A feature already has that name." });
+        if (title !== f.title && loadFeatures().some((x) => x.slug !== f.slug && x.title.toLowerCase() === title.toLowerCase())) return send(res, 400, { msg: "A task already has that name." });
         const prompt = String(b.prompt ?? "").trim();
-        return send(res, 200, update(f.slug, { title, prompt, refs: mentions(prompt, f.slug) }, `Edit planned feature: ${title}`));
+        return send(res, 200, update(f.slug, { title, prompt, refs: mentions(prompt, f.slug) }, `Edit planned task: ${title}`));
       }
     }
-    if (!hasWorktree(f)) return send(res, 400, { msg: "This feature has no branch or agent. Start it, or Reopen it." });
+    if (!hasWorktree(f)) return send(res, 400, { msg: "This task has no branch or agent. Start it, or Reopen it." });
     if (action === "open") {
       const live = liveStatus(readState(f.slug));
       // Two copies of one session would both write to it, so never open a second.
