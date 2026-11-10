@@ -52,23 +52,8 @@ fs.mkdirSync(STATE, { recursive: true });
 // ---------- cannu.json ----------
 
 export const REPO_FILE = path.join(APP, "cannu.json");
-// JSON that may have // comments, as cannu.example.json does. Drops each //
-// to the end of its line unless it's inside a string ("http://" stays).
-export function parseJsonc(text) {
-  let out = "", inStr = false;
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    if (inStr) { out += c; if (c === "\\") out += text[++i] ?? ""; else if (c === '"') inStr = false; }
-    else if (c === '"') { inStr = true; out += c; }
-    else if (c === "/" && text[i + 1] === "/") while (i < text.length && text[i + 1] !== "\n") i++;
-    else out += c;
-  }
-  return JSON.parse(out);
-}
-// Saving from the page (Agent defaults, Add repo) rewrites the file as plain
-// JSON, so comments in it don't survive that.
 export function repoRaw() {
-  try { return parseJsonc(fs.readFileSync(REPO_FILE, "utf8")); } catch { return {}; }
+  try { return JSON.parse(fs.readFileSync(REPO_FILE, "utf8")); } catch { return {}; }
 }
 // With no check in cannu.json, the repo's package.json check or test script.
 function packageCheck() {

@@ -106,25 +106,43 @@ machine and lists the repos.
 | `launchPrefix` | | Put before the Open session command, such as `ssh atlas ` |
 
 **`cannu.json`** lives in the repo's root and is committed there. It says how
-to work on this repo. Every key is optional. `cannu.example.json` has an example of each, with a
-comment saying what it does and its default; `//` comments are allowed in
-`cannu.json`.
+to work on this repo. Every key is optional; leave one out and Cannu uses the
+default. `cannu.example.json` sets every key, so copy it and delete what you
+don't need. It's plain JSON with no comments: the Agent defaults and Add repo
+popups rewrite the file, so comments wouldn't survive anyway.
 
 | Key | Default | What |
 | --- | --- | --- |
-| `main` | `main` | The branch features start from and merge into |
-| `notes` | `notes/features` | Where each feature's notes folder goes |
-| `commitNotes` | `true` | `false` keeps feature notes out of git entirely. They all live in the main folder, kept out of git through `.git/info/exclude`, so nothing is ever committed or pushed and a fresh clone has none. Agents are told not to `git add` them |
-| `copy` | `[]` | Files and folders git doesn't have (a local database, `.env`), copied from the main folder into each worktree. `.db` and `.sqlite` files are copied safely while open |
-| `setup` | `[]` | Commands run once in a new worktree, such as installing packages |
-| `app` | | The command that runs the app. It gets `PORT`, `DATA_DIR` and `APP_URL`, and must listen on `PORT`. With no app, Preview is greyed out and says why. Cannu's own is `scripts/preview.js`, which runs the feature's copy of Cannu on a demo repo, never your real ones |
-| `seed` | `[]` | Commands run once the app is up, such as loading demo data. They should skip what's already there |
-| `check` | `package.json`'s `check` or `test` script | What Check and merge runs, with `APP_URL` pointing at a fresh copy of the branch's app |
-| `merge` | `local` | Which ship button is the main one: `local` or `pr`. Both are always there |
-| `agent` | | Agent defaults, written by the Agent defaults popup |
+| `main` | `main` | The branch features start from and merge into. Cannu also records each feature (its `feature.md`) on it. Restart after changing |
+| `notes` | `notes/features` | Where each feature's notes go: `<notes>/<slug>/` holds `feature.md`, `prompts.md`, `log.md` and `decisions.md`. Restart after changing |
+| `commitNotes` | `true` | `false` keeps feature notes out of git entirely. They all live in the main folder, kept out of git through `.git/info/exclude`, so nothing is ever committed or pushed and a fresh clone has none. Agents are told not to `git add` them. Restart after changing |
+| `copy` | `[]` | Files and folders git doesn't have (a local database, uploads, `.env`), copied from the main folder into each new worktree. Never overwrites. `.db` and `.sqlite` files are copied safely while open |
+| `setup` | `[]` | Commands run once in a new worktree, in order, before the app starts, such as installing packages. Each gets 10 minutes; one failing stops setup. Retry setup runs them all again, so they should be safe to repeat |
+| `app` | | The command that runs the app. It must listen on `PORT` within 20 seconds. Used by Preview, by agents restarting it after a change, and by Check and merge (a fresh copy on port + 1000). With no app, Preview is greyed out and says why. Cannu's own is `scripts/preview.js`, which runs the feature's copy of Cannu on a demo repo, never your real ones |
+| `seed` | `[]` | Commands run once the app is up (many apps make their tables when they start), such as loading demo data. Each gets 2 minutes. They run again on Retry setup, so they should skip what's already there |
+| `check` | `package.json`'s `check` or `test` script | Has to pass before Check and merge merges, run with `APP_URL` pointing at a fresh copy of the branch's app. Agents are told to run it before they say they're done. `""` means no check |
+| `merge` | `local` | Which ship button is the main (black) one on a card: `local` is Check and merge on this machine, `pr` is Open PR on GitHub with CI shown on the card. Both are always there |
+| `agent` | | Agent defaults, below. The Agent defaults popup writes these, storing only what differs from Cannu's built-in values |
 
-Every command runs in the feature's folder through the shell, with the
-feature's `PORT`, `DATA_DIR`, `APP_URL` and `FEATURE_SLUG` set.
+Every command runs in the feature's folder through the shell, with these set:
+
+| Variable | What |
+| --- | --- |
+| `PORT` | The feature's own port |
+| `DATA_DIR` | `<feature folder>/data`, for the app's database and files |
+| `APP_URL` | `http://localhost:<PORT>` |
+| `FEATURE_SLUG` | The feature's short name, like `dark-mode` |
+
+Keys inside `agent`:
+
+| Key | Default | What |
+| --- | --- | --- |
+| `model` | Claude Code's own default | The model for new features (each can pick its own) |
+| `systemPrompt` | | Added to every agent's system prompt, after Cannu's own short brief |
+| `env` | | Extra environment variables for every agent |
+| `allowedTools` | Reading, editing, and common git, node and npm commands | What a background turn may do without asking, as Claude Code permission rules. Anything else is refused and listed in red on the card |
+| `disallowedTools` | `git push`, `checkout`, `switch` and `reset` | What a background turn may never do |
+| `resumeText`, `freshText`, `conflictText`, `commitText`, `checkText`, `prFixText` | Cannu's built-in wording | Messages Cannu sends for you, or fills in for you to send: after an interrupted turn, when a session can't be reopened, when merging conflicts, when shipping finds uncommitted changes, when Check and merge's check fails, and from Ask the agent to fix on a pull request. `{title}`, `{slug}`, `{notes}`, `{files}`, `{check}`, `{out}`, `{pr}` and `{problems}` are filled in |
 
 ## What every agent is told
 
@@ -162,10 +180,11 @@ There are three views, picked with the switcher left of the search box:
   order is saved in `labels.json`).
 - **List**: cards in a list with a filter per status.
 
-On the board, **Detailed** cards show the label (or the status, in the label
-view), what a working agent is doing and the start of a waiting agent's last
-reply. **Compact** is one line per feature. **Hide completed** hides merged
-and dropped features. All three are remembered per browser.
+On the board, cards show the label (or the status, in the label view), what a
+working agent is doing and the start of a waiting agent's last reply. The
+**Show All / Hide Completed** toggle hides merged and dropped features. Both
+it and the view are remembered per browser. The board reaches the bottom of the window, so its sideways
+scrollbar is always at the bottom.
 
 **Sort** (next to them) orders the cards in every column and the list at once:
 needs you first (the default), last active, newest, name, or manual. In manual,
@@ -240,9 +259,14 @@ comes from its name.
   later.
 - **@ tagging**: typing @ in a description or a chat message lists matching
   features. Picking one writes `@slug`, which points the agent at that
-  feature's notes (recorded as Related in `feature.md`).
+  feature's notes (recorded as Related in `feature.md`). Under the box, a line
+  lists which @s link to a real feature and which don't, and in shown text a
+  linked @slug is underlined. Clicking a linked feature closes the popup
+  you're in (saving any edit) and opens that one. A card shows **Linked to**
+  (the features it tags) and **Linked from** (the features that tag it), each
+  only when there are any.
 - **Agent defaults** (a popup): everything the dashboard sends an agent. That
-  covers the default model, the system prompt, extra environment variables,
+  covers the default model, the repo's own system prompt, extra environment variables,
   the carry on, new session, uncommitted changes, failed check, merge conflict
   and pull request fix messages, and what background
   turns may and may never do. Only what differs from the built-in values is
@@ -252,7 +276,8 @@ comes from its name.
   features with their bell on, or all.
 - Every card ends with one row of buttons: everyday ones on the left, and on
   the right in black the one that moves the feature on. Drop, Check and merge,
-  Open PR, Merge PR and Remove worktree ask "are you sure?" first.
+  Open PR, Merge PR and Remove worktree ask "are you sure?" first. Once one of
+  them has done its job in a card's popup, the popup closes.
 
 ## Waiting and working
 
