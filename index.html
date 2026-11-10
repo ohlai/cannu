@@ -305,16 +305,34 @@
   .found button small { color:var(--mute); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; direction:rtl; }
   .found button.on { border-color:var(--fg); }
   .colhead .pill { border:0; padding:0; }
-  /* Claude usage: a ring per limit, filling as it's used. Yellow when the
-     limit warns it's close, red when it's full. */
-  .rings { display:flex; gap:10px; align-items:center; }
-  .ring { display:flex; align-items:center; gap:5px; font-size:11.5px; color:var(--mute); cursor:default; }
-  .ring svg { width:22px; height:22px; transform:rotate(-90deg); }
-  .ring circle { fill:none; stroke-width:3; }
-  .ring .track { stroke:var(--line); }
-  .ring .fill { stroke:var(--fg); stroke-linecap:round; transition:stroke-dashoffset .4s, stroke .4s; }
-  .ring.warn .fill { stroke:#eab308; } .ring.full .fill { stroke:var(--bad); }
-  .ring.full { color:var(--bad); }
+  /* Claude usage: the week as a thick outer ring, the 5 hours inside it.
+     Hovering grows a card out of them with the numbers and reset times. */
+  :root { --u-green:#22c55e; --u-orange:#f59e0b; --u-red:#ef4444; }
+  .rings { position:relative; width:34px; height:34px; cursor:default; outline:none; }
+  .urings { position:relative; }
+  .urings svg { display:block; width:100%; height:100%; transform:rotate(-90deg); }
+  .urings circle { fill:none; }
+  .urings .track { stroke:var(--line); }
+  .urings .fill { stroke-linecap:round; transition:stroke-dashoffset .5s, stroke .4s; }
+  .green { --c:var(--u-green); } .orange { --c:var(--u-orange); } .red { --c:var(--u-red); }
+  .urings .fill, .udot { stroke:var(--c); background:var(--c); }
+  .rings > .urings { width:34px; height:34px; }
+  .ucard { position:absolute; z-index:50; top:-14px; left:50%; width:250px; padding:18px 18px 14px; border-radius:16px;
+    background:var(--card); border:1px solid var(--line); box-shadow:0 12px 40px rgba(0,0,0,.18);
+    transform:translateX(-50%) scale(.14); transform-origin:50% 31px; opacity:0; pointer-events:none;
+    transition:transform .32s cubic-bezier(.16,1,.3,1), opacity .18s; }
+  .rings:hover .ucard, .rings:focus-within .ucard { transform:translateX(-50%) scale(1); opacity:1; pointer-events:auto; }
+  .ucard .urings { width:170px; height:170px; margin:0 auto; }
+  .ucenter { position:absolute; inset:0; display:grid; place-content:center; text-align:center; font-size:34px; font-weight:700; line-height:1; }
+  .ucenter small, .ulabel { display:block; font-size:10.5px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--mute); margin-top:5px; }
+  .ustats { display:flex; align-items:stretch; margin-top:16px; }
+  .ustat { flex:1; text-align:center; }
+  .usep { width:1px; background:var(--line); margin:2px 6px; }
+  .unum { display:flex; align-items:center; justify-content:center; gap:7px; font-size:22px; font-weight:700; }
+  .udot { width:10px; height:10px; border-radius:50%; }
+  .ureset { font-size:11.5px; color:var(--mute); margin-top:6px; }
+  @media (prefers-reduced-motion: reduce) { .ucard { transition:opacity .15s; } }
+  .limited .dot { background:var(--bad); }
   .limited .dot { background:var(--bad); }
 </style>
 </head>
@@ -325,7 +343,7 @@
       <div class="brand"><img src="/logo.png?v=2" alt=""><h1>Cannu <span>Parallel agent management</span></h1></div>
       <p class="sub" style="margin:12px 0 0" id="totals">One branch, folder and Claude session per feature.</p>
     </div>
-    <div class="rings" id="rings" hidden></div>
+    <div class="rings" id="rings" tabindex="0" aria-label="Claude usage" hidden></div>
     <button id="defaultsOpen" title="Model, system prompt and everything else every agent is given">Agent defaults</button>
     <div class="seg" id="notify">
       <span class="thumb"></span>
@@ -559,10 +577,12 @@ function status(f) {
 // The 5 hour and weekly limits, refreshed by Cannu every minute.
 let USAGE = null;
 const LIMIT_NAME = { session: "5-hour", weekly: "weekly" };
-const resetAt = (iso) => {
+const resetTime = (iso) => {
   const d = new Date(iso), t = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-  return (d.toDateString() === new Date().toDateString() ? t : d.toLocaleDateString([], { weekday: "short" }) + " " + t) + ` (in ${dur(d - Date.now())})`;
+  return d.toDateString() === new Date().toDateString() ? t : d.toLocaleDateString([], { weekday: "short" }) + " " + t;
 };
+const until = (iso) => { const ms = new Date(iso) - Date.now(), h = Math.floor(ms / 36e5); return h >= 24 ? `${Math.floor(h / 24)}d ${h % 24}h` : dur(ms); };
+const resetAt = (iso) => `${resetTime(iso)} (in ${until(iso)})`;
 // Mirrors the server: full at 100%, free again once its reset time passes.
 function limitFull() {
   for (const which of ["session", "weekly"]) {
@@ -571,15 +591,30 @@ function limitFull() {
   }
   return null;
 }
+// Green below 60%, orange to 90%, red from 90%.
+const tone = (p) => (p >= 90 ? "red" : p >= 60 ? "orange" : "green");
+// The week as a thick outer ring with the 5 hours inside it.
+function usageRings(center = "") {
+  const arc = (k, r, w) => {
+    const l = USAGE[k]; if (!l) return "";
+    const C = 2 * Math.PI * r, p = Math.max(0, Math.min(100, l.percent));
+    return `<circle class="track" cx="50" cy="50" r="${r}" stroke-width="${w}"/><circle class="fill ${tone(p)}" cx="50" cy="50" r="${r}" stroke-width="${w}" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - p / 100)}"/>`;
+  };
+  return `<div class="urings"><svg viewBox="0 0 100 100">${arc("weekly", 43, 12)}${arc("session", 27, 8)}</svg>${center}</div>`;
+}
 function renderUsage() {
   const box = $("#rings");
-  box.hidden = !USAGE;
-  if (USAGE) box.innerHTML = [["session", "5h"], ["weekly", "Week"]].filter(([k]) => USAGE[k]).map(([k, short]) => {
-    const l = USAGE[k], p = Math.max(0, Math.min(100, l.percent)), C = 2 * Math.PI * 9;
-    const tone = p >= 100 ? "full" : l.severity && l.severity !== "normal" ? "warn" : !l.severity && p >= 80 ? "warn" : "";
-    return `<div class="ring ${tone}" title="${cap(LIMIT_NAME[k])} limit: ${Math.round(l.percent)}% used${l.resets ? ` · resets ${resetAt(l.resets)}` : ""}">
-      <svg viewBox="0 0 22 22"><circle class="track" cx="11" cy="11" r="9"/><circle class="fill" cx="11" cy="11" r="9" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - p / 100)}"/></svg>${short}</div>`;
-  }).join("");
+  box.hidden = !USAGE?.session && !USAGE?.weekly;
+  if (!box.hidden) {
+    const pc = (k) => (USAGE[k] ? Math.round(USAGE[k].percent) : null);
+    const stat = (k, label) => USAGE[k] ? `<div class="ustat"><div class="unum"><span class="udot ${tone(pc(k))}"></span>${pc(k)}%</div><div class="ulabel">${label} used</div>
+      ${USAGE[k].resets ? `<div class="ureset">resets ${resetTime(USAGE[k].resets)}<br>in ${until(USAGE[k].resets)}</div>` : ""}</div>` : "";
+    const html = `${usageRings()}<div class="ucard" role="tooltip">
+        ${usageRings(pc("session") != null ? `<div class="ucenter">${pc("session")}%<small>5h used</small></div>` : "")}
+        <div class="ustats">${stat("session", "5h")}<span class="usep"></span>${stat("weekly", "7d")}</div>
+      </div>`;
+    if (box.dataset.html !== html) { box.innerHTML = html; box.dataset.html = html; }
+  }
   // Over the board: a full limit, or features waiting to carry on after one.
   const full = limitFull(), held = all.filter((f) => f.worktree && f.live?.state === "limited").length;
   const lm = $("#limitMsg");
