@@ -651,10 +651,12 @@ function renderUsage() {
 }
 // ?fakelimit shows the board as if the 5-hour limit were full, to see how
 // that looks. Only this page is fooled: the server still starts agents.
-const FAKE = new URLSearchParams(location.search).has("fakelimit");
+const FAKE = new URLSearchParams(location.search).has("fakelimit"), FAKE_WEEK = new URLSearchParams(location.search).has("fakeweek");
 async function loadUsage() {
   try { USAGE = await (await fetch("/api/usage")).json(); } catch {}
   if (FAKE) USAGE = { ...USAGE, session: { percent: 100, resets: new Date(Date.now() + 72 * 60e3).toISOString() } };
+  // ?fakeweek: the week resetting a couple of days out.
+  if (FAKE_WEEK) USAGE = { ...USAGE, weekly: { percent: USAGE?.weekly?.percent ?? 42, resets: new Date(Date.now() + 53 * 36e5).toISOString() } };
   renderUsage();
 }
 loadUsage(); setInterval(loadUsage, 30e3);
