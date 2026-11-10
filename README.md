@@ -162,10 +162,11 @@ There are three views, picked with the switcher left of the search box:
   order is saved in `labels.json`).
 - **List**: cards in a list with a filter per status.
 
-On the board, **Detailed** cards show the label (or the status, in the label
-view), what a working agent is doing and the start of a waiting agent's last
-reply. **Compact** is one line per feature. **Hide completed** hides merged
-and dropped features. All three are remembered per browser.
+On the board, cards show the label (or the status, in the label view), what a
+working agent is doing and the start of a waiting agent's last reply. The
+**Show All / Hide Completed** toggle hides merged and dropped features. Both
+it and the view are remembered per browser. The board reaches the bottom of the window, so its sideways
+scrollbar is always at the bottom.
 
 **Sort** (next to them) orders the cards in every column and the list at once:
 needs you first (the default), last active, newest, name, or manual. In manual,
@@ -237,9 +238,14 @@ comes from its name.
   later.
 - **@ tagging**: typing @ in a description or a chat message lists matching
   features. Picking one writes `@slug`, which points the agent at that
-  feature's notes (recorded as Related in `feature.md`).
+  feature's notes (recorded as Related in `feature.md`). Under the box, a line
+  lists which @s link to a real feature and which don't, and in shown text a
+  linked @slug is underlined. Clicking a linked feature closes the popup
+  you're in (saving any edit) and opens that one. A card shows **Linked to**
+  (the features it tags) and **Linked from** (the features that tag it), each
+  only when there are any.
 - **Agent defaults** (a popup): everything the dashboard sends an agent. That
-  covers the default model, the system prompt, extra environment variables,
+  covers the default model, the repo's own system prompt, extra environment variables,
   the carry on, new session and merge conflict messages, and what background
   turns may and may never do. Only what differs from the built-in values is
   saved, under `agent` in `cannu.json`, and committed on main.
@@ -248,7 +254,8 @@ comes from its name.
   features with their bell on, or all.
 - Every card ends with one row of buttons: everyday ones on the left, and on
   the right in black the one that moves the feature on. Drop, Check and merge,
-  Open PR, Merge PR and Remove worktree ask "are you sure?" first.
+  Open PR, Merge PR and Remove worktree ask "are you sure?" first. Once one of
+  them has done its job in a card's popup, the popup closes.
 
 ## Waiting and working
 
