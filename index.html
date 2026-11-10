@@ -48,6 +48,9 @@
   button { font:inherit; font-size:13px; padding:6px 12px; border-radius:7px; border:1px solid var(--line); background:var(--card); color:var(--fg); cursor:pointer; }
   button:hover { border-color: var(--mute); }
   button.primary { background:var(--fg); color:var(--bg); border-color:var(--fg); }
+  /* Saves for good (Save as planned): stronger than Close, quieter than Start agent. */
+  button.second { background:color-mix(in srgb, var(--fg) 12%, var(--card)); border-color:color-mix(in srgb, var(--fg) 22%, var(--card)); }
+  button.second:hover { border-color:var(--mute); }
   textarea, input[type=text], input[type=search] { font:inherit; width:100%; padding:8px 10px; border-radius:7px; border:1px solid var(--line); background:var(--bg); color:var(--fg); }
   textarea { min-height: 70px; resize: vertical; }
   .hint { color: var(--mute); font-size:12px; }
@@ -116,8 +119,9 @@
   .compose textarea { display:block; min-height:0; resize:none; line-height:20px; padding:7px 12px; border-radius:10px; width:calc(100% - 118px); max-height:262px; overflow-y:auto;
     transition:width .28s cubic-bezier(.16,1,.3,1), height .18s ease; }
   .compose .send { position:absolute; right:0; bottom:0; width:108px; height:36px; padding:0; display:flex; align-items:center; justify-content:center; gap:8px; }
-  .send small { display:flex; align-items:center; gap:3px; font-size:11px; opacity:.65; }
-  .send small svg { width:11px; height:9px; fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
+  .send small, button small.keys { display:flex; align-items:center; gap:3px; font-size:11px; opacity:.65; }
+  button:has(small.keys) { display:inline-flex; align-items:center; gap:8px; }
+  .send small svg, button small.keys svg { width:11px; height:9px; fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
   .compose.multi { padding-bottom:44px; transition-delay:0s; }
   .compose.multi textarea { width:100%; transition-delay:.08s, 0s; }
   .chat .hint { padding:6px 10px 10px; }
@@ -169,6 +173,8 @@
   .panel header { padding:16px 20px 0; } .panel header h2 { margin:0; color:var(--fg); font-size:16px; }
   .panel .body { padding:14px 20px; overflow:auto; display:grid; gap:10px; }
   .panel footer { padding:12px 20px 16px; border-top:1px solid var(--line); }
+  /* A popup's message: above the buttons, not in their row. */
+  .dmsg { padding:0 20px 12px; } .dmsg:empty { display:none; } .dmsg > :first-child { margin-top:0; }
   .field { display:grid; gap:5px; } .field > label { font-weight:600; font-size:13px; }
   .field .row { gap:8px; }
   select { font:inherit; font-size:13px; padding:7px 10px; border-radius:7px; border:1px solid var(--line); background:var(--bg); color:var(--fg); }
@@ -430,7 +436,8 @@
         <label class="switch"><input type="checkbox" id="cNotes">Commit each feature's notes and prompts to the repo</label>
       </div>
     </div>
-    <footer class="row"><button data-close>Close</button><span class="msg" id="repoMsg"></span><span class="grow" style="min-width:0"></span><button class="primary" id="repoAdd">Add repo</button></footer>
+    <div class="dmsg" id="repoMsg"></div>
+    <footer class="row"><button data-close>Close</button><span class="grow" style="min-width:0"></span><button class="primary" id="repoAdd">Add repo</button></footer>
   </div>
 </dialog>
 
@@ -444,8 +451,9 @@
       <div class="field"><label for="newModel">Model</label><select id="newModel"></select></div>
       <div class="banner" id="limitNew" hidden></div>
     </div>
-    <footer class="row"><button data-close>Close</button><span class="msg" id="addMsg"></span><span class="grow" style="min-width:0"></span>
-      <button id="addPlan" title="Records it on main without a branch or agent. Start it later from its card.">Save as planned</button><button class="primary" id="add">Start agent</button></footer>
+    <div class="dmsg" id="addMsg"></div>
+    <footer class="row"><button data-close title="Keeps what you've typed here for next time, in this browser tab. Nothing is saved to the repo.">Close</button><span class="grow" style="min-width:0"></span>
+      <button class="second" id="addPlan" title="Records it on main without a branch or agent. Start it later from its card.">Save as planned</button><button class="primary" id="add">Start agent</button></footer>
   </div>
 </dialog>
 
@@ -468,7 +476,8 @@
   <div class="panel">
     <header><h2>Agent defaults</h2><div class="hint">What every feature agent is given. Saved under <code>agent</code> in the repo's <code>cannu.json</code> and committed on main. Agents that already started get changes from their next run.</div></header>
     <div class="body" id="defaultsBody"></div>
-    <footer class="row"><button data-close>Close</button><span class="msg" id="defaultsMsg"></span><span class="grow" style="min-width:0"></span><button class="primary" id="defaultsSave">Save</button></footer>
+    <div class="dmsg" id="defaultsMsg"></div>
+    <footer class="row"><button data-close>Close</button><span class="grow" style="min-width:0"></span><button class="primary" id="defaultsSave">Save</button></footer>
   </div>
 </dialog>
 <script>
@@ -520,6 +529,8 @@ function md(src) {
 // Filled bell: stem, body, clapper. Waves for "all", a slash for "silent".
 const bell = '<rect x="11.1" y="1.5" width="1.8" height="3.5" rx=".9"/><path d="M12 4c-3.6 0-6 2.9-6 6.4v3.4l-1.8 2.3c-.5.7-.1 1.4.7 1.4h14.2c.8 0 1.2-.7.7-1.4L18 13.8v-3.4C18 6.9 15.6 4 12 4z"/><path d="M9.3 19h5.4a2.7 2.7 0 0 1-5.4 0z"/>';
 const MAC = /Mac|iPhone|iPad/.test(navigator.platform);
+// The ↵ (or Ctrl + ↵) drawn on a button its key presses.
+const keysHint = (mod) => `<small class="keys" aria-hidden="true">${mod ? (MAC ? "⌘" : "Ctrl +") : ""}<svg viewBox="0 0 12 10"><path d="M10.5 1v3.5a1.5 1.5 0 0 1-1.5 1.5H1.5M4.5 3l-3 3 3 3"/></svg></small>`;
 const svg = (p) => `<svg class="i" viewBox="0 0 24 24">${p}</svg>`;
 const ICON = {
   off: svg(`<mask id="cut"><rect width="24" height="24" fill="#fff"/><path d="M3 2l19 19" stroke="#000" stroke-width="5"/></mask><g mask="url(#cut)">${bell}</g><path class="w" d="M3 2l19 19"/>`),
@@ -694,7 +705,7 @@ function chatBox(f, s, cls) {
       <div class="thread" data-chat></div>
       <div class="compose ${s.multi ? "multi" : ""}">
         <textarea data-field="draft" data-mention rows="1" placeholder="Message the agent. ${MAC ? "⌘" : "Ctrl"}+Enter sends.">${esc(s.draft)}</textarea>
-        <button class="primary send" data-act="send" title="${MAC ? "⌘+Enter" : "Ctrl+Enter"} sends">Send<small aria-hidden="true">${MAC ? "⌘" : "Ctrl +"}<svg viewBox="0 0 12 10"><path d="M10.5 1v3.5a1.5 1.5 0 0 1-1.5 1.5H1.5M4.5 3l-3 3 3 3"/></svg></small></button>
+        <button class="primary send" data-act="send" title="${MAC ? "⌘+Enter" : "Ctrl+Enter"} sends">Send${keysHint(true)}</button>
       </div>
       <div class="hint">${f.live?.open ? "Its terminal is open. Sending closes that terminal session and carries on here (the conversation is kept). " : f.live?.background || cls === "working" ? "It's mid-turn. Your message waits and goes as soon as this turn ends. " : ""}Saved word for word in its prompts.md. @ to tag a related feature. The agent reads their notes first.</div>
     </div>`;
@@ -805,14 +816,14 @@ function simpleCard(f, inPop) {
     ${actions(planned
       ? `${inPop ? "" : `<button data-act="edit">${s.edit ? "Cancel edit" : "Edit"}</button>`}<button data-act="drop" title="Keep it on record as dropped">Drop</button>`
       : `<button data-act="reopen">${s.reopen ? "Cancel reopen" : "Reopen"}</button>`,
-      planned ? `${s.edit && !inPop ? `<button data-act="edit-save" title="Save the name and description on main">Save</button>` : ""}<button class="primary" data-act="start" title="Make its branch and start an agent on what it says">Start agent</button>`
+      planned ? `${s.edit && !inPop ? `<button class="second" data-act="edit-save" title="Save the name and description on main">Save</button>` : ""}<button class="primary" data-act="start" title="Make its branch and start an agent on what it says. ${MAC ? "⌘" : "Ctrl"}+Enter in its boxes starts it.">Start agent${s.edit || inPop ? keysHint(true) : ""}</button>`
       : leftover ? `<button class="primary" data-act="remove" title="Delete its folder. The unmerged branch is kept, so the work is still in git.">Remove worktree</button>` : "")}
     ${s.reopen ? `<div style="margin-top:10px; display:grid; gap:8px">
       <div class="hint">A new feature that continues this one. Start agent makes a new branch from current main with a new session, and the agent reads this feature's notes first. Save as planned records it to start later.</div>
       <input type="text" data-field="rtitle" value="${esc(s.rtitle || f.title + " (continued)")}">
       <textarea data-field="rprompt" data-mention data-self="${f.slug}" placeholder="What you want changed this time, and why.">${esc(s.rprompt)}</textarea>
       ${MENTION_HINT}
-      <div class="row"><button data-act="reopen-plan" title="Records it on main without a branch or agent. Start it later from its card.">Save as planned</button><button class="primary" data-act="reopen-go">Start agent</button></div>
+      <div class="row"><button class="second" data-act="reopen-plan" title="Records it on main without a branch or agent. Start it later from its card.">Save as planned</button><button class="primary" data-act="reopen-go" title="${MAC ? "⌘" : "Ctrl"}+Enter starts it">Start agent${keysHint(true)}</button></div>
     </div>` : ""}
     ${msgBlock(s)}
   </div>`;
@@ -1400,6 +1411,8 @@ function renderPop() {
 }
 
 const TYPED = ["draft", "etitle", "eprompt", "rtitle", "rprompt"];
+// What Ctrl+Enter in each box presses. Plain Enter is never a save.
+const KEYS = { draft: "send", etitle: "start", eprompt: "start", rtitle: "reopen-go", rprompt: "reopen-go" };
 
 // The + slides open into a box; Enter makes the label and puts this feature in it.
 const shutLabel = (box) => { const w = box.closest(".newlabel"); w.classList.remove("open"); box.value = ""; box.blur(); };
@@ -1428,13 +1441,30 @@ host.addEventListener("input", (e) => {
   if (e.target.dataset.field === "eprompt") fitPlan(e.target);
 });
 host.addEventListener("click", onClick);
-// Ctrl+Enter (or Cmd+Enter) in a chat box sends.
+// Ctrl+Enter (or Cmd+Enter) does the main thing: send, or start the agent.
 host.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && e.target.dataset.field === "draft") { e.preventDefault(); e.target.closest(".chat").querySelector('[data-act="send"]').click(); }
+  const act = KEYS[e.target.dataset?.field];
+  if (e.key !== "Enter" || !(e.ctrlKey || e.metaKey) || !act || e.isComposing) return;
+  e.preventDefault();
+  const scope = host.id === "popDlg" ? host : e.target.closest("[data-slug]");
+  scope.querySelector(`[data-act="${act}"]`)?.click();
 });
 }
 $("#chips").addEventListener("click", (e) => { const b = e.target.closest("[data-filter]"); if (!b) return; filter = b.dataset.filter; store.set("filter", filter); render(all); });
 $("#search").addEventListener("input", () => render(all));
+
+async function copyErr(b) {
+  try { await navigator.clipboard.writeText(b.closest(".err").querySelector("pre").textContent); b.lastChild.textContent = "Copied"; } catch { b.lastChild.textContent = "Couldn't copy"; }
+  setTimeout(() => { b.lastChild.textContent = "Copy"; }, 1500);
+}
+// A popup's message sits at the foot of its body, as on a card: a line, or
+// for an error ("bad") the red box with Copy.
+function dlgMsg(id, msg, cls = "") { $(id).innerHTML = msgBlock({ msg, cls }); markShortErrors(); }
+for (const id of ["#newDlg", "#repoDlg", "#defaultsDlg"]) $(id).addEventListener("click", (e) => {
+  const b = e.target.closest("[data-act]");
+  if (b?.dataset.act === "copy") return copyErr(b);
+  if (b?.dataset.act === "errexpand" && !b.classList.contains("short")) b.classList.toggle("full");
+});
 
 async function onClick(e) {
   const b = e.target.closest("[data-act]"); if (!b) return;
@@ -1444,7 +1474,7 @@ async function onClick(e) {
   if (act === "collapse" && b.closest(".pop")) return; // the popup always shows everything
   if (act === "newlabel") { if (!b.classList.contains("open")) { b.classList.add("open"); b.querySelector("input").focus(); } return; }
   if (act === "label") { const f = all.find((x) => x.slug === slug); return setLabel(slug, b.dataset.label === f.label ? "" : b.dataset.label); }
-  if (act === "copy") { try { await navigator.clipboard.writeText(b.closest(".err").querySelector("pre").textContent); b.lastChild.textContent = "Copied"; } catch { b.lastChild.textContent = "Couldn't copy"; } setTimeout(() => { b.lastChild.textContent = "Copy"; }, 1500); return; }
+  if (act === "copy") return copyErr(b);
   if (act === "errexpand") {
     // Nothing hidden (a one line error): nothing to open, so the box and Copy stay put.
     const pre = b.querySelector("pre");
@@ -1649,23 +1679,34 @@ $("#newOpen").onclick = async () => {
   const keep = $("#newModel").value || newDraft.model || "";
   await loadDefaults();
   $("#newModel").innerHTML = modelOptions(keep, true);
-  $("#addMsg").textContent = "";
+  dlgMsg("#addMsg", "");
   openModal($("#newDlg")); $("#title").focus();
 };
 async function addFeature(plan) {
   const title = $("#title").value.trim(), prompt = $("#prompt").value.trim();
-  if (!title || (!plan && !prompt)) { $("#addMsg").textContent = plan ? "Needs a name." : "Needs a name and what you want. Or save it as planned."; return; }
-  $("#addMsg").textContent = "Creating…";
+  if (!title || (!plan && !prompt)) { dlgMsg("#addMsg", plan ? "Needs a name." : "Needs a name and what you want. Or save it as planned.", "bad"); return; }
+  dlgMsg("#addMsg", "Creating…");
+  // Busy: a second Enter (or click) mustn't make it twice.
+  const busy = (on) => { $("#add").disabled = $("#addPlan").disabled = on; };
+  busy(true);
   const r = await api("/api/features", { title, prompt, plan, model: $("#newModel").value });
-  if (r.msg) { $("#addMsg").textContent = r.msg; return; }
+  if (r.msg) { busy(false); dlgMsg("#addMsg", r.msg, "bad"); return; }
+  setTimeout(() => busy(false), 700);
   $("#title").value = ""; $("#prompt").value = ""; $("#newModel").value = ""; newDraft = {};
   try { sessionStorage.removeItem(NEW_KEY); } catch {}
-  $("#addMsg").textContent = plan ? "Saved as planned." : limitFull() ? `Setting up ${r.branch}. Its agent waits for the limit to reset.` : `Started ${r.branch}.`;
+  dlgMsg("#addMsg", plan ? "Saved as planned." : limitFull() ? `Setting up ${r.branch}. Its agent waits for the limit to reset.` : `Started ${r.branch}.`, "good");
   setTimeout(() => closeModal($("#newDlg")), 700);
   refresh();
 }
 $("#add").onclick = () => addFeature(false);
 $("#addPlan").onclick = () => addFeature(true);
+$("#add").insertAdjacentHTML("beforeend", keysHint(true));
+$("#add").title = `${MAC ? "⌘" : "Ctrl"}+Enter starts it`;
+// Ctrl+Enter anywhere in these presses the main button. A disabled (busy) one ignores it.
+for (const d of ["#newDlg", "#repoDlg", "#defaultsDlg"]) $(d).addEventListener("keydown", (e) => {
+  if (e.key !== "Enter" || !(e.ctrlKey || e.metaKey) || e.isComposing) return;
+  e.preventDefault(); $(d).querySelector("footer .primary").click();
+});
 
 // Agent defaults. Everything the dashboard sends an agent is listed: what you
 // can change, then (at the bottom) what's fixed because the dashboard relies on it.
@@ -1709,10 +1750,10 @@ function defaultsForm(r) {
 }
 function fillDefaults(r) { $("#defaultsBody").innerHTML = defaultsForm(r); builtIn = r.builtIn; defaultsDirty = false; }
 $("#defaultsOpen").onclick = async () => {
-  if (!defaultsDirty) { fillDefaults(await loadDefaults()); $("#defaultsMsg").textContent = ""; }
+  if (!defaultsDirty) { fillDefaults(await loadDefaults()); dlgMsg("#defaultsMsg", ""); }
   openModal($("#defaultsDlg"));
 };
-const notSaved = () => { defaultsDirty = true; $("#defaultsMsg").textContent = "Not saved yet."; };
+const notSaved = () => { defaultsDirty = true; dlgMsg("#defaultsMsg", "Not saved yet."); };
 $("#defaultsBody").addEventListener("input", notSaved);
 $("#defaultsBody").addEventListener("click", (e) => {
   const k = e.target.dataset?.reset; if (!k) return;
@@ -1726,9 +1767,9 @@ $("#defaultsSave").onclick = async () => {
   const body = { model: $("#dModel").value, systemPrompt: $("#dSystem").value.trim(), env, allowedTools: list("#dAllow"), disallowedTools: list("#dDeny") };
   for (const [k] of TEXTS) body[k] = $("#d_" + k).value.trim();
   const r = await api("/api/defaults", body);
-  if (r.msg) { $("#defaultsMsg").textContent = r.msg; return; }
+  if (r.msg) { dlgMsg("#defaultsMsg", r.msg, "bad"); return; }
   setModels(r); fillDefaults(r);
-  $("#defaultsMsg").textContent = "Saved and committed on main.";
+  dlgMsg("#defaultsMsg", "Saved and committed on main.", "good");
   setTimeout(() => closeModal($("#defaultsDlg")), 700);
 };
 
@@ -1839,8 +1880,8 @@ async function inspectDir() {
   if (!dir) { $("#repoSet").hidden = true; loaded = null; return; }
   const r = await fetch("/api/repos/inspect?dir=" + encodeURIComponent(dir)).then((x) => x.json()).catch(() => ({ ok: false }));
   if ($("#repoDir").value.trim() !== dir) return; // typed on since
-  if (!r.ok) { $("#repoSet").hidden = true; loaded = null; $("#repoMsg").textContent = r.msg || ""; return; }
-  $("#repoMsg").textContent = r.listed ? "That repo is already listed." : "";
+  if (!r.ok) { $("#repoSet").hidden = true; loaded = null; dlgMsg("#repoMsg", r.msg || "", "bad"); return; }
+  dlgMsg("#repoMsg", r.listed ? "That repo is already listed." : "");
   if (!nameTouched) $("#repoNameIn").value = r.name;
   fillForm(r.config); loaded = { has: r.hasConfig, values: formValues() };
   $("#repoSetHint").innerHTML = r.hasConfig ? "From the repo's <code>cannu.json</code>. Anything you change is saved back to it and committed."
@@ -1848,7 +1889,7 @@ async function inspectDir() {
   $("#repoSet").hidden = false;
 }
 async function openAddRepo() {
-  $("#repoDir").value = ""; $("#repoNameIn").value = ""; $("#repoMsg").textContent = "";
+  $("#repoDir").value = ""; $("#repoNameIn").value = ""; dlgMsg("#repoMsg", "");
   nameTouched = false; loaded = null; $("#repoSet").hidden = true;
   $("#found").innerHTML = `<div class="hint">Looking…</div>`;
   openModal($("#repoDlg"));
@@ -1863,17 +1904,17 @@ $("#repoDir").addEventListener("input", () => { clearTimeout(inspectTimer); insp
 $("#repoNameIn").addEventListener("input", () => { nameTouched = $("#repoNameIn").value.trim() !== ""; });
 $("#repoAdd").onclick = async () => {
   const dir = $("#repoDir").value.trim();
-  if (!dir) { $("#repoMsg").textContent = "Pick a repo or type its folder."; return; }
+  if (!dir) { dlgMsg("#repoMsg", "Pick a repo or type its folder.", "bad"); return; }
   // Only what's new or changed goes into cannu.json, so an existing one isn't rewritten for nothing.
   let settings;
   if (loaded) {
     const now = formValues();
     settings = loaded.has ? Object.fromEntries(Object.entries(now).filter(([k, v]) => JSON.stringify(v) !== JSON.stringify(loaded.values[k]))) : now;
   }
-  $("#repoMsg").textContent = "Adding…"; $("#repoAdd").disabled = true;
+  dlgMsg("#repoMsg", "Adding…"); $("#repoAdd").disabled = true;
   const r = await fetch("/api/repos", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ dir, name: plain($("#repoNameIn").value.trim()), settings }) }).then((x) => x.json()).catch(() => ({ msg: "Couldn't reach Cannu." }));
   $("#repoAdd").disabled = false;
-  if (!r.ok) { $("#repoMsg").textContent = r.msg; return; }
+  if (!r.ok) { dlgMsg("#repoMsg", r.msg, "bad"); return; }
   REPOS = await fetch("/api/repos").then((x) => x.json());
   closeModal($("#repoDlg"));
   // Its Cannu takes a moment to start; the board fills in on the next refresh.
