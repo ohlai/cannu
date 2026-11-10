@@ -471,8 +471,8 @@
   <div class="panel">
     <header><h2>Add a repo</h2><div class="hint">Cannu runs agents on it from a board of its own. A <code>cannu.json</code> in the repo says how to set it up, run and check it; without one it uses the defaults.</div></header>
     <div class="body">
-      <div class="field"><label>Found next to your repos</label><div class="found" id="found"><div class="hint">Looking…</div></div></div>
-      <div class="field"><label for="repoDir">Or its folder</label><input type="text" id="repoDir" placeholder="C:\Users\you\github\my-project"></div>
+      <div class="field" id="foundField"><label>Found next to your repos</label><div class="found" id="found"><div class="hint">Looking…</div></div></div>
+      <div class="field"><label for="repoDir">Folder</label><input type="text" id="repoDir" placeholder="C:\Users\you\github\my-project"></div>
       <div class="field"><label for="repoNameIn">Name</label><input type="text" id="repoNameIn" placeholder="From the folder's name"><div class="hint">Shown in the dropdown and in the board's address.</div></div>
       <div class="reposet" id="repoSet" hidden>
         <h3>How to work on it</h3>
@@ -2165,10 +2165,11 @@ async function inspectDir() {
 async function openAddRepo() {
   $("#repoDir").value = ""; $("#repoNameIn").value = ""; dlgMsg("#repoMsg", "");
   nameTouched = false; loaded = null; $("#repoSet").hidden = true;
-  $("#found").innerHTML = `<div class="hint">Looking…</div>`;
+  $("#found").innerHTML = `<div class="hint">Looking…</div>`; $("#foundField").hidden = false;
   openModal($("#repoDlg"));
   const list = await fetch("/api/repos/found").then((r) => r.json()).catch(() => []);
-  $("#found").innerHTML = list.length ? list.map((r) => `<button data-dir="${esc(r.dir)}">${esc(r.name)}<small>${esc(r.dir)}</small></button>`).join("") : `<div class="hint">No other git repos next to the ones you have. Type a folder below.</div>`;
+  $("#found").innerHTML = list.map((r) => `<button data-dir="${esc(r.dir)}">${esc(r.name)}<small>${esc(r.dir)}</small></button>`).join("");
+  $("#foundField").hidden = !list.length; // nothing found: just the folder box
 }
 $("#found").addEventListener("click", (e) => {
   const b = e.target.closest("[data-dir]"); if (!b) return;
