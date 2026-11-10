@@ -53,6 +53,10 @@ function run(h) {
       break;
     }
     case "Notification":
+      // A terminal left open nudges "waiting for your input" a minute after each
+      // turn. That's just idle (Stop already said so), not a question; as
+      // needs-you it put merged features back to waiting.
+      if (h.notification_type === "idle_prompt" || /waiting for your input/i.test(h.message || "")) break;
       writeState(f.slug, { ...base, state: "needs-you", activity: h.message || "waiting for you" });
       break;
     case "Stop":
