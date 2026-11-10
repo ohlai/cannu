@@ -12,6 +12,7 @@
 // worktree folder, session ID, setup step) are in local/features.json.
 import fs from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 
@@ -234,6 +235,44 @@ export function liveStatus(st, running = false) {
   if (state === "starting" && !term && !recent) state = st.started ? "interrupted" : "not-started";
   if (state === "idle" && !term && !bg) state = "closed";
   return { state, open: term, background: bg };
+}
+
+// ---------- Claude plan usage ----------
+
+// The 5 hour and weekly limits, from the endpoint Claude's own apps read, with
+// this machine's Claude Code login. Claude Code keeps that token fresh; if it
+// has expired, or there's no login file (macOS keeps it in the keychain),
+// usage is just unknown and nothing is held. Refreshed every minute.
+let usageNow = null;
+async function readUsage() {
+  try {
+    const tok = JSON.parse(fs.readFileSync(path.join(os.homedir(), ".claude", ".credentials.json"), "utf8")).claudeAiOauth?.accessToken;
+    if (!tok) return;
+    const r = await fetch("https://api.anthropic.com/api/oauth/usage", { headers: { authorization: `Bearer ${tok}`, "anthropic-beta": "oauth-2025-04-20" }, signal: AbortSignal.timeout(10e3) });
+    if (!r.ok) return;
+    const j = await r.json();
+    // limits[] carries the severity the apps colour by; five_hour and seven_day are the fallback.
+    const pick = (kind, old) => {
+      const l = (j.limits || []).find((x) => x.kind === kind);
+      if (l) return { percent: l.percent, severity: l.severity, resets: l.resets_at };
+      return j[old] ? { percent: j[old].utilization, severity: "", resets: j[old].resets_at } : null;
+    };
+    usageNow = { session: pick("session", "five_hour"), weekly: pick("weekly_all", "seven_day"), at: Date.now() };
+  } catch {}
+}
+export const refreshUsage = readUsage;
+// Only server.js and repo.js watch it: hook.js and launch.js import this file
+// too, and mustn't wait on a fetch.
+export function watchUsage() { readUsage(); setInterval(readUsage, 60e3); }
+export function planUsage() { return usageNow; }
+// The limit that's full right now ({ which, resets }), or null. A reset time
+// that has passed means it's free again, even before the next refresh.
+export function fullLimit() {
+  for (const which of ["session", "weekly"]) {
+    const l = usageNow?.[which];
+    if (l && l.percent >= 100 && !(Date.parse(l.resets) <= Date.now())) return { which, resets: l.resets };
+  }
+  return null;
 }
 
 // What every agent is told about how Cannu works, whatever the repo's own

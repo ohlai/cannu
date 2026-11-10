@@ -23,6 +23,11 @@ that was done.
 - Every message I send is written word for word into the feature's
   `prompts.md` by a hook, next to the agent's `log.md` and `decisions.md`.
 - Notifications when an agent needs me, finishes, fails or gets stuck.
+- Two rings at the top for the Claude plan's 5 hour and weekly limits (yellow
+  when close, red when full). While one is full Cannu starts no agents: new
+  features are set up and wait, a turn that hits the limit is held, and the
+  board offers Continue once it resets. It reads Claude Code's login from
+  `~/.claude/.credentials.json`; without that file the rings don't show.
 - A small HTTP API, so another agent (Hermes) can drive it. See `hermes/`.
 
 ![A feature's popup with its chat: the agent's last reply and the message box](screenshots/feature-chat.png)
