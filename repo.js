@@ -787,8 +787,15 @@ function editLabel(name, to, description, color) {
   if (!(name in l)) throw new Error("That label doesn't exist any more.");
   if (!to) throw new Error("Needs a name.");
   if (to !== name && to in l) throw new Error("There's already a label called that.");
-  delete l[name]; l[to] = labelInfo(description, color);
-  saveLabels(l, loadFeatures().filter((f) => f.label === name).map((f) => ({ ...f, label: to })), to === name ? `Edit label ${name}` : `Rename label ${name} to ${to}`);
+  // rebuilt so a renamed label keeps its place in the order
+  const out = Object.fromEntries(Object.entries(l).map(([k, v]) => k === name ? [to, labelInfo(description, color)] : [k, v]));
+  saveLabels(out, loadFeatures().filter((f) => f.label === name).map((f) => ({ ...f, label: to })), to === name ? `Edit label ${name}` : `Rename label ${name} to ${to}`);
+}
+// Columns go in labels.json's key order. Names left out keep their place at the end.
+function orderLabels(names) {
+  const l = readLabels(), out = {};
+  for (const n of [...(Array.isArray(names) ? names.map(cleanLabel) : []), ...Object.keys(l)]) if (n in l) out[n] = l[n];
+  saveLabels(out, [], "Reorder labels");
 }
 // A copy of the label, with a planned copy of each feature in it (same prompt
 // and model). Copies are planned, so no branches or agents start.
@@ -1012,11 +1019,12 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === "GET" && url.pathname === "/api/labels") return send(res, 200, readLabels());
     // { name } plus, for edit, { to, description }. Errors come back as { msg }.
-    const lm = req.method === "POST" && url.pathname.match(/^\/api\/labels\/(new|edit|duplicate|delete)$/);
+    const lm = req.method === "POST" && url.pathname.match(/^\/api\/labels\/(new|edit|duplicate|delete|order)$/);
     if (lm) {
       const b = await body(req), name = cleanLabel(b.name);
       fresh();
       try {
+        if (lm[1] === "order") { orderLabels(b.names); return send(res, 200, { ok: true }); }
         if (lm[1] === "new") { newLabel(name, b.description, b.color); return send(res, 200, { ok: true }); }
         if (lm[1] === "edit") { editLabel(name, cleanLabel(b.to), b.description, b.color); return send(res, 200, { ok: true }); }
         return send(res, 200, lm[1] === "duplicate" ? duplicateLabel(name) : await deleteLabel(name));
