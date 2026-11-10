@@ -206,7 +206,12 @@
   .col.newcol { background:none; border:1.5px dashed var(--line); }
   .col.newcol .colhead { color:var(--mute); font-weight:500; }
   .col.newcol.drop { outline:0; border-color:var(--mute); }
-  .col .namecol { margin-bottom:6px; }
+  .col .namecol, .col .desccol { width:100%; margin-bottom:6px; }
+  .col .desccol { min-height:58px; resize:vertical; font-size:12.5px; }
+  .col .colform { padding-bottom:4px; }
+  .colhead .editcol { cursor:text; border-radius:6px; }
+  .colhead .editcol:hover .tag { outline:1px solid var(--mute); }
+  .colhead .editcol:focus-visible { outline:2px solid var(--work); outline-offset:1px; }
   .col .namego { width:100%; margin-bottom:6px; }
   .colhead { display:flex; align-items:center; gap:8px; padding:2px 4px 10px; font-weight:600; font-size:13px; }
   .colhead .n { color:var(--mute); font-weight:500; }
@@ -386,17 +391,6 @@
   <div class="panel pop">
     <div class="body" id="popTop"></div>
     <footer class="row" id="popFoot"><button data-close>Close</button><div class="grow" id="popActs"></div></footer>
-  </div>
-</dialog>
-
-<dialog class="modal" id="labelDlg">
-  <div class="panel">
-    <header><h2>Edit label</h2></header>
-    <div class="body">
-      <div class="field"><label for="labName">Name</label><input type="text" id="labName" maxlength="40"></div>
-      <div class="field"><label for="labDesc">Description</label><textarea id="labDesc" placeholder="What goes in this label. Shown under its name on the board."></textarea></div>
-    </div>
-    <footer class="row"><button data-close>Close</button><span class="msg" id="labMsg"></span><span class="grow" style="min-width:0"></span><button class="primary" id="labSave">Save</button></footer>
   </div>
 </dialog>
 
@@ -933,7 +927,7 @@ function renderBoard(features) {
   const shown = features.filter((f) => (!q || (f.title + " " + (f.prompt || "") + " " + (f.label || "")).toLowerCase().includes(q)) && !(hide && ["merged", "dropped"].includes(kind(f)[0]))).sort(byUrgency);
   const cols = view === "status"
     ? CHIPS.filter((k) => !(hide && ["merged", "dropped"].includes(k))).map((k) => ({ key: k, head: `<span class="pill ${k}"><span class="dot"></span></span>${cap(k)}`, items: shown.filter((f) => kind(f)[0] === k) }))
-    : [...labels(), ""].map((l) => ({ key: l, head: l ? tagHtml(l) : "Unlabelled", menu: l ? colMenu(l) : "", desc: LABELS[l] || "", items: shown.filter((f) => (f.label || "") === l) }));
+    : [...labels(), ""].map((l) => ({ key: l, head: l ? `<span class="editcol" data-editcol tabindex="0" title="Click to rename or describe">${tagHtml(l)}</span>` : "Unlabelled", menu: l ? colMenu(l) : "", desc: LABELS[l] || "", items: shown.filter((f) => (f.label || "") === l) }));
   const empty = view === "label" ? "Drag a card here to label it" : "Nothing here";
   const add = view === "label" ? `<div class="col newcol" data-newcol tabindex="0" title="Click to make an empty label, or drop a feature here to give it a new one"><div class="colhead">+ New label</div><div class="none">Click to name it, or drag a feature here.</div></div>` : "";
   const html = `<div class="board ${dens}">${cols.map((c) => `<div class="col" data-col="${esc(c.key)}"><div class="colhead">${c.head}<span class="n">${c.items.length}</span>${c.menu || ""}</div>${c.desc ? `<div class="desc">${esc(c.desc)}</div>` : ""}${c.items.map(tile).join("") || `<div class="none">${empty}</div>`}</div>`).join("")}${add}</div>`;
@@ -949,12 +943,15 @@ $("#board").addEventListener("click", (e) => {
   if (lab) { lab.closest("details").open = false; return labelAction(lab.closest("[data-label]").dataset.label, lab.dataset.lab); }
   const nc = e.target.closest("[data-newcol]");
   if (nc && !naming) return nameNewCol(nc, null);
+  const nm = e.target.closest("[data-editcol]");
+  if (nm && !naming) return editCol(nm.closest(".col").dataset.col);
   const t = e.target.closest("[data-open]"); if (t) openPop(t.dataset.open);
 });
 $("#board").addEventListener("keydown", (e) => {
   if (e.key !== "Enter" && e.key !== " ") return;
   const nc = e.target.matches("[data-newcol]") && e.target;
   if (nc && !naming) { e.preventDefault(); return nameNewCol(nc, null); }
+  if (e.target.matches("[data-editcol]") && !naming) { e.preventDefault(); return editCol(e.target.closest(".col").dataset.col); }
   const t = e.target.closest("[data-open]"); if (t) { e.preventDefault(); openPop(t.dataset.open); }
 });
 // An open ⋯ menu closes on a click anywhere else, or Escape.
@@ -968,7 +965,7 @@ const boardSay = (msg) => { $("#boardMsg").textContent = msg || ""; $("#boardMsg
 async function labelAction(name, act) {
   boardSay("");
   const inside = all.filter((f) => f.label === name);
-  if (act === "edit") return editLabel(name);
+  if (act === "edit") return editCol(name);
   if (act === "duplicate") { const r = await api("/api/labels/duplicate", { name }); if (!r.ok) boardSay(r.msg); return refresh(); }
   const n = inside.length;
   const text = n ? `“${name}” has ${n} ${n === 1 ? "feature" : "features"} in it: ${inside.map((f) => f.title).join(", ")}. ${n === 1 ? "It" : "They"} will be deleted too, notes and all. Building ones are dropped and their worktrees removed first; a branch that isn't merged is kept in git.`
@@ -978,22 +975,6 @@ async function labelAction(name, act) {
   if (!r.ok) boardSay(r.msg);
   refresh();
 }
-// Edit: its name and a description, shown under the name on its column.
-let editing = null;
-function editLabel(name) {
-  editing = name;
-  $("#labName").value = name; $("#labDesc").value = LABELS[name] || ""; $("#labMsg").textContent = "";
-  openModal($("#labelDlg")); $("#labName").focus();
-}
-$("#labSave").onclick = async () => {
-  const to = $("#labName").value.trim();
-  if (!to) { $("#labMsg").textContent = "Needs a name."; return; }
-  $("#labMsg").textContent = "Saving…";
-  const r = await api("/api/labels/edit", { name: editing, to, description: $("#labDesc").value });
-  if (!r.ok) { $("#labMsg").textContent = r.msg; return; }
-  closeModal($("#labelDlg")); refresh();
-};
-$("#labName").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); $("#labSave").click(); } });
 
 // Dragging between label columns relabels. One label per feature, so the card just moves.
 let dragging = null;
@@ -1024,28 +1005,64 @@ async function setLabel(slug, label) {
   refresh();
 }
 
-// Clicked, or dropped on, the new label column: it asks for the name right
-// there. Enter makes the label (empty, or with the dropped feature in it);
-// Escape cancels.
+// A name box with a description box under it, in place of a column's head.
+// Enter in the name (Ctrl+Enter in the description), the button, or clicking
+// away with a name saves; Escape, or clicking away with no name, cancels.
 let naming = null;
+function colForm(host, { name = "", desc = "", go }, save) {
+  const me = {}; naming = me;
+  host.innerHTML = `<input type="text" class="namecol" maxlength="40" placeholder="Label name" aria-label="Label name" value="${esc(name)}">
+    <textarea class="desccol" placeholder="Description (optional)" aria-label="Label description">${esc(desc)}</textarea>
+    <button class="primary namego" data-namego>${go}</button>`;
+  const box = host.querySelector("input"), ta = host.querySelector("textarea");
+  box.focus(); box.select();
+  const done = (keep) => {
+    if (naming !== me) return; naming = null; $("#board")._html = "";
+    const v = box.value.trim();
+    if (keep && v) save(v, ta.value.trim()); else render(all);
+  };
+  host.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && (e.target === box || e.ctrlKey || e.metaKey)) { e.preventDefault(); done(true); }
+    else if (e.key === "Escape") { e.preventDefault(); done(false); }
+  });
+  host.querySelector("[data-namego]").addEventListener("click", () => done(true));
+  host.addEventListener("focusout", (e) => { if (!host.contains(e.relatedTarget)) done(true); });
+}
+
+// Clicked, or dropped on, the new label column: the label is made empty, or
+// with the dropped feature in it.
 function nameNewCol(c, slug) {
   const f = slug && all.find((x) => x.slug === slug);
-  const me = {}; naming = me;
-  c.innerHTML = `<div class="colhead">New label</div><input type="text" class="namecol" maxlength="40" placeholder="Label name" aria-label="New label name"><button class="primary namego" data-namego>Create board</button>${slug ? `<div class="none">For “${esc(f?.title || slug)}”</div>` : ""}`;
-  const box = c.querySelector("input"); box.focus();
-  const done = async (v) => {
-    if (naming !== me) return; naming = null; $("#board")._html = "";
-    if (!v) return render(all);
+  c.innerHTML = `<div class="colhead">New label</div><div class="colform"></div>${slug ? `<div class="none">For “${esc(f?.title || slug)}”</div>` : ""}`;
+  colForm(c.querySelector(".colform"), { go: "Create board" }, async (v, description) => {
+    boardSay("");
+    if (!slug || !labels().includes(v)) { // dropped on an existing name just labels it
+      LABELS[v] ??= description; render(all); // show it now; the server saves it
+      const r = await api("/api/labels/new", { name: v, description });
+      if (!r.ok) boardSay(r.msg);
+    }
     if (slug) return setLabel(slug, v);
-    LABELS[v] ??= ""; render(all); // show it now; the server commits it on main
-    const r = await api("/api/labels/new", { name: v });
+    refresh();
+  });
+}
+
+// Edit, from the ⋯ menu or clicking a column's name: its head turns into the
+// name and description boxes, the cards stay put.
+function editCol(name) {
+  const c = [...document.querySelectorAll("#board .col[data-col]")].find((x) => x.dataset.col === name); if (!c) return;
+  const host = document.createElement("div"); host.className = "colform";
+  c.querySelector(".desc")?.remove(); c.querySelector(".colhead").replaceWith(host);
+  colForm(host, { name, desc: LABELS[name] || "", go: "Save" }, async (to, description) => {
+    boardSay("");
+    if (to === name && description === (LABELS[name] || "")) return render(all);
+    // Show it now; the server saves it.
+    delete LABELS[name]; LABELS[to] = description;
+    for (const f of all) if (f.label === name) f.label = to;
+    render(all);
+    const r = await api("/api/labels/edit", { name, to, description });
     if (!r.ok) boardSay(r.msg);
     refresh();
-  };
-  box.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); done(box.value.trim()); } else if (e.key === "Escape") { e.preventDefault(); done(""); } });
-  c.querySelector("[data-namego]").addEventListener("click", () => done(box.value.trim()));
-  // Clicking away with a name keeps it; with none, cancels. Clicking Create label is handled above.
-  box.addEventListener("blur", (e) => { if (!c.contains(e.relatedTarget)) done(box.value.trim()); });
+  });
 }
 
 // ---------- feature popup ----------
