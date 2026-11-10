@@ -127,6 +127,14 @@ export function saveRuntime(slug, patch) {
   fs.mkdirSync(HOME, { recursive: true });
   fs.writeFileSync(RUNTIME, JSON.stringify(all, null, 2));
 }
+// A deleted feature forgets this machine's runtime and state too, so a new
+// feature that gets its slug starts clean.
+export function forget(slug) {
+  const all = readRuntime();
+  delete all[slug];
+  fs.writeFileSync(RUNTIME, JSON.stringify(all, null, 2));
+  fs.rmSync(path.join(STATE, slug + ".json"), { force: true });
+}
 
 export function loadFeatures() {
   const rt = readRuntime();

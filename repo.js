@@ -9,7 +9,7 @@ import crypto from "node:crypto";
 import os from "node:os";
 import { spawn, execFile, execFileSync } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
-import { CLAUDE_SETTINGS, META, APP, WORKTREES, STATE, FEATURES_DIR, REPO_FILE, MAIN, NOTES, COMMIT_NOTES, notesDir, repo, repoRaw, BUILT_IN, MODELS, defaults, fill, MD_KEYS, config, loadFeatures, saveRuntime, featureMd, readState, writeState, stamp, claudeBaseArgs, liveStatus, killTree, AUTO, resumeText, FEEDBACK } from "./lib.js";
+import { CLAUDE_SETTINGS, META, APP, WORKTREES, STATE, FEATURES_DIR, REPO_FILE, MAIN, NOTES, COMMIT_NOTES, notesDir, repo, repoRaw, BUILT_IN, MODELS, defaults, fill, MD_KEYS, config, loadFeatures, saveRuntime, featureMd, readState, writeState, stamp, claudeBaseArgs, liveStatus, killTree, AUTO, resumeText, FEEDBACK, forget } from "./lib.js";
 
 const WIN = process.platform === "win32";
 
@@ -146,13 +146,13 @@ function contextBlock({ title, continues, refs }, since) {
 // A new feature is a feature.md committed on main. Planned ones stop there.
 // Started ones get a branch made from main after that commit, so the branch
 // has its feature.md, and only main ever changes it.
-function createFeature(title, prompt, { continues = null, refs = [], plan = false, model = "" } = {}) {
+function createFeature(title, prompt, { continues = null, refs = [], plan = false, model = "", label = "" } = {}) {
   const list = loadFeatures();
   if (list.some((f) => f.title.toLowerCase() === title.toLowerCase())) throw new Error("A feature already has that name. Pick another.");
   const base = slugify(title);
   let slug = base;
   for (let n = 2; list.some((f) => f.slug === slug) || fs.existsSync(path.join(FEATURES_DIR, slug)) || fs.existsSync(path.join(WORKTREES, slug)) || branchExists(`feat/${slug}`); n++) slug = `${base}-${n}`;
-  const f = { slug, title, prompt, status: "planned", created: stamp(), continues, refs, model: model in MODELS ? model : "" };
+  const f = { slug, title, prompt, status: "planned", label, created: stamp(), continues, refs, model: model in MODELS ? model : "" };
   if (plan) { writeFeature(f, `Plan feature: ${title}`); return f; }
   return startFeature(f, `Start feature: ${title}`);
 }
@@ -691,6 +691,86 @@ async function removeFeature(f) {
   return { ok: true, msg: (b.ok ? "Removed the worktree and branch. The feature and its notes stay in the list." : `Removed the worktree. The branch ${f.branch} is kept because it isn't merged, so its work and notes are still in git.`) + leftover };
 }
 
+// ---------- labels ----------
+
+// Every label and its description, in labels.json in the notes folder, so a
+// label can have no features in it. It goes in git only when feature notes do
+// (commitNotes). A label only on features (from before this file) counts too,
+// and is saved the next time anything is.
+const LABELS_REL = path.join(NOTES, "labels.json");
+const LABELS_FILE = path.join(APP, LABELS_REL);
+const cleanLabel = (s) => String(s || "").replace(/\s+/g, " ").trim().slice(0, 40);
+function readLabels() {
+  let l = {}; try { l = JSON.parse(fs.readFileSync(LABELS_FILE, "utf8")); } catch {}
+  for (const f of loadFeatures()) if (f.label && !(f.label in l)) l[f.label] = "";
+  return l;
+}
+// labels.json plus any changed feature.md (and any deleted feature folders),
+// in one commit on main when notes are in git.
+function saveLabels(l, feats, message, gone = []) {
+  fs.mkdirSync(FEATURES_DIR, { recursive: true });
+  fs.writeFileSync(LABELS_FILE, JSON.stringify(l, null, 2) + "\n");
+  for (const f of feats) fs.writeFileSync(path.join(FEATURES_DIR, f.slug, "feature.md"), featureMd(f));
+  if (COMMIT_NOTES) commitMain(message, LABELS_REL, ...feats.map((f) => path.join(NOTES, f.slug, "feature.md")), ...gone.map((s) => path.join(NOTES, s)));
+}
+function setLabel(f, label) {
+  const l = readLabels(); // still has its old label, so that column stays when it empties
+  if (label) l[label] ??= "";
+  saveLabels(l, [{ ...f, label }], label ? `Label ${f.title}: ${label}` : `Unlabel ${f.title}`);
+}
+function newLabel(name, description = "") {
+  const l = readLabels();
+  if (!name) throw new Error("Needs a name.");
+  if (name in l) throw new Error("There's already a label called that.");
+  l[name] = String(description).trim();
+  saveLabels(l, [], `New label: ${name}`);
+}
+// Rename and describe. Its features move to the new name.
+function editLabel(name, to, description) {
+  const l = readLabels();
+  if (!(name in l)) throw new Error("That label doesn't exist any more.");
+  if (!to) throw new Error("Needs a name.");
+  if (to !== name && to in l) throw new Error("There's already a label called that.");
+  delete l[name]; l[to] = String(description || "").trim();
+  saveLabels(l, loadFeatures().filter((f) => f.label === name).map((f) => ({ ...f, label: to })), to === name ? `Describe label ${name}` : `Rename label ${name} to ${to}`);
+}
+// A copy of the label, with a planned copy of each feature in it (same prompt
+// and model). Copies are planned, so no branches or agents start.
+function duplicateLabel(name) {
+  const l = readLabels();
+  if (!(name in l)) throw new Error("That label doesn't exist any more.");
+  const named = (end) => name.slice(0, 40 - end.length) + end; // its number survives the 40 character limit
+  let to = named(" copy");
+  for (let n = 2; to in l; n++) to = named(` copy ${n}`);
+  newLabel(to, l[name]);
+  const feats = loadFeatures().filter((f) => f.label === name);
+  for (const f of feats) {
+    let title = `${f.title} (copy)`;
+    for (let n = 2; loadFeatures().some((x) => x.title.toLowerCase() === title.toLowerCase()); n++) title = `${f.title} (copy ${n})`;
+    createFeature(title, f.prompt || "", { refs: f.refs, plan: true, model: f.model || "", label: to });
+  }
+  return { ok: true, msg: `Made ${to} with ${feats.length} planned ${feats.length === 1 ? "copy" : "copies"}.` };
+}
+// Deletes the label and every feature in it: building ones are dropped, any
+// worktree is removed (an unmerged branch is kept, as Remove worktree does),
+// then their notes folders go, in one commit on main when notes are in git.
+async function deleteLabel(name) {
+  const l = readLabels();
+  if (!(name in l)) throw new Error("That label doesn't exist any more.");
+  const feats = loadFeatures().filter((f) => f.label === name);
+  const busy = feats.find((f) => { const live = liveStatus(readState(f.slug)); return running.has(f.slug) || settingUp.has(f.slug) || (f.dir && !f.removed && (live.open || live.background)); });
+  if (busy) return { ok: false, msg: `${busy.title}'s agent is still running. Let it finish or close its session first. Nothing was deleted.` };
+  for (const f of feats) {
+    if (f.status === "building") { const r = await dropFeature(f); if (!r.ok) return { ok: false, msg: `${f.title}: ${r.msg}` }; }
+    const now = loadFeatures().find((x) => x.slug === f.slug);
+    if (now.dir && !now.removed) { const r = await removeFeature(now); if (!r.ok) return { ok: false, msg: `${f.title}: ${r.msg} The label wasn't deleted.` }; }
+  }
+  for (const f of feats) { fs.rmSync(path.join(FEATURES_DIR, f.slug), { recursive: true, force: true }); forget(f.slug); }
+  delete l[name];
+  saveLabels(l, [], `Delete label ${name} and its ${feats.length} features`, feats.map((f) => f.slug));
+  return { ok: true, msg: `Deleted ${name} and ${feats.length} ${feats.length === 1 ? "feature" : "features"}.` };
+}
+
 // ---------- overview ----------
 
 const hasWorktree = (f) => !!f.dir && !f.removed && f.status !== "planned" && f.status !== "dropped";
@@ -867,6 +947,18 @@ const server = http.createServer(async (req, res) => {
       if (!plan && !prompt?.trim()) return send(res, 400, { msg: "Needs a starting prompt to start an agent. Or save it as planned." });
       return send(res, 200, createFeature(title.trim(), String(prompt || "").trim(), { refs: mentions(prompt), plan: !!plan, model }));
     }
+    if (req.method === "GET" && url.pathname === "/api/labels") return send(res, 200, readLabels());
+    // { name } plus, for edit, { to, description }. Errors come back as { msg }.
+    const lm = req.method === "POST" && url.pathname.match(/^\/api\/labels\/(new|edit|duplicate|delete)$/);
+    if (lm) {
+      const b = await body(req), name = cleanLabel(b.name);
+      fresh();
+      try {
+        if (lm[1] === "new") { newLabel(name, b.description); return send(res, 200, { ok: true }); }
+        if (lm[1] === "edit") { editLabel(name, cleanLabel(b.to), b.description); return send(res, 200, { ok: true }); }
+        return send(res, 200, lm[1] === "duplicate" ? duplicateLabel(name) : await deleteLabel(name));
+      } catch (e) { return send(res, 200, { ok: false, msg: e.message }); }
+    }
     const m = url.pathname.match(/^\/api\/features\/([a-z0-9-]+)\/(\w+)$/);
     const f = m && loadFeatures().find((x) => x.slug === m[1]);
     if (!f) return send(res, 404, { msg: "Not found" });
@@ -883,10 +975,7 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, createFeature(b.title.trim(), prompt, { continues: f.slug, refs: mentions(prompt, f.slug), plan: !!b.plan }));
     }
     // One label per feature, any text. Empty clears it.
-    if (action === "label") {
-      const label = String(b.label || "").replace(/\s+/g, " ").trim().slice(0, 40);
-      return send(res, 200, update(f.slug, { label }, label ? `Label ${f.title}: ${label}` : `Unlabel ${f.title}`));
-    }
+    if (action === "label") { setLabel(f, cleanLabel(b.label)); return send(res, 200, loadFeatures().find((x) => x.slug === f.slug)); }
     if (action === "drop") return send(res, 200, await dropFeature(f));
     if (action === "remove" && f.status === "dropped" && f.dir && !f.removed) return send(res, 200, await removeFeature(f));
     if (f.status === "planned") {
