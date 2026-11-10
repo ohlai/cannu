@@ -1272,7 +1272,10 @@ function follow() {
       const tiles = [...over.querySelectorAll(".tile")].filter((t) => t !== el);
       const f = all.find((x) => x.slug === el.dataset.open);
       // manual: above the first card whose middle is below the pointer; otherwise where the sort puts it
-      const before = sortBy === "manual" ? tiles.find((t) => { const L = lay(t); return py < L.y + L.h / 2; })
+      // Like the columns: the card's middle, as if it followed the pointer fully, swaps once it's a
+      // fifth into the next card. Coming from another column there's no next, so it's halfway.
+      const mid = py - held.gy + el.offsetHeight / 2, mine = [...over.querySelectorAll(".tile")], me = mine.indexOf(el);
+      const before = sortBy === "manual" ? tiles.find((t) => { const L = lay(t), i = mine.indexOf(t); return mid < L.y + L.h * (me < 0 ? 0.5 : i > me ? 0.2 : 0.8); })
         : over === el.closest(".col") ? el.nextElementSibling : tiles.find((t) => bySort(f, all.find((x) => x.slug === t.dataset.open)) < 0);
       shift(el, over, before || null);
     }
