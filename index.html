@@ -321,7 +321,7 @@
      known. */
   :root { --u-green:#22c55e; --u-orange:#f59e0b; --u-red:#ef4444; }
   .rings { display:flex; align-items:center; height:34px; cursor:default; outline:none; }
-  .urings { position:relative; width:34px; height:34px; transition:transform .3s cubic-bezier(.16,1,.3,1); }
+  .urings { position:relative; width:34px; height:34px; transition:transform .5s cubic-bezier(.65,0,.35,1); }
   .urings svg { display:block; width:100%; height:100%; transform:rotate(-90deg); }
   .urings circle { fill:none; }
   .urings .track { stroke:var(--line); }
@@ -329,8 +329,10 @@
   .green { --c:var(--u-green); } .orange { --c:var(--u-orange); } .red { --c:var(--u-red); } .grey { --c:var(--mute); }
   .urings .fill, .udot { stroke:var(--c); background:var(--c); }
   .ucenter { position:absolute; inset:0; display:grid; place-content:center; font-size:8px; font-weight:700; letter-spacing:-.02em; opacity:0; transition:opacity .2s; }
-  .uin { max-width:0; overflow:hidden; white-space:nowrap; opacity:0; transition:max-width .4s cubic-bezier(.16,1,.3,1), opacity .25s; }
-  .rings:is(:hover, :focus-visible) .uin { max-width:300px; opacity:1; }
+  /* --uw is the lines' real width, set by renderUsage, so the slide runs the
+     whole way at the eased speed instead of racing to a guessed maximum. */
+  .uin { max-width:0; overflow:hidden; white-space:nowrap; opacity:0; transition:max-width .5s cubic-bezier(.65,0,.35,1), opacity .4s ease-in-out; }
+  .rings:is(:hover, :focus-visible) .uin { max-width:var(--uw, 300px); opacity:1; }
   .rings:is(:hover, :focus-visible) .ucenter { opacity:1; }
   .rings:is(:hover, :focus-visible) .urings { transform:scale(1.3); }
   .uline { display:flex; align-items:center; gap:6px; padding-left:14px; font-size:12px; line-height:1.5; }
@@ -338,7 +340,9 @@
   .uline b { min-width:30px; }
   .uline small { color:var(--mute); font-size:11px; }
   .udot { width:7px; height:7px; border-radius:50%; flex:none; }
-  #limitMsg .switch { font-size:12px; margin-left:12px; }
+  #limitMsg { display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:8px 14px; text-align:center; }
+  #limitMsg[hidden] { display:none; }
+  #limitMsg .switch { font-size:12px; }
   @media (prefers-reduced-motion: reduce) { .urings, .uin, .ucenter { transition:none; } }
   .limited .dot { background:var(--bad); }
 </style>
@@ -365,7 +369,7 @@
     </div>
   </div>
   <div class="msg bad" id="notifyMsg" hidden style="margin-top:-12px; margin-bottom:12px"></div>
-  <div class="banner" id="limitMsg" hidden style="margin:-12px 0 20px"></div>
+  <div class="banner" id="limitMsg" hidden style="margin:-16px 0 20px"></div>
 
   <div class="filters">
     <div class="seg text" id="viewSeg"><span class="thumb"></span>
@@ -624,7 +628,7 @@ function renderUsage() {
     return `<div class="uline"><span class="ulab">${label}</span><span class="udot ${p == null ? "grey" : tone(p)}"></span><b>${p == null ? "–" : p + "%"}</b><small>${p == null ? (l?.resets ? "reset, not checked since" : "not known yet") : l.resets ? `resets ${resetAt(l.resets)}` : ""}</small></div>`;
   };
   const html = `${usageRings()}<div class="uin">${line("session", "5H")}${line("weekly", "7D")}</div>`;
-  if (box.dataset.html !== html) { box.innerHTML = html; box.dataset.html = html; }
+  if (box.dataset.html !== html) { box.innerHTML = html; box.dataset.html = html; box.style.setProperty("--uw", box.lastChild.scrollWidth + "px"); }
   // Under the header: a full limit, or features waiting to carry on after one.
   const full = limitFull(), held = all.filter((f) => f.worktree && f.live?.state === "limited");
   const wait = held.map(heldUntil).filter(Boolean).sort().at(-1);
