@@ -190,6 +190,8 @@
   .seg.text .thumb { width:var(--w, 0); transform:translateX(var(--x, 0)); transition:transform .25s cubic-bezier(.4,0,.2,1), width .25s cubic-bezier(.4,0,.2,1); }
   .seg.text:not(.ready) .thumb { transition:none; }
   .seg.text button { width:auto; padding:0 12px; font-size:12.5px; white-space:nowrap; }
+  #densSeg button { opacity:1; }
+  #densSeg button:not(.on):hover { background:var(--bg); }
   @media (prefers-reduced-motion: reduce) { .seg.text .thumb { transition:none; } }
   /* Hide completed: a checkbox drawn like Cannu's buttons, black with a white tick when on. */
   .switch { display:inline-flex; align-items:center; gap:8px; font-size:13px; color:var(--mute); cursor:pointer; user-select:none; }
@@ -212,8 +214,8 @@
   /* The view switcher, colours flipped: a black box, the picked view on a white square. */
   #viewSeg { background:var(--fg); border-color:var(--fg); }
   #viewSeg .thumb { background:var(--bg); }
-  #viewSeg button { color:var(--bg); opacity:.6; }
-  #viewSeg button:hover { opacity:.9; }
+  #viewSeg button { color:var(--bg); opacity:1; }
+  #viewSeg button:not(.on):hover { background:rgba(127,127,127,.3); }
   #viewSeg button.on { color:var(--fg); opacity:1; }
   .board { display:grid; grid-auto-flow:column; grid-auto-columns:minmax(300px, 1fr); gap:14px; overflow-x:auto; align-items:start; padding:24px 32px 32px; margin:-16px -32px -24px; } /* the scroller clips, so room inside it for a dragged card's lean and shadow, pulled back out (the top only partly, so it stays off the filters) */
   .col { background:color-mix(in srgb, var(--line) 35%, transparent); border-radius:12px; padding:10px; min-height:110px; }
