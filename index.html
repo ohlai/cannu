@@ -1856,7 +1856,10 @@ function openModal(d) {
   document.documentElement.style.paddingRight = innerWidth - document.documentElement.clientWidth + "px";
   document.documentElement.classList.add("locked");
   for (const o of document.querySelectorAll("dialog.modal[open]")) if (o !== d) o.classList.add("under");
-  d.showModal(); requestAnimationFrame(() => requestAnimationFrame(() => d.classList.add("in")));
+  // Reopened mid-close (a fast "no" from the server): cancel the pending close instead of being shut by it.
+  clearTimeout(d._closing);
+  if (!d.open) d.showModal();
+  requestAnimationFrame(() => requestAnimationFrame(() => d.classList.add("in")));
 }
 function closeModal(d) {
   if (!d.open || !d.classList.contains("in")) return;
@@ -1864,7 +1867,7 @@ function closeModal(d) {
   // The popup underneath, if any, takes its dim and blur back as this one fades.
   const below = [...document.querySelectorAll("dialog.modal[open]")].filter((o) => o !== d).pop();
   below?.classList.remove("under");
-  setTimeout(() => {
+  d._closing = setTimeout(() => {
     d.close();
     if (document.querySelector("dialog.modal[open]")) return; // another popup is still up (Drop's "are you sure?" over a feature)
     document.documentElement.classList.remove("locked"); document.documentElement.style.paddingRight = "";
@@ -1952,7 +1955,7 @@ async function addFeature(plan) {
   closeModal($("#newDlg"));
   $("#title").value = ""; $("#prompt").value = ""; $("#newModel").value = ""; newLabel = ""; newDraft = {};
   try { sessionStorage.removeItem(NEW_KEY); } catch {}
-  const r = await api("/api/features", { title, prompt, plan, model, label });
+  const r = await api("/api/features", { title, prompt, plan, model, label }).catch(() => ({ msg: "Couldn't reach Cannu, or it sent back something unexpected." }));
   if (r.msg) {
     if ($("#title").value || $("#prompt").value) return boardSay(`Couldn't create “${title}”: ${r.msg}`); // already typing the next one
     $("#title").value = keep.title; $("#prompt").value = keep.prompt; newDraft = { model }; newLabel = label; saveNew();
