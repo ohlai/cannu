@@ -196,8 +196,8 @@
   .seg.text .thumb { width:var(--w, 0); transform:translateX(var(--x, 0)); transition:transform .25s cubic-bezier(.4,0,.2,1), width .25s cubic-bezier(.4,0,.2,1); }
   .seg.text:not(.ready) .thumb { transition:none; }
   .seg.text button { width:auto; padding:0 12px; font-size:12.5px; white-space:nowrap; }
-  #densSeg button, #doneSeg button { opacity:1; }
-  #densSeg button:not(.on):hover, #doneSeg button:not(.on):hover { background:var(--bg); }
+  #doneSeg button { opacity:1; }
+  #doneSeg button:not(.on):hover { background:var(--bg); }
   @media (prefers-reduced-motion: reduce) { .seg.text .thumb { transition:none; } }
   /* Switches in popups: a checkbox drawn like Cannu's buttons, black with a white tick when on. */
   .switch { display:inline-flex; align-items:center; gap:8px; font-size:13px; color:var(--mute); cursor:pointer; user-select:none; }
@@ -308,9 +308,6 @@
   .tile .snip { margin-top:6px; font-size:12.5px; color:var(--mute); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
   .tile .foot { display:flex; gap:6px; align-items:center; margin-top:8px; flex-wrap:wrap; }
   .tile .when { margin-left:auto; font-size:11.5px; color:var(--mute); white-space:nowrap; }
-  .compact .tile { padding:7px 10px; margin-bottom:5px; display:flex; gap:8px; align-items:center; }
-  .compact .tile .t { flex:1; min-width:0; font-weight:500; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .compact .tile .foot { margin:0; }
   /* Labels: tinted with their own colour, never filled, so they don't read as a status. */
   .tag { display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:500; padding:1px 7px; border-radius:5px; color:var(--fg); background:color-mix(in srgb, var(--h) 18%, transparent); border:1px solid transparent; white-space:nowrap; }
   .tag::before { content:""; width:6px; height:6px; border-radius:2px; background:var(--h); }
@@ -449,10 +446,6 @@
     <div class="seg text" id="doneSeg"><span class="thumb"></span>
       <button data-val="show" title="Every feature, merged and dropped too">Show All</button>
       <button data-val="hide" title="Hide merged and dropped features">Hide Completed</button>
-    </div>
-    <div class="seg text" id="densSeg"><span class="thumb"></span>
-      <button data-val="detailed" title="Status, label, what the agent is doing and its last reply on every card">Detailed</button>
-      <button data-val="compact" title="One line per feature">Compact</button>
     </div>
     <div class="repopick" id="sortPick">
       <button id="sortBtn" aria-haspopup="true" aria-expanded="false" title="How cards are ordered, in every column and the list"><span id="sortName"></span><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
@@ -973,7 +966,7 @@ function render(features) {
   $("#chips").innerHTML = ["all", ...CHIPS].map((g) => `<button data-filter="${g}" title="${KIND_TIPS[g]}" class="${g === filter ? "on" : ""}">${cap(g)}<span class="n">${features.filter((f) => inGroup(f, g)).length}</span></button>`).join("");
   const onBoard = view !== "list";
   document.body.classList.toggle("boarding", onBoard);
-  $("#chips").hidden = onBoard; $("#densSeg").hidden = !onBoard; $("#doneSeg").hidden = !onBoard;
+  $("#chips").hidden = onBoard; $("#doneSeg").hidden = !onBoard;
   for (const place of segs) place();
   if (popSlug) renderPop();
   if (onBoard) { if ($("#list").firstChild) $("#list").innerHTML = ""; return renderBoard(features); }
@@ -1146,7 +1139,7 @@ let LABELS = {};
 // In labels.json's order, which dragging a column header changes.
 const labels = () => [...new Set([...Object.keys(LABELS), ...all.map((f) => f.label).filter(Boolean)])];
 
-let view = store.get("view", "status"), dens = store.get("density", "detailed");
+let view = store.get("view", "status");
 if (!["status", "label", "list"].includes(view)) view = "status";
 let hideDone = store.get("hideDone", false);
 
@@ -1164,7 +1157,6 @@ function makeSeg(el, get, set) {
   segs.push(place);
 }
 makeSeg($("#viewSeg"), () => view, (v) => { view = v; store.set("view", v); });
-makeSeg($("#densSeg"), () => dens, (v) => { dens = v; store.set("density", v); });
 makeSeg($("#doneSeg"), () => (hideDone ? "hide" : "show"), (v) => { hideDone = v === "hide"; store.set("hideDone", hideDone); });
 // The sort dropdown, built like the repo one.
 const SORT_NAMES = { status: "Needs you first", active: "Last active", created: "Newest", name: "Name", manual: "Manual (drag)" };
@@ -1193,8 +1185,6 @@ function tile(f) {
   const [k, detail] = kind(f), cls = status(f)[0], st = f.st || {};
   const pill = `<span class="pill ${k} ${cls}"><span class="dot"></span>${k}${detail ? `<span class="detail">· ${esc(detail)}</span>` : ""}</span>`;
   const when = ago(st.at) || day(f.merged || f.dropped || f.created);
-  if (dens === "compact") return `<div class="tile" data-open="${f.slug}" tabindex="0" title="${esc(f.title)}${detail ? " · " + esc(detail) : ""}">
-    <span class="pill ${k} ${cls}" style="border:0;padding:0"><span class="dot"></span></span><span class="t">${esc(f.title)}</span><span class="when">${when}</span></div>`;
   return `<div class="tile" data-open="${f.slug}" tabindex="0">
     <div class="t">${esc(f.title)}</div>
     ${st.activity && cls === "working" ? `<div class="activity">${esc(st.activity)}</div>` : ""}
@@ -1218,7 +1208,7 @@ function renderBoard(features) {
   const empty = view === "label" ? "Drag a card here to label it" : "Nothing here";
   const add = view === "label" ? `<div class="col newcol" data-newcol tabindex="0" title="Click to make an empty label, or drop a feature here to give it a new one"><div class="colhead">+ New label</div><div class="none">Click to name it, or drag a feature here.</div></div>` : "";
   const plus = (l) => view === "label" ? `<button class="coladd" data-addcol title="${l ? `New feature labelled ${esc(l)}` : "New feature without a label"}" aria-label="New feature"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M5 1v8M1 5h8"/></svg></button>` : "";
-  const html = `<div class="board ${dens}">${cols.map((c) => `<div class="col" data-col="${esc(c.key)}"><div class="colhead"${view === "label" && c.key ? ' data-dragcol title="Drag to move this column"' : ""}>${c.head}<span class="n">${c.items.length}</span>${plus(c.key)}${c.menu || ""}</div>${c.desc ? `<div class="desc">${esc(c.desc)}</div>` : ""}${c.items.map(tile).join("") || `<div class="none">${empty}</div>`}</div>`).join("")}${add}</div>`;
+  const html = `<div class="board">${cols.map((c) => `<div class="col" data-col="${esc(c.key)}"><div class="colhead"${view === "label" && c.key ? ' data-dragcol title="Drag to move this column"' : ""}>${c.head}<span class="n">${c.items.length}</span>${plus(c.key)}${c.menu || ""}</div>${c.desc ? `<div class="desc">${esc(c.desc)}</div>` : ""}${c.items.map(tile).join("") || `<div class="none">${empty}</div>`}</div>`).join("")}${add}</div>`;
   const host = $("#board");
   if (host._html === html) return;
   const left = host.firstElementChild?.scrollLeft || 0;

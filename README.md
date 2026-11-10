@@ -162,11 +162,10 @@ There are three views, picked with the switcher left of the search box:
   order is saved in `labels.json`).
 - **List**: cards in a list with a filter per status.
 
-On the board, **Detailed** cards show the label (or the status, in the label
-view), what a working agent is doing and the start of a waiting agent's last
-reply. **Compact** is one line per feature. The **Show All / Hide Completed**
-toggle hides merged and dropped features. All three are remembered per
-browser. The board reaches the bottom of the window, so its sideways
+On the board, cards show the label (or the status, in the label view), what a
+working agent is doing and the start of a waiting agent's last reply. The
+**Show All / Hide Completed** toggle hides merged and dropped features. Both
+it and the view are remembered per browser. The board reaches the bottom of the window, so its sideways
 scrollbar is always at the bottom.
 
 **Sort** (next to them) orders the cards in every column and the list at once:
