@@ -249,10 +249,14 @@ async function readUsage(force = false) {
     const tok = JSON.parse(fs.readFileSync(path.join(os.homedir(), ".claude", ".credentials.json"), "utf8")).claudeAiOauth?.accessToken;
     if (!tok) return;
     const r = await fetch("https://api.anthropic.com/api/oauth/usage", { headers: { authorization: `Bearer ${tok}`, "anthropic-beta": "oauth-2025-04-20" }, signal: AbortSignal.timeout(10e3) });
-    // Back off as long as it asks, at least a minute. A flat 5 minutes lost
-    // every slot to anything polling the same login each minute (it sends retry-after: 0).
-    if (r.status === 429) { const t = Date.now() + Math.max(60e3, (+r.headers.get("retry-after") || 0) * 1e3); return save({ next: t, backoff: t }); }
-    if (!r.ok) return;
+    // Back off as long as it asks, between 1 and 5 minutes. A flat 5 minutes lost
+    // every slot to anything polling each minute (it often sends retry-after: 0);
+    // honouring a long one uncapped left the rings stale for hours.
+    if (r.status === 429) {
+      const ra = r.headers.get("retry-after"), t = Date.now() + Math.min(5 * 60e3, Math.max(60e3, (+ra || 0) * 1e3));
+      return save({ next: t, backoff: t, last: `429 retry-after ${ra} at ${new Date().toISOString()}` });
+    }
+    if (!r.ok) return save({ next: Date.now() + 55e3, last: `${r.status} at ${new Date().toISOString()}` });
     const j = await r.json();
     // limits[] carries the severity the apps colour by; five_hour and seven_day are the fallback.
     const pick = (kind, old) => {
