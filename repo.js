@@ -969,7 +969,10 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "GET" && action === "chat") return send(res, 200, f.dir ? chat(f) : { messages: [] });
     if (req.method !== "POST") return send(res, 405, {});
     const b = await body(req);
-    fresh(); // whatever this does, the next board shows it
+    // Whatever this does, the next board shows it: cleared now, and again once
+    // it finishes, since a long action (the check in Check and merge) lets
+    // polls re-cache the old state in between.
+    fresh(); res.on("finish", fresh);
     if (action === "reopen") {
       if (!b.title?.trim()) return send(res, 400, { msg: "Needs a title." });
       if (!b.plan && !b.prompt?.trim()) return send(res, 400, { msg: "Needs a prompt to start an agent. Or save it as planned." });
