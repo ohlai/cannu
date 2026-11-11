@@ -32,7 +32,9 @@ that was done.
   file the rings stay grey.
 - Schedule a planned feature to start by itself: at a time, or some minutes
   before the 5-hour or weekly limit resets, so what's left of it isn't
-  wasted. Pick **When** in New feature, or **Schedule** on a planned card.
+  wasted (it starts 30 minutes before). Use the ▾ on **Start agent**, in New
+  feature or on a planned card: Start now, Pick a time (a day and a time,
+  filled in with today and the next hour), or before either limit resets.
   The card and its tile say when it starts. Cannu has to be running to start
   it: if the computer was off or asleep at that time, it doesn't start late by
   itself. The card says it was missed and when, with Start now. A limit's

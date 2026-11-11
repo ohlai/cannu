@@ -53,8 +53,17 @@
   button.second:hover { border-color:var(--mute); }
   textarea, input[type=text], input[type=search] { font:inherit; width:100%; padding:8px 10px; border-radius:7px; border:1px solid var(--line); background:var(--bg); color:var(--fg); }
   textarea { min-height: 70px; resize: vertical; }
-  /* The schedule's time and minutes boxes sit beside a select, so they match it. */
-  input[type=datetime-local], input[type=number] { font:inherit; font-size:13px; padding:7px 10px; border-radius:7px; border:1px solid var(--line); background:var(--bg); color:var(--fg); color-scheme:light dark; /* the calendar icon follows the theme */ }
+  /* Start agent ▾ and its menu. The day and time boxes look like a select; color-scheme lets their icons follow the theme. */
+  .startsplit { display:inline-flex; }
+  .startsplit > :first-child { border-radius:7px 0 0 7px; }
+  .startsplit > .chev { border-radius:0 7px 7px 0; border-left-color:color-mix(in srgb, var(--bg) 35%, var(--fg)); padding:6px 8px; }
+  .startmenu { position:fixed; z-index:50; min-width:290px; background:var(--card); border:1px solid var(--line); border-radius:9px; padding:5px; box-shadow:0 8px 24px rgba(0,0,0,.18); }
+  .startmenu > button { display:flex; width:100%; justify-content:space-between; gap:16px; border:0; background:none; text-align:left; padding:7px 10px; }
+  .startmenu > button:hover { background:var(--bg); }
+  .startmenu small { color:var(--mute); }
+  .startmenu hr { border:0; border-top:1px solid var(--line); margin:4px 0; }
+  .startmenu .pick { padding:4px 10px 8px; gap:6px; flex-wrap:nowrap; }
+  .startmenu input { font:inherit; font-size:13px; padding:6px 8px; border-radius:7px; border:1px solid var(--line); background:var(--bg); color:var(--fg); color-scheme:light dark; }
   .hint { color: var(--mute); font-size:12px; }
   .msg { margin-top:8px; font-size:13px; white-space:pre-wrap; }
   .msg.bad { color: var(--bad); } .msg.good { color: var(--idle); }
@@ -499,13 +508,11 @@
       <textarea id="prompt" class="tall" data-mention placeholder="What you want and why. Saved word for word in the feature's notes. Optional if you're only planning it."></textarea>
       <div class="hint">@ to tag a related feature. The agent reads their notes first.</div>
       <div class="hint" data-tags></div>
-      <div class="field"><label for="newModel">Model</label><select id="newModel"></select></div>
-      <div class="field"><label for="new_swhen">When</label><div class="row" id="newWhen" style="flex-wrap:wrap"></div></div>
-      <div class="banner" id="limitNew" hidden></div>
+      <div class="field"><label for="newModel">Model</label><select id="newModel"></select></div>      <div class="banner" id="limitNew" hidden></div>
     </div>
     <div class="dmsg" id="addMsg"></div>
     <footer class="row"><button data-close title="Keeps what you've typed here for next time, in this browser tab. Nothing is saved to the repo.">Close</button><span class="grow" style="min-width:0"></span>
-      <button class="second" id="addPlan" title="Records it on main without a branch or agent. Start it later from its card.">Save as planned</button><button class="primary" id="add">Start agent</button></footer>
+      <button class="second" id="addPlan" title="Records it on main without a branch or agent. Start it later from its card.">Save as planned</button><span class="startsplit"><button class="primary" id="add">Start agent</button><button class="primary chev" id="addChev" aria-label="Start later" title="Start it later: at a time, or just before a usage limit resets">▾</button></span></footer>
   </div>
 </dialog>
 
@@ -694,19 +701,60 @@ function schedBanner(f) {
   if (!s.missed) return `<div class="meta sched">${esc(schedText(f))}</div>`;
   const what = schedWhat(s);
   return `<div class="banner">Was meant to start at ${resetTime(s.missed)}${what ? ` (${what})` : ""}, but ${s.why ? "couldn't: " + esc(s.why) : "Cannu wasn't running then: the computer was off or asleep"}. It hasn't started, and won't by itself.
-    <div class="row" style="margin-top:8px"><button class="primary" data-act="start">Start now</button><button data-act="sched">Pick a new time</button><button data-act="unschedule">Clear</button></div></div>`;
+    <div class="row" style="margin-top:8px"><button class="primary" data-act="start">Start now</button><button data-act="chev">Pick a new time</button><button data-act="unschedule">Clear</button></div></div>`;
 }
-// The When controls. `attr` names each box (data-field on a card, an id in
-// New feature); `now` adds "Start now" first.
-const schedFields = (v, attr, now) => `<select ${attr("swhen")}>${[...(now ? [["", "Start now"]] : []), ["at", "At a time"], ["session", "Before the 5-hour limit resets"], ["weekly", "Before the weekly limit resets"]].map(([k, t]) => `<option value="${k}" ${v.swhen === k ? "selected" : ""}>${t}</option>`).join("")}</select>
-  <input type="datetime-local" ${attr("sat")} value="${esc(v.sat ?? "")}" ${v.swhen === "at" ? "" : "hidden"}>
-  <label class="row" style="gap:6px" ${v.swhen === "session" || v.swhen === "weekly" ? "" : "hidden"}><input type="number" min="0" step="5" ${attr("smins")} value="${esc(v.smins ?? 30)}" style="width:5.5em"> min before</label>`;
-// What the server takes. The time is sent with its zone, so a server in another zone gets it right.
-const schedBody = (when, at, mins) => !when ? null : when === "at" ? { at: at ? new Date(at).toISOString() : "" } : { before: when, mins: Number(mins) };
-// A datetime-local value for an ISO time, in this browser's zone.
-const localInput = (iso) => { const d = new Date(iso); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); };
-// A card's When boxes: what's typed, else its current schedule, else blank (30 min for a limit).
-const schedVals = (f, s) => { const c = schedOf(f); return { swhen: s.swhen ?? (c?.before || "at"), sat: s.sat ?? (c?.at ? localInput(c.at) : ""), smins: s.smins ?? c?.mins ?? 30 }; };
+
+// Start agent's ▾: start now, pick a time, or just before a limit resets.
+// One menu at a time, floated by the ▾ that opened it and put in its popup
+// (or the page), so the card redrawing underneath doesn't close it.
+// pick() gets "now", { at }, { before, mins } or null (clear).
+const BEFORE_MINS = 30;
+let startMenu = null;
+const closeStartMenu = () => { startMenu?.remove(); startMenu = null; };
+const startSplit = (main, chev) => `<span class="startsplit">${main}<button class="primary chev" ${chev} aria-label="Start later" title="Start it later: at a time, or just before a usage limit resets">▾</button></span>`;
+function openStartMenu(btn, { scheduled, pick }) {
+  closeStartMenu();
+  // A day and time box in this browser's zone: today, and the next whole hour.
+  const local = (d) => { d = new Date(d); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString(); };
+  const next = new Date(); next.setHours(next.getHours() + 1, 0, 0, 0);
+  // When "before it resets" would be, from the usage reading (the server works it out the same way).
+  const before = (k) => {
+    const l = USAGE?.[k];
+    if (!l) return "reset time not known yet";
+    if (!l.resets) return "now: no window running";
+    if (Date.parse(l.resets) <= Date.now()) return "once the next reading is in";
+    return resetTime(new Date(Math.max(Date.now(), Date.parse(l.resets) - BEFORE_MINS * 60e3)));
+  };
+  const m = startMenu = document.createElement("div");
+  m.className = "startmenu";
+  m.innerHTML = `<button data-w="now"><span>Start now</span></button>
+    <button data-w="pick"><span>Pick a time…</span></button>
+    <div class="pick row" hidden><input type="date" aria-label="Day" value="${local(next).slice(0, 10)}" min="${local(new Date()).slice(0, 10)}"><input type="time" aria-label="Time" value="${local(next).slice(11, 16)}"><button class="primary" data-w="at">Set</button></div>
+    <hr>
+    <button data-w="session"><span>Before the 5-hour limit resets</span><small>${before("session")}</small></button>
+    <button data-w="weekly"><span>Before the weekly limit resets</span><small>${before("weekly")}</small></button>
+    ${scheduled ? `<hr><button data-w="clear"><span>Clear schedule</span></button>` : ""}`;
+  (btn.closest("dialog") || document.body).append(m);
+  const r = btn.getBoundingClientRect();
+  m.style.right = innerWidth - r.right + "px";
+  m.style.bottom = innerHeight - r.top + 6 + "px";
+  m.addEventListener("click", (e) => {
+    const w = e.target.closest("[data-w]")?.dataset.w; if (!w) return;
+    if (w === "pick") { m.querySelector(".pick").hidden = false; m.querySelector(".pick input").focus(); return; }
+    let v = w === "now" ? "now" : w === "clear" ? null : { before: w, mins: BEFORE_MINS };
+    if (w === "at") {
+      const [d, t] = m.querySelectorAll(".pick input"), ms = Date.parse(`${d.value}T${t.value}`);
+      if (!ms) return;
+      v = { at: new Date(ms).toISOString() }; // with its zone, so a server elsewhere gets the time you meant
+    }
+    closeStartMenu(); pick(v);
+  });
+  m.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.matches(".pick input")) m.querySelector('[data-w="at"]').click(); });
+}
+// A click anywhere else, or Escape, closes it. Escape doesn't also close the popup under it.
+document.addEventListener("pointerdown", (e) => { if (startMenu && !startMenu.contains(e.target) && !e.target.closest(".startsplit .chev, [data-act=chev]")) closeStartMenu(); }, true);
+document.addEventListener("keydown", (e) => { if (e.key !== "Escape" || !startMenu) return; const d = startMenu.closest("dialog"); if (d) d._keep = true; closeStartMenu(); }, true);
+addEventListener("scroll", (e) => { if (startMenu && !startMenu.contains(e.target)) closeStartMenu(); }, true);
 // Mirrors the server: full at 100%, free again once its reset time passes.
 function limitFull() {
   for (const which of ["session", "weekly"]) {
@@ -932,13 +980,10 @@ function simpleCard(f, inPop) {
       ${mentionHint(s.eprompt ?? f.prompt, f.slug)}${linkedFrom(f, "hint")}
     </div>` : ""}
     ${actions(planned
-      ? `${inPop ? "" : `<button data-act="edit">${s.edit ? "Cancel edit" : "Edit"}</button>`}<button data-act="drop" title="Keep it on record as dropped">Drop</button><button data-act="sched" title="Start it by itself at a time, or just before a usage limit resets so what's left of it isn't wasted">${s.sched ? "Cancel schedule" : schedOf(f) ? "Reschedule" : "Schedule"}</button>`
+      ? `${inPop ? "" : `<button data-act="edit">${s.edit ? "Cancel edit" : "Edit"}</button>`}<button data-act="drop" title="Keep it on record as dropped">Drop</button>`
       : `<button data-act="reopen">${s.reopen ? "Cancel reopen" : "Reopen"}</button>`,
-      planned ? `${s.edit && !inPop ? `<button class="second" data-act="edit-save" title="Save the name and description on main">Save</button>` : ""}<button class="primary" data-act="start" title="Make its branch and start an agent on what it says. ${MAC ? "⌘" : "Ctrl"}+Enter in its boxes starts it.">Start agent${s.edit || inPop ? keysHint(true) : ""}</button>`
+      planned ? `${s.edit && !inPop ? `<button class="second" data-act="edit-save" title="Save the name and description on main">Save</button>` : ""}${startSplit(`<button class="primary" data-act="start" title="Make its branch and start an agent on what it says. ${MAC ? "⌘" : "Ctrl"}+Enter in its boxes starts it.">Start agent${s.edit || inPop ? keysHint(true) : ""}</button>`, 'data-act="chev"')}`
       : leftover ? `<button class="primary" data-act="remove" title="Delete its folder. The unmerged branch is kept, so the work is still in git.">Remove worktree</button>` : "")}
-    ${planned && s.sched ? `<div class="row" style="margin-top:10px; gap:8px; flex-wrap:wrap">${schedFields(schedVals(f, s), (k) => `data-field="${k}"`)}
-      <span class="grow" style="min-width:0"></span>${schedOf(f) ? `<button data-act="unschedule">Clear schedule</button>` : ""}<button class="primary" data-act="sched-save">Save schedule</button></div>
-      <div class="hint">Cannu starts it then if it's running. If the computer is off or asleep at that time, it doesn't start late by itself: the card says it was missed.</div>` : ""}
     ${s.reopen ? `<div style="margin-top:10px; display:grid; gap:8px">
       <div class="hint">A new feature that continues this one. Start agent makes a new branch from current main with a new session, and the agent reads this feature's notes first. Save as planned records it to start later.</div>
       <input type="text" data-field="rtitle" value="${esc(s.rtitle || f.title + " (continued)")}">
@@ -1001,7 +1046,7 @@ function render(features) {
   const ms = live.reduce((a, f) => a + f.usage.ms, 0), cost = live.reduce((a, f) => a + f.usage.cost, 0);
   // The totals go on their own line under the tagline.
   $("#totals").innerHTML = `One branch, folder and Claude session per feature.${ms || cost ? `<br>All features: ${dur(ms)} agent time, ≈$${cost.toFixed(2)} at API prices.` : ""}`;
-  const typing = document.activeElement?.closest?.("#list") && document.activeElement.matches("textarea, input[type=text], input[type=datetime-local], input[type=number]");
+  const typing = document.activeElement?.closest?.("#list") && document.activeElement.matches("textarea, input[type=text]");
   // Filter chips, with how many features each would show.
   const inGroup = (f, g) => g === "all" || kind(f)[0] === g;
   $("#chips").innerHTML = ["all", ...CHIPS].map((g) => `<button data-filter="${g}" title="${KIND_TIPS[g]}" class="${g === filter ? "on" : ""}">${cap(g)}<span class="n">${features.filter((f) => inGroup(f, g)).length}</span></button>`).join("");
@@ -1640,7 +1685,7 @@ function renderPop() {
   // isn't a change to redraw for. Every refresh redrew it, which threw the
   // cursor out of the box you were typing in.
   const typed = Object.fromEntries(TYPED.map((k) => [k, s[k]]));
-  Object.assign(s, { draft: "", etitle: null, eprompt: null, rtitle: "", rprompt: "", sat: null, smins: null });
+  Object.assign(s, { draft: "", etitle: null, eprompt: null, rtitle: "", rprompt: "" });
   const html = (f.worktree ? card(f, true) : simpleCard(f, true)) + "\u0000" + lab;
   Object.assign(s, typed);
   const top = $("#popTop");
@@ -1678,7 +1723,7 @@ function renderPop() {
   const plan = top.querySelector('[data-field="eprompt"]');
   if (plan) fitPlan(plan);
   const back = ta0 && top.querySelector(`[data-field="${ta0.dataset.field}"]`);
-  if (back) { back.focus(); try { [back.selectionStart, back.selectionEnd, back.scrollTop] = sel0; } catch {} } // a time or number box has no selection
+  if (back) { back.focus(); [back.selectionStart, back.selectionEnd, back.scrollTop] = sel0; }
   boxes().forEach((b, i) => { if (tops[i]) b.scrollTop = tops[i]; });
 }
 
@@ -1703,7 +1748,7 @@ document.addEventListener("focusin", (e) => {
   for (const v of [...past.slice(1), now]) { el.select(); document.execCommand(v ? "insertText" : "delete", false, v); }
 });
 
-const TYPED = ["draft", "etitle", "eprompt", "rtitle", "rprompt", "sat", "smins"];
+const TYPED = ["draft", "etitle", "eprompt", "rtitle", "rprompt"];
 // What Ctrl+Enter in each box presses. Plain Enter is never a save.
 const KEYS = { draft: "send", etitle: "start", eprompt: "start", rtitle: "reopen-go", rprompt: "reopen-go" };
 
@@ -1731,9 +1776,7 @@ host.addEventListener("input", (e) => {
   const c = e.target.closest("[data-slug]"); if (!c) return; const s = u(c.dataset.slug);
   if (e.target.dataset.field) s[e.target.dataset.field] = e.target.value;
   if (e.target.closest(".compose")) fitCompose(e.target);
-  if (e.target.dataset.field === "eprompt") fitPlan(e.target);
-  if (e.target.dataset.field === "swhen") render(all); // shows the time box or the minutes box
-});
+  if (e.target.dataset.field === "eprompt") fitPlan(e.target);});
 host.addEventListener("click", onClick);
 // Ctrl+Enter (or Cmd+Enter) does the main thing: send, or start the agent.
 host.addEventListener("keydown", (e) => {
@@ -1858,14 +1901,16 @@ async function onClick(e) {
     Object.assign(s, { edit: false, etitle: null, eprompt: null });
     return true;
   };
-  if (act === "sched") { s.sched = !s.sched; Object.assign(s, { swhen: null, sat: null, smins: null }); return render(all); }
-  if (act === "unschedule") { const r = await api(`${base}/schedule`, { schedule: null }); s.sched = false; return say(r.msg, r.ok ? "" : "bad"); }
-  if (act === "sched-save") {
-    if (!(await saveTyped())) return;
-    const f = all.find((x) => x.slug === slug);
-    const v = schedVals(f, s), r = await api(`${base}/schedule`, { schedule: schedBody(v.swhen, v.sat, v.smins) });
-    if (r.ok) s.sched = false;
-    return say(r.ok ? "Scheduled. It starts by itself when it's due." : r.msg, r.ok ? "good" : "bad");
+  if (act === "unschedule") { const r = await api(`${base}/schedule`, { schedule: null }); return say(r.msg, r.ok ? "" : "bad"); }
+  if (act === "chev") {
+    if (startMenu) return closeStartMenu();
+    return openStartMenu(b, { scheduled: !!schedOf(all.find((x) => x.slug === slug)), pick: async (v) => {
+      // Start now: the card's own Start agent, wherever the card is right now (it may have redrawn).
+      if (v === "now") return $(`[data-slug="${slug}"] [data-act="start"]`)?.click();
+      if (!(await saveTyped())) return;
+      const r = await api(`${base}/schedule`, { schedule: v });
+      say(!r.ok ? r.msg : v ? "Scheduled. It starts by itself when it's due." : r.msg, r.ok ? "good" : "bad");
+    } });
   }
   if (act === "start") {
     if (!(await saveTyped())) return;
@@ -2024,9 +2069,9 @@ async function addFeature(plan) {
   const typed = $("#newLabels [data-newpick]")?.value.replace(/\s+/g, " ").trim(); // typed in the + box but Enter never pressed: still meant
   const title = $("#title").value.trim(), prompt = $("#prompt").value.trim(), model = $("#newModel").value, label = typed || newLabel;
   // Either button keeps a picked schedule: both save it as planned, and it starts when due.
-  const schedule = schedBody($("#new_swhen").value, $("#new_sat").value, $("#new_smins").value);
+  const schedule = newSched;
   if (!title || ((!plan || schedule) && !prompt)) { dlgMsg("#addMsg", schedule ? "Needs a name and what you want, so the agent has something to start on." : plan ? "Needs a name." : "Needs a name and what you want. Or save it as planned.", "bad"); return; }
-  if (schedule && "at" in schedule && !schedule.at) { dlgMsg("#addMsg", "Pick a time to start it.", "bad"); return; }
+  if (schedule?.at && Date.parse(schedule.at) <= Date.now()) { dlgMsg("#addMsg", `${resetTime(schedule.at)} has already passed. Pick a later time from ▾.`, "bad"); return; }
   const keep = { title: $("#title").value, prompt: $("#prompt").value };
   closeModal($("#newDlg"));
   $("#title").value = ""; $("#prompt").value = ""; $("#newModel").value = ""; newLabel = ""; newDraft = {};
@@ -2037,16 +2082,17 @@ async function addFeature(plan) {
     $("#title").value = keep.title; $("#prompt").value = keep.prompt; newDraft = { model }; newLabel = label; saveNew();
     await openNew(); dlgMsg("#addMsg", r.msg, "bad"); return;
   }
-  setWhen(""); // the When boxes were kept for a retry; the next feature starts now unless told otherwise
+  setSched(null); // kept for a retry; the next feature starts now unless told otherwise
   refresh();
 }
-// New feature's When: Start now, or a schedule. With one, the black button says Schedule.
-function setWhen(swhen) {
-  $("#newWhen").innerHTML = schedFields({ swhen }, (k) => `id="new_${k}"`, true);
-  $("#add").firstChild.textContent = swhen ? "Schedule" : "Start agent";
+// New feature's ▾. Start now starts it; anything else is remembered, and the
+// black button then says when, like "Schedule · 9:00 PM".
+let newSched = null;
+function setSched(v) {
+  newSched = v;
+  $("#add").firstChild.textContent = !v ? "Start agent" : `Schedule · ${v.at ? resetTime(v.at) : `before the ${LIMIT_NAME[v.before]} reset`}`;
 }
-setWhen("");
-$("#newWhen").addEventListener("change", (e) => { if (e.target.id === "new_swhen") setWhen(e.target.value); });
+$("#addChev").onclick = (e) => startMenu ? closeStartMenu() : openStartMenu(e.currentTarget, { scheduled: !!newSched, pick: (v) => v === "now" ? (setSched(null), addFeature(false)) : setSched(v) });
 $("#add").onclick = () => addFeature(false);
 $("#addPlan").onclick = () => addFeature(true);
 $("#add").insertAdjacentHTML("beforeend", keysHint(true));
