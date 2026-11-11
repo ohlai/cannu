@@ -1,6 +1,6 @@
 <img src="logo.png" alt="Cannu's logo, a silk moth" width="96">
 
-# Cannu: parallel agent management
+# Cannu: agent board
 
 Cannu runs Claude Code agents in parallel, one per task, on any git repo,
 and shows them all on one board. Node built-ins only, nothing to install.
@@ -203,7 +203,8 @@ comes from its name.
   runs its `seed`, and starts the agent on my prompt in the background.
   **Save as planned** only commits the `feature.md`.
 - **Start agent / Edit / Drop** (planned tasks): start it as above, change
-  what it says, or mark it dropped.
+  its name, description or model, or mark it dropped. Its popup has the same
+  boxes as New task, and closing it saves.
 - **Drop** (building tasks): for a bad idea. Its app stops and it's
   recorded as dropped. Its folder and branch stay until **Remove worktree**,
   which commits anything uncommitted to the branch first and keeps the branch,
@@ -245,7 +246,8 @@ comes from its name.
   every `setup` and `seed` command runs again, so they should be safe to
   repeat. Unfinished setups also re-run when the dashboard starts.
 - **Reopen** (merged or dropped tasks): a new task that continues the
-  old one. **Start agent** makes a new branch from current main and a new
+  old one, with the same boxes as New task (the model starts as the old
+  one's). **Start agent** makes a new branch from current main and a new
   session pointed at the old notes. **Save as planned** records it to start
   later.
 - **@ tagging**: typing @ in a description or a chat message lists matching

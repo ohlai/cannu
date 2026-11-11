@@ -417,7 +417,7 @@
 <main>
   <div class="row" id="top" style="margin-bottom:36px">
     <div class="grow">
-      <div class="brand"><img src="/logo.png?v=2" alt=""><h1>Cannu <span>Agents in parallel, one per task</span></h1></div>
+      <div class="brand"><img src="/logo.png?v=2" alt=""><h1>Cannu <span>Agent board</span></h1></div>
       <p class="sub" style="margin:12px 0 0" id="totals"></p>
     </div>
     <div class="rings" id="rings" tabindex="0" aria-label="Claude usage"></div>
@@ -493,11 +493,8 @@
     <header><h2>New task</h2></header>
     <div class="body">
       <div class="labels" id="newLabels" style="margin-top:0"></div>
-      <input type="text" id="title" placeholder="Task name">
-      <textarea id="prompt" class="tall" data-mention placeholder="What needs doing?"></textarea>
-      <div class="hint">@ to tag a related task. The agent reads their notes first.</div>
-      <div class="hint" data-tags></div>
-      <div class="field"><label for="newModel">Model</label><select id="newModel"></select></div>      <div class="banner" id="limitNew" hidden></div>
+      <div id="newForm" style="display:contents"></div>
+      <div class="banner" id="limitNew" hidden></div>
     </div>
     <div class="dmsg" id="addMsg"></div>
     <footer class="row"><button data-close title="Keeps what you've typed here for next time, in this browser tab. Nothing is saved to the repo.">Close</button><span class="grow" style="min-width:0"></span>
@@ -865,7 +862,15 @@ function shipButtons(f) {
 }
 
 // The same name and description boxes in New task, a planned task and Reopen.
-const TITLE_PH = "Task name", PROMPT_PH = "What needs doing?";
+// The name, description and model boxes: one form for New task, a planned
+// task and Reopen, so their wording and fields can't drift apart. `at(k)`
+// hooks each box up: ids in New task, data-fields on a card.
+function taskForm(at, { title = "", prompt = "", model = "", self = "" } = {}) {
+  return `<input type="text" ${at("title")} placeholder="Task name" value="${esc(title)}">
+    <textarea ${at("prompt")} data-mention${self ? ` data-self="${self}"` : ""} placeholder="What needs doing?">${esc(prompt)}</textarea>
+    ${mentionHint(prompt, self)}
+    <div class="field"><label>Model</label><select ${at("model")} aria-label="Model">${modelOptions(model, true)}</select></div>`;
+}
 // A feature with no branch or agent: planned, dropped, imported from the old
 // board, or merged and its worktree removed.
 function simpleCard(f, inPop) {
@@ -891,10 +896,7 @@ function simpleCard(f, inPop) {
     </div>
     ${planned && !edit && f.prompt ? `<div class="plan md">${md(f.prompt)}</div>` : ""}
     ${edit ? `<div style="margin-top:10px; display:grid; gap:8px">
-      <input type="text" data-field="etitle" placeholder="${TITLE_PH}" value="${esc(s.etitle ?? f.title)}">
-      <textarea data-field="eprompt" data-mention data-self="${f.slug}" placeholder="${PROMPT_PH}">${esc(s.eprompt ?? f.prompt ?? "")}</textarea>
-      ${mentionHint(s.eprompt ?? f.prompt, f.slug)}${linkedFrom(f, "hint")}
-      <div class="field"><label>Model</label><select data-field="emodel">${modelOptions(s.emodel ?? f.model ?? "", true)}</select></div>
+      ${taskForm((k) => `data-field="e${k}"`, { title: s.etitle ?? f.title, prompt: s.eprompt ?? f.prompt ?? "", model: s.emodel ?? f.model ?? "", self: f.slug })}${linkedFrom(f, "hint")}
     </div>` : ""}
     ${actions(planned
       ? `${inPop ? "" : `<button data-act="edit">${s.edit ? "Cancel edit" : "Edit"}</button>`}<button data-act="drop" title="Keep it on record as dropped">Drop</button>`
@@ -903,9 +905,7 @@ function simpleCard(f, inPop) {
       : leftover ? `<button class="primary" data-act="remove" title="Delete its folder. The unmerged branch is kept, so the work is still in git.">Remove worktree</button>` : "")}
     ${s.reopen ? `<div style="margin-top:10px; display:grid; gap:8px">
       <div class="hint">A new task that continues this one. Start agent makes a new branch from current main with a new session, and the agent reads this task's notes first. Save as planned records it to start later.</div>
-      <input type="text" data-field="rtitle" placeholder="${TITLE_PH}" value="${esc(s.rtitle || f.title + " (continued)")}">
-      <textarea data-field="rprompt" data-mention data-self="${f.slug}" placeholder="${PROMPT_PH}">${esc(s.rprompt)}</textarea>
-      ${mentionHint(s.rprompt, f.slug)}
+      ${taskForm((k) => `data-field="r${k}"`, { title: s.rtitle || f.title + " (continued)", prompt: s.rprompt, model: s.rmodel ?? f.model ?? "", self: f.slug })}
       <div class="row"><button class="second" data-act="reopen-plan" title="Records it on main without a branch or agent. Start it later from its card.">Save as planned</button><button class="primary" data-act="reopen-go" title="${MAC ? "⌘" : "Ctrl"}+Enter starts it">Start agent${keysHint(true)}</button></div>
     </div>` : ""}
     ${msgBlock(s)}
@@ -1605,7 +1605,7 @@ function renderPop() {
   // isn't a change to redraw for. Every refresh redrew it, which threw the
   // cursor out of the box you were typing in.
   const typed = Object.fromEntries(TYPED.map((k) => [k, s[k]]));
-  Object.assign(s, { draft: "", etitle: null, eprompt: null, emodel: null, rtitle: "", rprompt: "" });
+  Object.assign(s, { draft: "", etitle: null, eprompt: null, emodel: null, rtitle: "", rprompt: "", rmodel: null });
   const html = (f.worktree ? card(f, true) : simpleCard(f, true)) + "\u0000" + lab;
   Object.assign(s, typed);
   const top = $("#popTop");
@@ -1668,7 +1668,7 @@ document.addEventListener("focusin", (e) => {
   for (const v of [...past.slice(1), now]) { el.select(); document.execCommand(v ? "insertText" : "delete", false, v); }
 });
 
-const TYPED = ["draft", "etitle", "eprompt", "emodel", "rtitle", "rprompt"];
+const TYPED = ["draft", "etitle", "eprompt", "emodel", "rtitle", "rprompt", "rmodel"];
 // What Ctrl+Enter in each box presses. Plain Enter is never a save.
 const KEYS = { draft: "send", etitle: "start", eprompt: "start", rtitle: "reopen-go", rprompt: "reopen-go" };
 
@@ -1864,9 +1864,9 @@ async function onClick(e) {
     const title = (s.rtitle || f.title + " (continued)").trim(), prompt = s.rprompt.trim();
     if (!prompt && !plan) return say("Say what you want changed this time.", "bad");
     say("Creating…");
-    const r = await api(`${base}/reopen`, { title, prompt, plan });
+    const r = await api(`${base}/reopen`, { title, prompt, plan, model: s.rmodel ?? f.model ?? "" });
     if (r.msg) return say(r.msg, "bad");
-    Object.assign(s, { reopen: false, rtitle: "", rprompt: "" });
+    Object.assign(s, { reopen: false, rtitle: "", rprompt: "", rmodel: null });
     if (!plan && popSlug === slug) closeModal($("#popDlg")); // started: back to the board
     return say(plan ? `Saved "${r.title}" as planned.` : `Started ${r.branch}.`, "good");
   }
@@ -1940,6 +1940,7 @@ async function loadDefaults() { const r = await api("/api/defaults"); setModels(
 // popup to look at another feature doesn't lose it. Cleared once it's created.
 const NEW_KEY = "newFeature";
 let newLabel = "";
+$("#newForm").innerHTML = taskForm((k) => ({ title: 'id="title"', prompt: 'id="prompt" class="tall"', model: 'id="newModel"' })[k]);
 const saveNew = () => { try { sessionStorage.setItem(NEW_KEY, JSON.stringify({ title: $("#title").value, prompt: $("#prompt").value, model: $("#newModel").value, label: newLabel })); } catch {} };
 let newDraft = {}; try { newDraft = JSON.parse(sessionStorage.getItem(NEW_KEY)) || {}; } catch {}
 $("#title").value = newDraft.title || ""; $("#prompt").value = newDraft.prompt || ""; newLabel = newDraft.label || "";

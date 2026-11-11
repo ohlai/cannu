@@ -1053,7 +1053,7 @@ const server = http.createServer(async (req, res) => {
       if (!b.title?.trim()) return send(res, 400, { msg: "Needs a title." });
       if (!b.plan && !b.prompt?.trim()) return send(res, 400, { msg: "Needs a prompt to start an agent. Or save it as planned." });
       const prompt = String(b.prompt || "").trim();
-      return send(res, 200, createFeature(b.title.trim(), prompt, { continues: f.slug, refs: mentions(prompt, f.slug), plan: !!b.plan }));
+      return send(res, 200, createFeature(b.title.trim(), prompt, { continues: f.slug, refs: mentions(prompt, f.slug), plan: !!b.plan, model: b.model || "" }));
     }
     // One label per feature, any text. Empty clears it.
     if (action === "label") { setLabel(f, cleanLabel(b.label)); return send(res, 200, loadFeatures().find((x) => x.slug === f.slug)); }
