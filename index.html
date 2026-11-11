@@ -130,6 +130,26 @@
   .compose.multi { padding-bottom:44px; transition-delay:0s; }
   .compose.multi textarea { width:100%; transition-delay:.08s, 0s; }
   .chat .hint { padding:6px 10px 10px; }
+  .chat { position:relative; }
+  .atts { display:flex; flex-wrap:wrap; gap:6px; }
+  /* Files waiting to send float over the bottom of the thread, so the
+     messages keep their full height. */
+  .compose .atts { position:absolute; left:0; bottom:calc(100% + 6px); z-index:2; }
+  .compose .att { box-shadow:0 2px 10px rgba(0,0,0,.18); }
+  .att { position:relative; display:flex; align-items:center; height:56px; border:1px solid var(--line); border-radius:8px; overflow:hidden; background:var(--bg); color:var(--fg); text-decoration:none; }
+  .att:has(img) { border:0; background:none; }
+  .att img { height:56px; max-width:120px; object-fit:cover; display:block; border-radius:8px; }
+  /* A sent message's attachments, above its bubble on the same side. */
+  .atts.sent { align-self:flex-start; justify-content:flex-start; max-width:85%; margin-bottom:-6px; }
+  .atts.sent.me, .atts.sent.dashboard { align-self:flex-end; justify-content:flex-end; }
+  .atts.sent img { height:72px; max-width:160px; object-fit:cover; display:block; border-radius:8px; }
+  .atts.sent .att { height:36px; }
+  .bubble.bare { background:none; padding:0; color:var(--fg); }
+  .bubble.me.bare { text-align:right; }
+  .att .name { padding:0 26px 0 10px; font-size:12px; max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .att button { position:absolute; top:3px; right:3px; width:18px; height:18px; padding:0; border-radius:50%; font-size:10px; line-height:1; display:flex; align-items:center; justify-content:center; }
+  .chat.dragging::after { content:"Drop to attach"; position:absolute; inset:0; z-index:5; display:flex; align-items:center; justify-content:center;
+    border:2px dashed var(--mute); border-radius:8px; background:color-mix(in srgb, var(--bg) 70%, transparent); color:var(--fg); font-weight:600; pointer-events:none; }
   @media (prefers-reduced-motion: reduce) { .compose, .compose textarea { transition:none; } }
   /* The title row looks the same folded or not: everything sits at the top, and the
      details wrap under the title, left of the time and status. */
@@ -774,15 +794,21 @@ function bellBtn(f) {
 // that moves the feature on (in black) on the right.
 const actions = (left, right) => `<div class="row actions">${left}<span class="grow" style="min-width:0"></span>${right}</div>`;
 
+// Files waiting to go with the next message: a thumbnail for an image, the
+// name for anything else, each with an ✕ to take it off.
+const attsHtml = (s) => (s.files || []).map((a, i) => `<span class="att" title="${esc(a.name)}">${a.url ? `<img src="${a.url}" alt="${esc(a.name)}">` : `<span class="name">${esc(a.name)}</span>`}<button data-act="unattach" data-i="${i}" title="Remove" aria-label="Remove ${esc(a.name)}">✕</button></span>`).join("");
+function showAtts(slug) { for (const el of document.querySelectorAll(`[data-slug="${slug}"] .compose .atts`)) el.innerHTML = attsHtml(u(slug)); }
+
 function chatBox(f, s, cls) {
   return `<div class="chat">
       <div class="thread" data-chat></div>
       <div class="compose ${s.multi ? "multi" : ""}">
+        <div class="atts">${attsHtml(s)}</div>
         <textarea data-field="draft" data-mention rows="1" placeholder="Message the agent">${esc(s.draft)}</textarea>
         <button class="primary send" data-act="send" title="${MAC ? "⌘+Enter" : "Ctrl+Enter"} sends">Send${keysHint(true)}</button>
       </div>
       <div class="hint" data-tags>${tagsHtml(s.draft)}</div>
-      <div class="hint">${f.live?.open ? "Its terminal is open. Sending closes that terminal session and carries on here (the conversation is kept). " : f.live?.background || cls === "working" ? "It's mid-turn. Your message waits and goes as soon as this turn ends. " : ""}@ to tag a related task. The agent reads their notes first.</div>
+      <div class="hint">${f.live?.open ? "Its terminal is open. Sending closes that terminal session and carries on here (the conversation is kept). " : f.live?.background || cls === "working" ? "It's mid-turn. Your message waits and goes as soon as this turn ends. " : ""}@ to tag a related task. The agent reads their notes first. Paste or drag in images and files to attach them.</div>
     </div>`;
 }
 
@@ -1037,6 +1063,24 @@ function patchList(html) {
   for (const el of old.values()) el.remove();
 }
 
+// A message's attachments went as paths on their own lines: show those as
+// previews (a thumbnail for an image, the name for anything else) and the rest
+// as text. The previews sit above the message's bubble, not inside it.
+const ATT_LINE = /^\S.*[\\/]attachments[\\/]([a-z0-9-]+)[\\/](\d+-([\w.-]+))$/;
+function bubble(who, text, foot) {
+  const b = msgBody(text);
+  return (b.pics ? `<div class="atts sent ${who}">${b.pics}</div>` : "") + `<div class="bubble ${who}${b.bare ? " bare" : ""}">${b.html}<div class="who">${foot}</div></div>`;
+}
+function msgBody(text) {
+  const lines = text.split("\n"), atts = lines.map((l) => l.trim().match(ATT_LINE)).filter(Boolean);
+  const rest = lines.filter((l) => !ATT_LINE.test(l.trim())).join("\n").trim();
+  const pics = atts.map(([, slug, file, name]) => {
+    const src = `/r/${encodeURIComponent(CUR)}/api/features/${slug}/file?name=${encodeURIComponent(file)}`;
+    return /\.(png|jpe?g|gif|webp)$/i.test(name) ? `<a href="${src}" target="_blank"><img src="${src}" alt="${esc(name)}"></a>` : `<a class="att" href="${src}"><span class="name">${esc(name)}</span></a>`;
+  }).join("");
+  return { pics, html: rest ? `<div class="md">${md(rest)}</div>` : "", bare: !rest && atts.length > 0 };
+}
+
 // The conversation, newest at the bottom. Reloaded when the agent's state
 // changes; stays scrolled to the bottom unless you've scrolled up.
 async function loadChat(slug) {
@@ -1049,10 +1093,8 @@ async function loadChat(slug) {
   const first = !el.dataset.loaded;
   const following = first || atNewest(el);
   const count = el.children.length, y = el.scrollTop;
-  el.innerHTML = r.messages?.length ? r.messages.map((m) => `<div class="bubble ${m.who}">
-      <div class="md">${md(m.who === "dashboard" ? m.text.replace(/^\[Added by the dashboard, not my words\]\s*/, "") : m.text)}</div>
-      <div class="who">${{ me: "You", agent: "Agent", dashboard: "Sent by the dashboard" }[m.who]}${m.queued ? " · waiting to send" : m.sending ? " · sending…" : m.at ? " · " + new Date(m.at).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : ""}</div>
-    </div>`).join("") : `<div class="hint">${r.saved === false ? "This session has no saved conversation yet." : "No messages yet."}</div>`;
+  el.innerHTML = r.messages?.length ? r.messages.map((m) => bubble(m.who, m.who === "dashboard" ? m.text.replace(/^\[Added by the dashboard, not my words\]\s*/, "") : m.text,
+      `${{ me: "You", agent: "Agent", dashboard: "Sent by the dashboard" }[m.who]}${m.queued ? " · waiting to send" : m.sending ? " · sending…" : m.at ? " · " + new Date(m.at).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : ""}`)).join("") : `<div class="hint">${r.saved === false ? "This session has no saved conversation yet." : "No messages yet."}</div>`;
   el.dataset.loaded = "1";
   // Still sending: no state change marks it landing, so reload on every refresh until it has.
   el.dataset.at = r.messages?.some((m) => m.sending) ? "" : String(f?.st?.at) + (f?.st?.queue?.length || 0);
@@ -1690,6 +1732,18 @@ function markShortErrors() {
     e.title = short ? "" : "Click to show more";
   }
 }
+async function attach(ta, files) {
+  const slug = ta.closest("[data-slug]").dataset.slug, s = u(slug);
+  for (const file of [...files]) {
+    const name = file.name || "pasted.png";
+    try {
+      const r = await (await fetch(`/r/${encodeURIComponent(CUR)}/api/features/${slug}/attach?name=${encodeURIComponent(name)}`, { method: "POST", body: file })).json();
+      if (!r.path) throw 0;
+      (s.files ||= []).push({ path: r.path, name, url: file.type.startsWith("image/") ? URL.createObjectURL(file) : "" });
+      showAtts(slug);
+    } catch { s.msg = `Couldn't attach ${name}.`; s.cls = "bad"; render(all); }
+  }
+}
 async function refresh() { try { const [fs, ls] = await Promise.all([api("/api/features"), api("/api/labels")]); LABELS = ls; render(fs); markShortErrors(); renderUsage(); } catch {} }
 
 for (const host of [$("#list"), $("#popDlg")]) {
@@ -1700,6 +1754,23 @@ host.addEventListener("input", (e) => {
   if (e.target.dataset.field === "eprompt") fitPlan(e.target);
 });
 host.addEventListener("click", onClick);
+// Files pasted or dropped into a chat are saved by the server, and their paths
+// go into the message for the agent to read. Plain text pastes as usual.
+host.addEventListener("paste", (e) => { if (e.target.closest(".compose") && e.clipboardData.files.length) { e.preventDefault(); attach(e.target, e.clipboardData.files); } });
+// While files are dragged over a chat it shows a dashed drop zone. dragleave
+// also fires moving between the chat's own children, so the zone clears a
+// moment after the last dragover instead.
+let dragOff;
+host.addEventListener("dragover", (e) => {
+  const c = e.target.closest(".chat"); if (!c || !e.dataTransfer.types.includes("Files")) return;
+  e.preventDefault(); c.classList.add("dragging");
+  clearTimeout(dragOff); dragOff = setTimeout(() => c.classList.remove("dragging"), 150);
+});
+host.addEventListener("drop", (e) => {
+  const c = e.target.closest(".chat"); if (!c || !e.dataTransfer.files.length) return;
+  e.preventDefault(); c.classList.remove("dragging");
+  attach(c.querySelector(".compose textarea"), e.dataTransfer.files);
+});
 // A planned feature's model, saved as soon as it's picked.
 host.addEventListener("change", async (e) => {
   if (!e.target.matches("[data-model]")) return;
@@ -1798,9 +1869,12 @@ async function onClick(e) {
   if (act === "unstick" || act === "stopturn") { const r = await api(`${base}/${act}`, { pid: b.dataset.pid }); return say(r.msg, r.ok ? "good" : "bad"); }
   if (act === "continue") { const r = await api(`${base}/continue`, {}); return say(r.msg, r.ok ? "good" : "bad"); }
   if (act === "resume-bg" || act === "resume-term") { const r = await api(`${base}/resume`, { where: act === "resume-bg" ? "background" : "terminal" }); return say(r.msg, r.ok ? "good" : "bad"); }
+  if (act === "unattach") { s.files.splice(+b.dataset.i, 1); return showAtts(slug); }
   if (act === "send") {
-    const text = s.draft.trim(); if (!text) return;
-    s.draft = "";
+    // Attached files go as their paths after the message; the agent reads them from there.
+    const files = s.files || [], typed = s.draft.trim();
+    const text = [typed, ...files.map((a) => a.path)].filter(Boolean).join("\n"); if (!text) return;
+    s.draft = ""; s.files = []; showAtts(slug);
     // Ctrl+Enter sends with the cursor still in the box, which stops the card
     // redrawing. Step out, let it redraw, then put the cursor back.
     const inBox = document.activeElement?.closest?.(".compose");
@@ -1809,15 +1883,16 @@ async function onClick(e) {
     // Show the message now instead of after the server answers and the chat
     // reloads. The reload replaces this bubble; a failure removes it.
     const chat = $(`[data-slug="${slug}"] [data-chat]`), box = $(`[data-slug="${slug}"] .compose textarea`);
-    let bubble;
+    let sent = [];
     if (chat) {
       chat.querySelector(".hint")?.remove();
-      chat.insertAdjacentHTML("beforeend", `<div class="bubble me"><div class="md">${md(text)}</div><div class="who">You · sending…</div></div>`);
-      bubble = chat.lastElementChild; chat.scrollTop = chat.scrollHeight;
+      const n = chat.children.length;
+      chat.insertAdjacentHTML("beforeend", bubble("me", text, "You · sending…"));
+      sent = [...chat.children].slice(n); chat.scrollTop = chat.scrollHeight;
     }
     if (box) { box.value = ""; fitCompose(box); }
     const r = await api(`${base}/feedback`, { text });
-    if (r.msg) { bubble?.remove(); s.draft = text; if (box) { box.value = text; fitCompose(box); } return after(r.msg, "bad"); }
+    if (r.msg) { sent.forEach((x) => x.remove()); s.draft = typed; s.files = files; showAtts(slug); if (box) { box.value = typed; fitCompose(box); } return after(r.msg, "bad"); }
     return after(r.sent ? "" : { "busy-terminal": "Waiting: the agent is mid-turn in its terminal. Your message goes as soon as it finishes.", busy: "Waiting: the agent is mid-turn. Your message goes as soon as it finishes.", "not-started": "Waiting: the agent hasn't started yet. Your message goes once it has.", limited: "Waiting: your Claude usage limit is full. Your message goes as soon as it resets." }[r.why] || "");
   }
   if (act === "start") {

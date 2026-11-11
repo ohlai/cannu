@@ -216,7 +216,10 @@ comes from its name.
   as soon as the turn ends. If the session is open and idle in a terminal,
   sending closes that terminal session first, since one session can't run in
   two places. The conversation is kept, so Open session picks it back up.
-  Anything a background turn wasn't allowed to do is listed in red.
+  Anything a background turn wasn't allowed to do is listed in red. Paste or
+  drag images and files into the chat: each is saved under the state folder's
+  `attachments/<slug>/` (outside git) and its path goes into the message for
+  the agent to read.
 - **Open session**: the same session in a terminal, for watching it live or
   approving something. On Windows it opens a Windows Terminal tab. On Linux,
   macOS or Docker it gives you the command to run and copies it. Closing the

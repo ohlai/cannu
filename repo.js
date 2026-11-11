@@ -9,7 +9,7 @@ import crypto from "node:crypto";
 import os from "node:os";
 import { spawn, execFile, execFileSync } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
-import { CLAUDE_SETTINGS, META, APP, WORKTREES, STATE, FEATURES_DIR, REPO_FILE, MAIN, NOTES, COMMIT_NOTES, notesDir, repo, repoRaw, BUILT_IN, MODELS, defaults, fill, MD_KEYS, config, loadFeatures, saveRuntime, featureMd, readState, writeState, stamp, claudeBaseArgs, liveStatus, killTree, AUTO, resumeText, FEEDBACK, forget, watchUsage, fullLimit, refreshUsage } from "./lib.js";
+import { CLAUDE_SETTINGS, META, APP, WORKTREES, STATE, FEATURES_DIR, REPO_FILE, MAIN, NOTES, COMMIT_NOTES, notesDir, repo, repoRaw, BUILT_IN, MODELS, defaults, fill, MD_KEYS, config, loadFeatures, saveRuntime, featureMd, readState, writeState, stamp, claudeBaseArgs, liveStatus, killTree, AUTO, resumeText, FEEDBACK, ATTACH, forget, watchUsage, fullLimit, refreshUsage } from "./lib.js";
 watchUsage();
 
 const WIN = process.platform === "win32";
@@ -1043,7 +1043,26 @@ const server = http.createServer(async (req, res) => {
     const action = m[2];
     if (req.method === "GET" && action === "notes") return send(res, 200, notes(f));
     if (req.method === "GET" && action === "chat") return send(res, 200, f.dir ? chat(f) : { messages: [] });
+    // An attached file, for the chat to show. Only images get their own type;
+    // anything else (svg included, which could carry script) downloads.
+    if (req.method === "GET" && action === "file") {
+      const file = path.join(ATTACH, f.slug, path.basename(url.searchParams.get("name") || ""));
+      if (!fs.existsSync(file)) return send(res, 404, {});
+      const type = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp" }[path.extname(file).slice(1).toLowerCase()];
+      res.writeHead(200, { "content-type": type || "application/octet-stream", "cache-control": "max-age=86400", ...(type ? {} : { "content-disposition": "attachment" }) });
+      return fs.createReadStream(file).pipe(res);
+    }
     if (req.method !== "POST") return send(res, 405, {});
+    // A file pasted or dropped into the chat: the raw bytes, saved outside the
+    // worktree so it never lands in git. The page puts its path in the message.
+    if (action === "attach") {
+      const dir = path.join(ATTACH, f.slug); fs.mkdirSync(dir, { recursive: true });
+      const name = (url.searchParams.get("name") || "file").replace(/[^\w.-]+/g, "_").slice(-80);
+      const file = path.join(dir, `${Date.now()}-${name}`);
+      const chunks = []; for await (const c of req) chunks.push(c);
+      fs.writeFileSync(file, Buffer.concat(chunks));
+      return send(res, 200, { path: file });
+    }
     const b = await body(req);
     // Whatever this does, the next board shows it: cleared now, and again once
     // it finishes, since a long action (the check in Check and merge) lets
