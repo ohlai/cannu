@@ -371,6 +371,10 @@
   /* The day and time boxes look like the app's other boxes; color-scheme lets their icons follow the theme. */
   .startmenu .pick { display:flex; gap:6px; align-items:center; padding:2px 9px 8px; }
   .startmenu .pick input { font:inherit; font-size:13px; padding:6px 8px; border-radius:7px; border:1px solid var(--line); background:var(--bg); color:var(--fg); color-scheme:light dark; }
+  /* Typed, not picked: no calendar or clock button in the day and time boxes. */
+  .startmenu .pick input::-webkit-calendar-picker-indicator { display:none; }
+  .startmenu .pick input[type=number] { width:5.5em; }
+  .startmenu .pick span { color:var(--mute); font-size:13px; margin-right:auto; }
   .startmenu .pick button, .startmenu .pick button:hover { width:auto; padding:6px 12px; border-radius:7px; background:var(--fg); color:var(--bg); border:1px solid var(--fg); }
   /* Add repo: how to work on the picked repo, i.e. its cannu.json. */
   /* A set height, not floor to ceiling, that doesn't jump when a repo is picked: the body scrolls instead. */
@@ -712,50 +716,73 @@ function schedBanner(f) {
 // opens upward from it. One at a time: menuOpen is the slug of the card it's
 // on, or "new" for New feature. The 2s refresh waits while it's open, so a
 // redraw can't shut it or wipe a half-typed time.
-const BEFORE_MINS = 30;
 let menuOpen = null;
 const CHEV = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>`;
+// How many minutes before each limit's reset to start, remembered in this
+// browser for each limit. Until a limit has its own, it takes the other's, so
+// the first one you set fills in both.
+const beforeMins = (k) => { const b = store.get("beforeMins", {}); return b[k] ?? b[k === "session" ? "weekly" : "session"] ?? 30; };
+const saveBeforeMins = (k, n) => store.set("beforeMins", { ...store.get("beforeMins", {}), [k]: n });
+// When that would be, from the usage reading (the server works it out the same way).
+function beforeAt(k, mins) {
+  const l = USAGE?.[k];
+  if (!l) return "not known yet";
+  if (!l.resets) return "now";
+  if (Date.parse(l.resets) <= Date.now()) return "after the next reading";
+  return resetTime(new Date(Math.max(Date.now(), Date.parse(l.resets) - mins * 60e3)));
+}
 function startMenuHtml(scheduled) {
   // The day and time boxes, in this browser's zone: today, and the next whole hour.
   const local = (d) => { d = new Date(d); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString(); };
   const next = new Date(); next.setHours(next.getHours() + 1, 0, 0, 0);
-  // When "before it resets" would be, from the usage reading (the server works it out the same way).
-  const before = (k) => {
-    const l = USAGE?.[k];
-    if (!l) return "not known yet";
-    if (!l.resets) return "now";
-    if (Date.parse(l.resets) <= Date.now()) return "after the next reading";
-    return resetTime(new Date(Math.max(Date.now(), Date.parse(l.resets) - BEFORE_MINS * 60e3)));
-  };
+  const limit = (k, name) => `<button data-w="${k}">Before the ${name} limit resets<small>${beforeAt(k, beforeMins(k))}</small></button>
+    <div class="pick" data-for="${k}" hidden><input type="number" min="0" max="1440" step="5" value="${beforeMins(k)}" aria-label="Minutes before the ${name} limit resets"><span>min before</span><button class="primary set" data-w="before" data-k="${k}">Set</button></div>`;
   return `<div class="repomenu startmenu">
     <button data-w="now">Start now</button>
     <button data-w="pick">Pick a time…</button>
-    <div class="pick" hidden><input type="date" aria-label="Day" value="${local(next).slice(0, 10)}" min="${local(new Date()).slice(0, 10)}"><input type="time" aria-label="Time" value="${local(next).slice(11, 16)}"><button class="primary" data-w="at">Set</button></div>
+    <div class="pick" data-for="at" hidden><input type="date" aria-label="Day" value="${local(next).slice(0, 10)}" min="${local(new Date()).slice(0, 10)}"><input type="time" aria-label="Time" value="${local(next).slice(11, 16)}"><button class="primary set" data-w="at">Set</button></div>
     <hr>
-    <button data-w="session">Before the 5-hour limit resets<small>${before("session")}</small></button>
-    <button data-w="weekly">Before the weekly limit resets<small>${before("weekly")}</small></button>
+    ${limit("session", "5-hour")}
+    ${limit("weekly", "weekly")}
     ${scheduled ? `<hr><button data-w="clear">Clear schedule</button>` : ""}</div>`;
 }
 // The black button with a ▾ beside it. key is what menuOpen is set to while its menu is open.
 const startSplit = (main, key, scheduled) => `<span class="startsplit">${main}<button class="primary startchev" data-chev="${key}" aria-label="Start later" aria-expanded="${menuOpen === key}" title="Start it later: at a time, or just before a usage limit resets">${CHEV}</button>${menuOpen === key ? startMenuHtml(scheduled) : ""}</span>`;
 const closeMenu = () => { menuOpen = null; for (const m of document.querySelectorAll(".startmenu")) { m.closest(".startsplit")?.querySelector(".startchev")?.setAttribute("aria-expanded", "false"); m.remove(); } };
 // A click on a menu item: "now", { at }, { before, mins }, null (clear), or
-// undefined for nothing to do yet (Pick a time… only opens the boxes).
+// undefined for nothing to do yet (Pick a time… and the two limits only open their boxes).
 function menuChoice(b) {
   const w = b.dataset.w, m = b.closest(".startmenu");
-  if (w === "pick") { const p = m.querySelector(".pick"); p.hidden = !p.hidden; if (!p.hidden) p.querySelector("input").focus(); return undefined; }
+  const row = { pick: "at", session: "session", weekly: "weekly" }[w];
+  if (row) {
+    const p = m.querySelector(`.pick[data-for="${row}"]`);
+    p.hidden = !p.hidden;
+    if (!p.hidden) { const i = p.querySelector("input"); i.focus(); if (i.type === "number") i.select(); }
+    return undefined;
+  }
   if (w === "now") return "now";
   if (w === "clear") return null;
-  if (w !== "at") return { before: w, mins: BEFORE_MINS };
-  const [d, t] = m.querySelectorAll(".pick input"), ms = Date.parse(`${d.value}T${t.value}`);
+  if (w === "before") {
+    const k = b.dataset.k, n = Math.round(Number(b.closest(".pick").querySelector("input").value));
+    if (!(n >= 0)) return undefined;
+    saveBeforeMins(k, n);
+    return { before: k, mins: n };
+  }
+  const [d, t] = m.querySelectorAll('.pick[data-for="at"] input'), ms = Date.parse(`${d.value}T${t.value}`);
   return ms ? { at: new Date(ms).toISOString() } : undefined; // with its zone, so a server elsewhere gets the time you meant
 }
+// Typing the minutes updates the time shown beside that limit.
+document.addEventListener("input", (e) => {
+  const p = e.target.closest(".startmenu .pick[data-for=session], .startmenu .pick[data-for=weekly]"); if (!p) return;
+  const n = Number(e.target.value);
+  p.closest(".startmenu").querySelector(`[data-w="${p.dataset.for}"] small`).textContent = n >= 0 ? beforeAt(p.dataset.for, n) : "";
+});
 // A click anywhere else, or Escape, closes it. Escape doesn't also close the popup under it.
 document.addEventListener("pointerdown", (e) => { if (menuOpen && !e.target.closest(".startmenu, [data-chev]")) closeMenu(); }, true);
 document.addEventListener("keydown", (e) => {
   if (!menuOpen) return;
   if (e.key === "Escape") { const d = document.querySelector(".startmenu")?.closest("dialog"); if (d) d._keep = true; closeMenu(); }
-  else if (e.key === "Enter" && e.target.matches(".startmenu .pick input")) { e.preventDefault(); e.target.closest(".startmenu").querySelector('[data-w="at"]').click(); }
+  else if (e.key === "Enter" && e.target.matches(".startmenu .pick input")) { e.preventDefault(); e.target.closest(".pick").querySelector(".set").click(); }
 }, true);
 // Mirrors the server: full at 100%, free again once its reset time passes.
 function limitFull() {
@@ -1908,7 +1935,7 @@ async function onClick(e) {
   if (act === "unschedule") { const r = await api(`${base}/schedule`, { schedule: null }); return say(r.msg, r.ok ? "" : "bad"); }
   if (act === "chev") { menuOpen = menuOpen === slug ? null : slug; return render(all); }
   // The missed banner: the same menu, with the day and time boxes already open.
-  if (act === "newtime") { menuOpen = slug; render(all); const p = $(".startmenu .pick"); if (p) { p.hidden = false; p.querySelector("input").focus(); } return; }
+  if (act === "newtime") { menuOpen = slug; render(all); const p = $('.startmenu .pick[data-for="at"]'); if (p) { p.hidden = false; p.querySelector("input").focus(); } return; }
   if (act === "menu") {
     const v = menuChoice(b); if (v === undefined) return;
     closeMenu();
@@ -2095,7 +2122,7 @@ async function addFeature(plan) {
 let newSched = null;
 function setSched(v) { newSched = v; drawNewStart(); }
 function drawNewStart() {
-  const label = !newSched ? "Start agent" : `Schedule · ${newSched.at ? resetTime(newSched.at) : `before the ${LIMIT_NAME[newSched.before]} reset`}`;
+  const label = !newSched ? "Start agent" : `Schedule · ${newSched.at ? resetTime(newSched.at) : `${newSched.mins} min before the ${LIMIT_NAME[newSched.before]} reset`}`;
   $("#newStart").innerHTML = startSplit(`<button class="primary" id="add" title="${MAC ? "⌘" : "Ctrl"}+Enter ${newSched ? "schedules" : "starts"} it">${esc(label)}${keysHint(true)}</button>`, "new", !!newSched);
 }
 drawNewStart();
