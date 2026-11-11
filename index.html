@@ -363,9 +363,9 @@
      these buttons sit at the bottom of a card or popup. After .repomenu, so these win. */
   .startsplit { position:relative; display:inline-flex; }
   .startsplit > .primary:first-child { border-top-right-radius:0; border-bottom-right-radius:0; }
-  .startsplit > .chev { display:inline-flex; align-items:center; padding:0 7px; border-top-left-radius:0; border-bottom-left-radius:0; border-left-color:color-mix(in srgb, var(--bg) 30%, var(--fg)); }
-  .startsplit > .chev svg { width:12px; height:12px; fill:none; stroke:currentColor; stroke-width:2.5; transition:transform .15s; }
-  .startsplit > .chev[aria-expanded="true"] svg { transform:rotate(180deg); }
+  .startsplit > .startchev { display:inline-flex; align-items:center; padding:0 7px; border-top-left-radius:0; border-bottom-left-radius:0; border-left-color:color-mix(in srgb, var(--bg) 30%, var(--fg)); }
+  .startsplit > .startchev svg { width:12px; height:12px; fill:none; stroke:currentColor; stroke-width:2.5; transition:transform .15s; }
+  .startsplit > .startchev[aria-expanded="true"] svg { transform:rotate(180deg); }
   .startmenu { top:auto; bottom:calc(100% + 6px); right:0; width:max-content; max-width:none; text-align:left; font-weight:400; }
   .startmenu button small { max-width:none; direction:ltr; }
   /* The day and time boxes look like the app's other boxes; color-scheme lets their icons follow the theme. */
@@ -737,8 +737,8 @@ function startMenuHtml(scheduled) {
     ${scheduled ? `<hr><button data-w="clear">Clear schedule</button>` : ""}</div>`;
 }
 // The black button with a ▾ beside it. key is what menuOpen is set to while its menu is open.
-const startSplit = (main, key, scheduled) => `<span class="startsplit">${main}<button class="primary chev" data-chev="${key}" aria-label="Start later" aria-expanded="${menuOpen === key}" title="Start it later: at a time, or just before a usage limit resets">${CHEV}</button>${menuOpen === key ? startMenuHtml(scheduled) : ""}</span>`;
-const closeMenu = () => { menuOpen = null; for (const m of document.querySelectorAll(".startmenu")) { m.closest(".startsplit")?.querySelector(".chev")?.setAttribute("aria-expanded", "false"); m.remove(); } };
+const startSplit = (main, key, scheduled) => `<span class="startsplit">${main}<button class="primary startchev" data-chev="${key}" aria-label="Start later" aria-expanded="${menuOpen === key}" title="Start it later: at a time, or just before a usage limit resets">${CHEV}</button>${menuOpen === key ? startMenuHtml(scheduled) : ""}</span>`;
+const closeMenu = () => { menuOpen = null; for (const m of document.querySelectorAll(".startmenu")) { m.closest(".startsplit")?.querySelector(".startchev")?.setAttribute("aria-expanded", "false"); m.remove(); } };
 // A click on a menu item: "now", { at }, { before, mins }, null (clear), or
 // undefined for nothing to do yet (Pick a time… only opens the boxes).
 function menuChoice(b) {
