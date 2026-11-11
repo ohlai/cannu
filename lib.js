@@ -234,16 +234,21 @@ export function liveStatus(st, running = false) {
 // usage is just unknown and nothing is held. Refreshed every minute.
 // Every Cannu process on this machine (the dashboard, each repo, each feature's
 // own copy) shares one reading through USAGE_FILE: one fetch a minute between
-// them all, a rate limit backs them all off (retry-after, at least 1 min), and a restart shows
+// them all, a rate limit backs them all off (retry-after, 1 to 5 min), and a restart shows
 // the last reading straight away. Polling separately got the endpoint to
 // refuse them all, and a restarted one then had nothing.
+// Processes outlive merges (nothing restarts them, feature apps are detached),
+// so the file also gets written by older code: never wait more than 5 min past
+// the last write, whatever wait it asks for. Feature app copies only read it:
+// the endpoint's limit is shared with Claude Code itself, so fewer callers.
 const USAGE_FILE = path.join(os.tmpdir(), "cannu-usage.json");
 let usageNow = null;
 async function readUsage(force = false) {
-  let c = {};
-  try { c = JSON.parse(fs.readFileSync(USAGE_FILE, "utf8")); } catch {}
+  let c = {}, wrote = 0;
+  try { c = JSON.parse(fs.readFileSync(USAGE_FILE, "utf8")); wrote = fs.statSync(USAGE_FILE).mtimeMs; } catch {}
   if (c.usage) usageNow = c.usage;
-  if (Date.now() < (force ? c.backoff || 0 : c.next || 0)) return;
+  if (process.env.FEATURE_SLUG) return;
+  if (Date.now() < Math.min(force ? c.backoff || 0 : c.next || 0, wrote + 5 * 60e3)) return;
   const save = (o) => { try { fs.writeFileSync(USAGE_FILE, JSON.stringify({ usage: usageNow, ...o })); } catch {} };
   save({ next: Date.now() + 55e3 }); // claimed: the others wait for this fetch
   try {
