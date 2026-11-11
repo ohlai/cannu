@@ -138,12 +138,14 @@
   .compose .att { box-shadow:0 2px 10px rgba(0,0,0,.18); }
   .att { position:relative; display:flex; align-items:center; height:56px; border:1px solid var(--line); border-radius:8px; overflow:hidden; background:var(--bg); color:var(--fg); text-decoration:none; }
   .att:has(img) { border:0; background:none; }
-  .att img, .bubble .atts img { height:56px; max-width:120px; object-fit:cover; display:block; border-radius:8px; }
-  .bubble .atts { margin:2px 0 4px; justify-content:flex-end; }
-  .bubble.agent .atts { justify-content:flex-start; }
+  .att img { height:56px; max-width:120px; object-fit:cover; display:block; border-radius:8px; }
+  /* A sent message's attachments, above its bubble on the same side. */
+  .atts.sent { align-self:flex-start; justify-content:flex-start; max-width:85%; margin-bottom:-6px; }
+  .atts.sent.me, .atts.sent.dashboard { align-self:flex-end; justify-content:flex-end; }
+  .atts.sent img { height:72px; max-width:160px; object-fit:cover; display:block; border-radius:8px; }
+  .atts.sent .att { height:36px; }
   .bubble.bare { background:none; padding:0; color:var(--fg); }
   .bubble.me.bare { text-align:right; }
-  .bubble .att { height:36px; }
   .att .name { padding:0 26px 0 10px; font-size:12px; max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .att button { position:absolute; top:3px; right:3px; width:18px; height:18px; padding:0; border-radius:50%; font-size:10px; line-height:1; display:flex; align-items:center; justify-content:center; }
   .chat.dragging::after { content:"Drop to attach"; position:absolute; inset:0; z-index:5; display:flex; align-items:center; justify-content:center;
@@ -1059,8 +1061,12 @@ function patchList(html) {
 
 // A message's attachments went as paths on their own lines: show those as
 // previews (a thumbnail for an image, the name for anything else) and the rest
-// as text. A message of only images has no bubble round it.
+// as text. The previews sit above the message's bubble, not inside it.
 const ATT_LINE = /^\S.*[\\/]attachments[\\/]([a-z0-9-]+)[\\/](\d+-([\w.-]+))$/;
+function bubble(who, text, foot) {
+  const b = msgBody(text);
+  return (b.pics ? `<div class="atts sent ${who}">${b.pics}</div>` : "") + `<div class="bubble ${who}${b.bare ? " bare" : ""}">${b.html}<div class="who">${foot}</div></div>`;
+}
 function msgBody(text) {
   const lines = text.split("\n"), atts = lines.map((l) => l.trim().match(ATT_LINE)).filter(Boolean);
   const rest = lines.filter((l) => !ATT_LINE.test(l.trim())).join("\n").trim();
@@ -1068,7 +1074,7 @@ function msgBody(text) {
     const src = `/r/${encodeURIComponent(CUR)}/api/features/${slug}/file?name=${encodeURIComponent(file)}`;
     return /\.(png|jpe?g|gif|webp)$/i.test(name) ? `<a href="${src}" target="_blank"><img src="${src}" alt="${esc(name)}"></a>` : `<a class="att" href="${src}"><span class="name">${esc(name)}</span></a>`;
   }).join("");
-  return { html: (pics ? `<div class="atts">${pics}</div>` : "") + (rest ? `<div class="md">${md(rest)}</div>` : ""), bare: !rest && atts.length > 0 };
+  return { pics, html: rest ? `<div class="md">${md(rest)}</div>` : "", bare: !rest && atts.length > 0 };
 }
 
 // The conversation, newest at the bottom. Reloaded when the agent's state
@@ -1083,10 +1089,8 @@ async function loadChat(slug) {
   const first = !el.dataset.loaded;
   const following = first || atNewest(el);
   const count = el.children.length, y = el.scrollTop;
-  el.innerHTML = r.messages?.length ? r.messages.map((m) => { const b = msgBody(m.who === "dashboard" ? m.text.replace(/^\[Added by the dashboard, not my words\]\s*/, "") : m.text); return `<div class="bubble ${m.who}${b.bare ? " bare" : ""}">
-      ${b.html}
-      <div class="who">${{ me: "You", agent: "Agent", dashboard: "Sent by the dashboard" }[m.who]}${m.queued ? " · waiting to send" : m.sending ? " · sending…" : m.at ? " · " + new Date(m.at).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : ""}</div>
-    </div>`; }).join("") : `<div class="hint">${r.saved === false ? "This session has no saved conversation yet." : "No messages yet."}</div>`;
+  el.innerHTML = r.messages?.length ? r.messages.map((m) => bubble(m.who, m.who === "dashboard" ? m.text.replace(/^\[Added by the dashboard, not my words\]\s*/, "") : m.text,
+      `${{ me: "You", agent: "Agent", dashboard: "Sent by the dashboard" }[m.who]}${m.queued ? " · waiting to send" : m.sending ? " · sending…" : m.at ? " · " + new Date(m.at).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : ""}`)).join("") : `<div class="hint">${r.saved === false ? "This session has no saved conversation yet." : "No messages yet."}</div>`;
   el.dataset.loaded = "1";
   // Still sending: no state change marks it landing, so reload on every refresh until it has.
   el.dataset.at = r.messages?.some((m) => m.sending) ? "" : String(f?.st?.at) + (f?.st?.queue?.length || 0);
@@ -1863,16 +1867,16 @@ async function onClick(e) {
     // Show the message now instead of after the server answers and the chat
     // reloads. The reload replaces this bubble; a failure removes it.
     const chat = $(`[data-slug="${slug}"] [data-chat]`), box = $(`[data-slug="${slug}"] .compose textarea`);
-    let bubble;
+    let sent = [];
     if (chat) {
       chat.querySelector(".hint")?.remove();
-      const mb = msgBody(text);
-      chat.insertAdjacentHTML("beforeend", `<div class="bubble me${mb.bare ? " bare" : ""}">${mb.html}<div class="who">You · sending…</div></div>`);
-      bubble = chat.lastElementChild; chat.scrollTop = chat.scrollHeight;
+      const n = chat.children.length;
+      chat.insertAdjacentHTML("beforeend", bubble("me", text, "You · sending…"));
+      sent = [...chat.children].slice(n); chat.scrollTop = chat.scrollHeight;
     }
     if (box) { box.value = ""; fitCompose(box); }
     const r = await api(`${base}/feedback`, { text });
-    if (r.msg) { bubble?.remove(); s.draft = typed; s.files = files; showAtts(slug); if (box) { box.value = typed; fitCompose(box); } return after(r.msg, "bad"); }
+    if (r.msg) { sent.forEach((x) => x.remove()); s.draft = typed; s.files = files; showAtts(slug); if (box) { box.value = typed; fitCompose(box); } return after(r.msg, "bad"); }
     return after(r.sent ? "" : { "busy-terminal": "Waiting: the agent is mid-turn in its terminal. Your message goes as soon as it finishes.", busy: "Waiting: the agent is mid-turn. Your message goes as soon as it finishes.", "not-started": "Waiting: the agent hasn't started yet. Your message goes once it has.", limited: "Waiting: your Claude usage limit is full. Your message goes as soon as it resets." }[r.why] || "");
   }
   if (act === "start") {
