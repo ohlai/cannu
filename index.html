@@ -13,7 +13,7 @@
   main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 80px; }
   h1 { font-size: 20px; margin: 0 0 4px; }
   h2 { font-size: 15px; margin: 28px 0 10px; color: var(--mute); font-weight: 600; }
-  .sub { color: var(--mute); margin: 0 0 20px; }
+  .sub { color: var(--mute); margin: 0 0 20px; } #totals:empty { display:none; }
   .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px 16px; margin-bottom:12px; }
   .card.past { padding: 10px 16px; }
   .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
@@ -417,8 +417,8 @@
 <main>
   <div class="row" id="top" style="margin-bottom:36px">
     <div class="grow">
-      <div class="brand"><img src="/logo.png?v=2" alt=""><h1>Cannu <span>Parallel agent management</span></h1></div>
-      <p class="sub" style="margin:12px 0 0" id="totals">One branch, folder and Claude session per task.</p>
+      <div class="brand"><img src="/logo.png?v=2" alt=""><h1>Cannu <span>Agents in parallel, one per task</span></h1></div>
+      <p class="sub" style="margin:12px 0 0" id="totals"></p>
     </div>
     <div class="rings" id="rings" tabindex="0" aria-label="Claude usage"></div>
     <button id="defaultsOpen" title="Model, system prompt and everything else every agent is given">Agent defaults</button>
@@ -493,8 +493,8 @@
     <header><h2>New task</h2></header>
     <div class="body">
       <div class="labels" id="newLabels" style="margin-top:0"></div>
-      <input type="text" id="title" placeholder="Name">
-      <textarea id="prompt" class="tall" data-mention placeholder="What you want and why. Saved word for word in the task's notes. Optional if you're only planning it."></textarea>
+      <input type="text" id="title" placeholder="Task name">
+      <textarea id="prompt" class="tall" data-mention placeholder="What needs doing?"></textarea>
       <div class="hint">@ to tag a related task. The agent reads their notes first.</div>
       <div class="hint" data-tags></div>
       <div class="field"><label for="newModel">Model</label><select id="newModel"></select></div>      <div class="banner" id="limitNew" hidden></div>
@@ -609,7 +609,7 @@ const api = async (url, body) => {
 
 // UI state kept across re-renders: open boxes, drafts, messages.
 const ui = {};
-const u = (slug) => (ui[slug] ??= { fb: false, draft: "", msg: "", cls: "", full: false, notes: false, reopen: false, rtitle: "", rprompt: "", edit: false, etitle: null, eprompt: null });
+const u = (slug) => (ui[slug] ??= { fb: false, draft: "", msg: "", cls: "", full: false, notes: false, reopen: false, rtitle: "", rprompt: "", edit: false, etitle: null, eprompt: null, emodel: null });
 // Every feature has one status, and there's one filter per status, in order
 // of how much it needs looking at: waiting on you first, dropped last.
 const KINDS = ["waiting", "working", "planned", "merged", "dropped"]; // by urgency: sorts the cards
@@ -781,11 +781,11 @@ function chatBox(f, s, cls) {
   return `<div class="chat">
       <div class="thread" data-chat></div>
       <div class="compose ${s.multi ? "multi" : ""}">
-        <textarea data-field="draft" data-mention rows="1" placeholder="Message the agent. ${MAC ? "⌘" : "Ctrl"}+Enter sends.">${esc(s.draft)}</textarea>
+        <textarea data-field="draft" data-mention rows="1" placeholder="Message the agent">${esc(s.draft)}</textarea>
         <button class="primary send" data-act="send" title="${MAC ? "⌘+Enter" : "Ctrl+Enter"} sends">Send${keysHint(true)}</button>
       </div>
       <div class="hint" data-tags>${tagsHtml(s.draft)}</div>
-      <div class="hint">${f.live?.open ? "Its terminal is open. Sending closes that terminal session and carries on here (the conversation is kept). " : f.live?.background || cls === "working" ? "It's mid-turn. Your message waits and goes as soon as this turn ends. " : ""}Saved word for word in its prompts.md. @ to tag a related task. The agent reads their notes first.</div>
+      <div class="hint">${f.live?.open ? "Its terminal is open. Sending closes that terminal session and carries on here (the conversation is kept). " : f.live?.background || cls === "working" ? "It's mid-turn. Your message waits and goes as soon as this turn ends. " : ""}@ to tag a related task. The agent reads their notes first.</div>
     </div>`;
 }
 
@@ -864,6 +864,8 @@ function shipButtons(f) {
   return (prFirst ? local + pr : pr + local).replace(/<button data-act="(merge|prmerge|pr)"([^>]*)>([^<]*)<\/button>$/, '<button class="primary" data-act="$1"$2>$3</button>');
 }
 
+// The same name and description boxes in New task, a planned task and Reopen.
+const TITLE_PH = "Task name", PROMPT_PH = "What needs doing?";
 // A feature with no branch or agent: planned, dropped, imported from the old
 // board, or merged and its worktree removed.
 function simpleCard(f, inPop) {
@@ -889,9 +891,10 @@ function simpleCard(f, inPop) {
     </div>
     ${planned && !edit && f.prompt ? `<div class="plan md">${md(f.prompt)}</div>` : ""}
     ${edit ? `<div style="margin-top:10px; display:grid; gap:8px">
-      <input type="text" data-field="etitle" value="${esc(s.etitle ?? f.title)}">
-      <textarea data-field="eprompt" data-mention data-self="${f.slug}" placeholder="What you want and why. This is what the agent starts on.">${esc(s.eprompt ?? f.prompt ?? "")}</textarea>
+      <input type="text" data-field="etitle" placeholder="${TITLE_PH}" value="${esc(s.etitle ?? f.title)}">
+      <textarea data-field="eprompt" data-mention data-self="${f.slug}" placeholder="${PROMPT_PH}">${esc(s.eprompt ?? f.prompt ?? "")}</textarea>
       ${mentionHint(s.eprompt ?? f.prompt, f.slug)}${linkedFrom(f, "hint")}
+      <div class="field"><label>Model</label><select data-field="emodel">${modelOptions(s.emodel ?? f.model ?? "", true)}</select></div>
     </div>` : ""}
     ${actions(planned
       ? `${inPop ? "" : `<button data-act="edit">${s.edit ? "Cancel edit" : "Edit"}</button>`}<button data-act="drop" title="Keep it on record as dropped">Drop</button>`
@@ -900,8 +903,8 @@ function simpleCard(f, inPop) {
       : leftover ? `<button class="primary" data-act="remove" title="Delete its folder. The unmerged branch is kept, so the work is still in git.">Remove worktree</button>` : "")}
     ${s.reopen ? `<div style="margin-top:10px; display:grid; gap:8px">
       <div class="hint">A new task that continues this one. Start agent makes a new branch from current main with a new session, and the agent reads this task's notes first. Save as planned records it to start later.</div>
-      <input type="text" data-field="rtitle" value="${esc(s.rtitle || f.title + " (continued)")}">
-      <textarea data-field="rprompt" data-mention data-self="${f.slug}" placeholder="What you want changed this time, and why.">${esc(s.rprompt)}</textarea>
+      <input type="text" data-field="rtitle" placeholder="${TITLE_PH}" value="${esc(s.rtitle || f.title + " (continued)")}">
+      <textarea data-field="rprompt" data-mention data-self="${f.slug}" placeholder="${PROMPT_PH}">${esc(s.rprompt)}</textarea>
       ${mentionHint(s.rprompt, f.slug)}
       <div class="row"><button class="second" data-act="reopen-plan" title="Records it on main without a branch or agent. Start it later from its card.">Save as planned</button><button class="primary" data-act="reopen-go" title="${MAC ? "⌘" : "Ctrl"}+Enter starts it">Start agent${keysHint(true)}</button></div>
     </div>` : ""}
@@ -959,7 +962,7 @@ function render(features) {
   const live = features.filter((f) => f.usage);
   const ms = live.reduce((a, f) => a + f.usage.ms, 0), cost = live.reduce((a, f) => a + f.usage.cost, 0);
   // The totals go on their own line under the tagline.
-  $("#totals").innerHTML = `One branch, folder and Claude session per task.${ms || cost ? `<br>All tasks: ${dur(ms)} agent time, ≈$${cost.toFixed(2)} at API prices.` : ""}`;
+  $("#totals").textContent = ms || cost ? `All tasks: ${dur(ms)} agent time, ≈$${cost.toFixed(2)} at API prices.` : "";
   const typing = document.activeElement?.closest?.("#list") && document.activeElement.matches("textarea, input[type=text]");
   // Filter chips, with how many features each would show.
   const inGroup = (f, g) => g === "all" || kind(f)[0] === g;
@@ -1569,14 +1572,18 @@ function openPop(slug) {
   else if (plan) { fitPlan(plan); plan.focus(); plan.selectionStart = plan.selectionEnd = plan.value.length; }
   else $("#popDlg [data-close]").focus();
 }
+// A planned task's boxes as they stand, for /edit.
+const editBody = (f, s) => ({ title: (s.etitle ?? f.title).trim(), prompt: (s.eprompt ?? f.prompt ?? "").trim(), model: s.emodel ?? f.model ?? "" });
 // Closing a planned feature's popup (Close, Escape, a click outside) saves
 // what you changed. Nothing changed, nothing committed.
 async function saveOnClose(slug) {
   const s = u(slug), f = all.find((x) => x.slug === slug);
-  const title = (s.etitle ?? f?.title ?? "").trim(), prompt = (s.eprompt ?? f?.prompt ?? "").trim();
-  s.etitle = s.eprompt = null;
-  if (!f || f.status !== "planned" || (title === f.title && prompt === (f.prompt || "").trim())) return;
-  const r = await api(`/api/features/${slug}/edit`, { title, prompt });
+  if (!f) return;
+  const b = editBody(f, s);
+  s.etitle = s.eprompt = s.emodel = null;
+  if (f.status !== "planned" || (b.title === f.title && b.prompt === (f.prompt || "").trim() && b.model === (f.model || ""))) return;
+  const { title, prompt } = b;
+  const r = await api(`/api/features/${slug}/edit`, b);
   if (!r.msg) remember(f, title, prompt);
   s.msg = r.msg || "Saved and committed on main."; s.cls = r.msg ? "bad" : "good";
   render(all); refresh();
@@ -1598,7 +1605,7 @@ function renderPop() {
   // isn't a change to redraw for. Every refresh redrew it, which threw the
   // cursor out of the box you were typing in.
   const typed = Object.fromEntries(TYPED.map((k) => [k, s[k]]));
-  Object.assign(s, { draft: "", etitle: null, eprompt: null, rtitle: "", rprompt: "" });
+  Object.assign(s, { draft: "", etitle: null, eprompt: null, emodel: null, rtitle: "", rprompt: "" });
   const html = (f.worktree ? card(f, true) : simpleCard(f, true)) + "\u0000" + lab;
   Object.assign(s, typed);
   const top = $("#popTop");
@@ -1661,7 +1668,7 @@ document.addEventListener("focusin", (e) => {
   for (const v of [...past.slice(1), now]) { el.select(); document.execCommand(v ? "insertText" : "delete", false, v); }
 });
 
-const TYPED = ["draft", "etitle", "eprompt", "rtitle", "rprompt"];
+const TYPED = ["draft", "etitle", "eprompt", "emodel", "rtitle", "rprompt"];
 // What Ctrl+Enter in each box presses. Plain Enter is never a save.
 const KEYS = { draft: "send", etitle: "start", eprompt: "start", rtitle: "reopen-go", rprompt: "reopen-go" };
 
@@ -1806,12 +1813,12 @@ async function onClick(e) {
   }
   if (act === "start") {
     // Mid-edit: save what's in the boxes first, so the agent starts on what you just wrote.
-    if (s.etitle != null || s.eprompt != null) {
-      const f = all.find((x) => x.slug === slug);
-      const saved = await api(`${base}/edit`, { title: s.etitle ?? f.title, prompt: s.eprompt ?? f.prompt ?? "" });
+    if (s.etitle != null || s.eprompt != null || s.emodel != null) {
+      const f = all.find((x) => x.slug === slug), b = editBody(f, s);
+      const saved = await api(`${base}/edit`, b);
       if (saved.msg) return say(saved.msg, "bad");
-      remember(f, s.etitle ?? f.title, s.eprompt ?? f.prompt ?? "");
-      Object.assign(s, { edit: false, etitle: null, eprompt: null });
+      remember(f, b.title, b.prompt);
+      Object.assign(s, { edit: false, etitle: null, eprompt: null, emodel: null });
     }
     // Back to the board: the card moves to Working and shows setup. A failure keeps the popup, with the error.
     say("Starting: making its branch and folder…");
@@ -1819,12 +1826,12 @@ async function onClick(e) {
     if (!r.msg && popSlug === slug) closeModal($("#popDlg"));
     return say(r.msg || "Started. The agent begins in the background once setup finishes.", r.msg ? "bad" : "good");
   }
-  if (act === "edit") { s.edit = !s.edit; s.etitle = null; s.eprompt = null; return render(all); }
+  if (act === "edit") { s.edit = !s.edit; s.etitle = s.eprompt = s.emodel = null; return render(all); }
   if (act === "edit-save") {
-    const f = all.find((x) => x.slug === slug);
-    const r = await api(`${base}/edit`, { title: s.etitle ?? f.title, prompt: s.eprompt ?? f.prompt ?? "" });
+    const f = all.find((x) => x.slug === slug), b = editBody(f, s);
+    const r = await api(`${base}/edit`, b);
     if (r.msg) return say(r.msg, "bad");
-    remember(f, s.etitle ?? f.title, s.eprompt ?? f.prompt ?? "");
+    remember(f, b.title, b.prompt);
     s.edit = false; return say("Saved and committed on main.", "good");
   }
   if (act === "drop") {

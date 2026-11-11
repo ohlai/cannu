@@ -1065,7 +1065,8 @@ const server = http.createServer(async (req, res) => {
         const title = String(b.title || "").trim() || f.title;
         if (title !== f.title && loadFeatures().some((x) => x.slug !== f.slug && x.title.toLowerCase() === title.toLowerCase())) return send(res, 400, { msg: "A task already has that name." });
         const prompt = String(b.prompt ?? "").trim();
-        return send(res, 200, update(f.slug, { title, prompt, refs: mentions(prompt, f.slug) }, `Edit planned task: ${title}`));
+        const model = b.model === undefined ? f.model || "" : b.model in MODELS ? b.model : "";
+        return send(res, 200, update(f.slug, { title, prompt, model, refs: mentions(prompt, f.slug) }, `Edit planned task: ${title}`));
       }
     }
     if (!hasWorktree(f)) return send(res, 400, { msg: "This task has no branch or agent. Start it, or Reopen it." });
