@@ -131,8 +131,11 @@
   .compose.multi textarea { width:100%; transition-delay:.08s, 0s; }
   .chat .hint { padding:6px 10px 10px; }
   .chat { position:relative; }
-  .atts { display:flex; flex-wrap:wrap; gap:6px; margin:0 10px; }
-  .atts:not(:empty) { margin-bottom:6px; }
+  .atts { display:flex; flex-wrap:wrap; gap:6px; }
+  /* Files waiting to send float over the bottom of the thread, so the
+     messages keep their full height. */
+  .compose .atts { position:absolute; left:0; bottom:calc(100% + 6px); z-index:2; }
+  .compose .att { box-shadow:0 2px 10px rgba(0,0,0,.18); }
   .att { position:relative; display:flex; align-items:center; height:56px; border:1px solid var(--line); border-radius:8px; overflow:hidden; background:var(--bg); color:var(--fg); text-decoration:none; }
   .att:has(img) { border:0; background:none; }
   .att img, .bubble .atts img { height:56px; max-width:120px; object-fit:cover; display:block; border-radius:8px; }
@@ -795,13 +798,13 @@ const actions = (left, right) => `<div class="row actions">${left}<span class="g
 // Files waiting to go with the next message: a thumbnail for an image, the
 // name for anything else, each with an ✕ to take it off.
 const attsHtml = (s) => (s.files || []).map((a, i) => `<span class="att" title="${esc(a.name)}">${a.url ? `<img src="${a.url}" alt="${esc(a.name)}">` : `<span class="name">${esc(a.name)}</span>`}<button data-act="unattach" data-i="${i}" title="Remove" aria-label="Remove ${esc(a.name)}">✕</button></span>`).join("");
-function showAtts(slug) { for (const el of document.querySelectorAll(`[data-slug="${slug}"] .atts`)) el.innerHTML = attsHtml(u(slug)); }
+function showAtts(slug) { for (const el of document.querySelectorAll(`[data-slug="${slug}"] .compose .atts`)) el.innerHTML = attsHtml(u(slug)); }
 
 function chatBox(f, s, cls) {
   return `<div class="chat">
       <div class="thread" data-chat></div>
-      <div class="atts">${attsHtml(s)}</div>
       <div class="compose ${s.multi ? "multi" : ""}">
+        <div class="atts">${attsHtml(s)}</div>
         <textarea data-field="draft" data-mention rows="1" placeholder="Message the agent. ${MAC ? "⌘" : "Ctrl"}+Enter sends.">${esc(s.draft)}</textarea>
         <button class="primary send" data-act="send" title="${MAC ? "⌘+Enter" : "Ctrl+Enter"} sends">Send${keysHint(true)}</button>
       </div>
