@@ -490,7 +490,7 @@
 
 <dialog class="modal" id="newDlg">
   <div class="panel">
-    <header><h2>New task</h2></header>
+    <header class="row"><h2>New task</h2><span class="grow" style="min-width:0"></span><select id="newModel" title="The model its agent runs on" aria-label="Model"></select></header>
     <div class="body">
       <div class="labels" id="newLabels" style="margin-top:0"></div>
       <div id="newForm" style="display:contents"></div>
@@ -606,7 +606,7 @@ const api = async (url, body) => {
 
 // UI state kept across re-renders: open boxes, drafts, messages.
 const ui = {};
-const u = (slug) => (ui[slug] ??= { fb: false, draft: "", msg: "", cls: "", full: false, notes: false, reopen: false, rtitle: "", rprompt: "", edit: false, etitle: null, eprompt: null, emodel: null });
+const u = (slug) => (ui[slug] ??= { fb: false, draft: "", msg: "", cls: "", full: false, notes: false, reopen: false, rtitle: "", rprompt: "", edit: false, etitle: null, eprompt: null });
 // Every feature has one status, and there's one filter per status, in order
 // of how much it needs looking at: waiting on you first, dropped last.
 const KINDS = ["waiting", "working", "planned", "merged", "dropped"]; // by urgency: sorts the cards
@@ -862,15 +862,15 @@ function shipButtons(f) {
 }
 
 // The same name and description boxes in New task, a planned task and Reopen.
-// The name, description and model boxes: one form for New task, a planned
-// task and Reopen, so their wording and fields can't drift apart. `at(k)`
-// hooks each box up: ids in New task, data-fields on a card.
-function taskForm(at, { title = "", prompt = "", model = "", self = "" } = {}) {
+// The name and description boxes: one form for New task, a planned task and
+// Reopen, so their wording can't drift apart. `at(k)` hooks each box up: ids
+// in New task, data-fields on a card. The model picker sits top right in each.
+function taskForm(at, { title = "", prompt = "", self = "" } = {}) {
   return `<input type="text" ${at("title")} placeholder="Task name" value="${esc(title)}">
     <textarea ${at("prompt")} data-mention${self ? ` data-self="${self}"` : ""} placeholder="What needs doing?">${esc(prompt)}</textarea>
-    ${mentionHint(prompt, self)}
-    <div class="field"><label>Model</label><select ${at("model")} aria-label="Model">${modelOptions(model, true)}</select></div>`;
+    ${mentionHint(prompt, self)}`;
 }
+const modelPick = (attr, sel, title) => `<select class="model" ${attr} title="${title}" aria-label="Model">${modelOptions(sel, true)}</select>`;
 // A feature with no branch or agent: planned, dropped, imported from the old
 // board, or merged and its worktree removed.
 function simpleCard(f, inPop) {
@@ -893,10 +893,11 @@ function simpleCard(f, inPop) {
         ${edit ? "" : linksHtml(f)}
       </div>
       ${head(f, cls, label, "")}
+      ${planned ? modelPick("data-model", f.model || "", "The model its agent runs on. Changeable until it starts.") : s.reopen ? modelPick('data-field="rmodel"', s.rmodel ?? f.model ?? "", "The model the new task's agent runs on") : ""}
     </div>
     ${planned && !edit && f.prompt ? `<div class="plan md">${md(f.prompt)}</div>` : ""}
     ${edit ? `<div style="margin-top:10px; display:grid; gap:8px">
-      ${taskForm((k) => `data-field="e${k}"`, { title: s.etitle ?? f.title, prompt: s.eprompt ?? f.prompt ?? "", model: s.emodel ?? f.model ?? "", self: f.slug })}${linkedFrom(f, "hint")}
+      ${taskForm((k) => `data-field="e${k}"`, { title: s.etitle ?? f.title, prompt: s.eprompt ?? f.prompt ?? "", self: f.slug })}${linkedFrom(f, "hint")}
     </div>` : ""}
     ${actions(planned
       ? `${inPop ? "" : `<button data-act="edit">${s.edit ? "Cancel edit" : "Edit"}</button>`}<button data-act="drop" title="Keep it on record as dropped">Drop</button>`
@@ -905,7 +906,7 @@ function simpleCard(f, inPop) {
       : leftover ? `<button class="primary" data-act="remove" title="Delete its folder. The unmerged branch is kept, so the work is still in git.">Remove worktree</button>` : "")}
     ${s.reopen ? `<div style="margin-top:10px; display:grid; gap:8px">
       <div class="hint">A new task that continues this one. Start agent makes a new branch from current main with a new session, and the agent reads this task's notes first. Save as planned records it to start later.</div>
-      ${taskForm((k) => `data-field="r${k}"`, { title: s.rtitle || f.title + " (continued)", prompt: s.rprompt, model: s.rmodel ?? f.model ?? "", self: f.slug })}
+      ${taskForm((k) => `data-field="r${k}"`, { title: s.rtitle || f.title + " (continued)", prompt: s.rprompt, self: f.slug })}
       <div class="row"><button class="second" data-act="reopen-plan" title="Records it on main without a branch or agent. Start it later from its card.">Save as planned</button><button class="primary" data-act="reopen-go" title="${MAC ? "⌘" : "Ctrl"}+Enter starts it">Start agent${keysHint(true)}</button></div>
     </div>` : ""}
     ${msgBlock(s)}
@@ -1573,15 +1574,15 @@ function openPop(slug) {
   else $("#popDlg [data-close]").focus();
 }
 // A planned task's boxes as they stand, for /edit.
-const editBody = (f, s) => ({ title: (s.etitle ?? f.title).trim(), prompt: (s.eprompt ?? f.prompt ?? "").trim(), model: s.emodel ?? f.model ?? "" });
+const editBody = (f, s) => ({ title: (s.etitle ?? f.title).trim(), prompt: (s.eprompt ?? f.prompt ?? "").trim() });
 // Closing a planned feature's popup (Close, Escape, a click outside) saves
 // what you changed. Nothing changed, nothing committed.
 async function saveOnClose(slug) {
   const s = u(slug), f = all.find((x) => x.slug === slug);
   if (!f) return;
   const b = editBody(f, s);
-  s.etitle = s.eprompt = s.emodel = null;
-  if (f.status !== "planned" || (b.title === f.title && b.prompt === (f.prompt || "").trim() && b.model === (f.model || ""))) return;
+  s.etitle = s.eprompt = null;
+  if (f.status !== "planned" || (b.title === f.title && b.prompt === (f.prompt || "").trim())) return;
   const { title, prompt } = b;
   const r = await api(`/api/features/${slug}/edit`, b);
   if (!r.msg) remember(f, title, prompt);
@@ -1605,7 +1606,7 @@ function renderPop() {
   // isn't a change to redraw for. Every refresh redrew it, which threw the
   // cursor out of the box you were typing in.
   const typed = Object.fromEntries(TYPED.map((k) => [k, s[k]]));
-  Object.assign(s, { draft: "", etitle: null, eprompt: null, emodel: null, rtitle: "", rprompt: "", rmodel: null });
+  Object.assign(s, { draft: "", etitle: null, eprompt: null, rtitle: "", rprompt: "", rmodel: null });
   const html = (f.worktree ? card(f, true) : simpleCard(f, true)) + "\u0000" + lab;
   Object.assign(s, typed);
   const top = $("#popTop");
@@ -1668,7 +1669,7 @@ document.addEventListener("focusin", (e) => {
   for (const v of [...past.slice(1), now]) { el.select(); document.execCommand(v ? "insertText" : "delete", false, v); }
 });
 
-const TYPED = ["draft", "etitle", "eprompt", "emodel", "rtitle", "rprompt", "rmodel"];
+const TYPED = ["draft", "etitle", "eprompt", "rtitle", "rprompt", "rmodel"];
 // What Ctrl+Enter in each box presses. Plain Enter is never a save.
 const KEYS = { draft: "send", etitle: "start", eprompt: "start", rtitle: "reopen-go", rprompt: "reopen-go" };
 
@@ -1699,6 +1700,14 @@ host.addEventListener("input", (e) => {
   if (e.target.dataset.field === "eprompt") fitPlan(e.target);
 });
 host.addEventListener("click", onClick);
+// A planned feature's model, saved as soon as it's picked.
+host.addEventListener("change", async (e) => {
+  if (!e.target.matches("[data-model]")) return;
+  const slug = e.target.closest("[data-slug]").dataset.slug, s = u(slug);
+  const r = await api(`/api/features/${slug}/model`, { model: e.target.value });
+  if (r.msg) { s.msg = r.msg; s.cls = "bad"; render(all); }
+  refresh();
+});
 // Ctrl+Enter (or Cmd+Enter) does the main thing: send, or start the agent.
 host.addEventListener("keydown", (e) => {
   const act = KEYS[e.target.dataset?.field];
@@ -1813,12 +1822,12 @@ async function onClick(e) {
   }
   if (act === "start") {
     // Mid-edit: save what's in the boxes first, so the agent starts on what you just wrote.
-    if (s.etitle != null || s.eprompt != null || s.emodel != null) {
+    if (s.etitle != null || s.eprompt != null) {
       const f = all.find((x) => x.slug === slug), b = editBody(f, s);
       const saved = await api(`${base}/edit`, b);
       if (saved.msg) return say(saved.msg, "bad");
       remember(f, b.title, b.prompt);
-      Object.assign(s, { edit: false, etitle: null, eprompt: null, emodel: null });
+      Object.assign(s, { edit: false, etitle: null, eprompt: null });
     }
     // Back to the board: the card moves to Working and shows setup. A failure keeps the popup, with the error.
     say("Starting: making its branch and folder…");
@@ -1826,7 +1835,7 @@ async function onClick(e) {
     if (!r.msg && popSlug === slug) closeModal($("#popDlg"));
     return say(r.msg || "Started. The agent begins in the background once setup finishes.", r.msg ? "bad" : "good");
   }
-  if (act === "edit") { s.edit = !s.edit; s.etitle = s.eprompt = s.emodel = null; return render(all); }
+  if (act === "edit") { s.edit = !s.edit; s.etitle = s.eprompt = null; return render(all); }
   if (act === "edit-save") {
     const f = all.find((x) => x.slug === slug), b = editBody(f, s);
     const r = await api(`${base}/edit`, b);
@@ -1940,7 +1949,7 @@ async function loadDefaults() { const r = await api("/api/defaults"); setModels(
 // popup to look at another feature doesn't lose it. Cleared once it's created.
 const NEW_KEY = "newFeature";
 let newLabel = "";
-$("#newForm").innerHTML = taskForm((k) => ({ title: 'id="title"', prompt: 'id="prompt" class="tall"', model: 'id="newModel"' })[k]);
+$("#newForm").innerHTML = taskForm((k) => ({ title: 'id="title"', prompt: 'id="prompt" class="tall"' })[k]);
 const saveNew = () => { try { sessionStorage.setItem(NEW_KEY, JSON.stringify({ title: $("#title").value, prompt: $("#prompt").value, model: $("#newModel").value, label: newLabel })); } catch {} };
 let newDraft = {}; try { newDraft = JSON.parse(sessionStorage.getItem(NEW_KEY)) || {}; } catch {}
 $("#title").value = newDraft.title || ""; $("#prompt").value = newDraft.prompt || ""; newLabel = newDraft.label || "";

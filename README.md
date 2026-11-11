@@ -203,8 +203,9 @@ comes from its name.
   runs its `seed`, and starts the agent on my prompt in the background.
   **Save as planned** only commits the `feature.md`.
 - **Start agent / Edit / Drop** (planned tasks): start it as above, change
-  its name, description or model, or mark it dropped. Its popup has the same
-  boxes as New task, and closing it saves.
+  its name or description (its popup has the same boxes as New task, and
+  closing it saves), or mark it dropped. The model picker top right saves as
+  soon as you pick.
 - **Drop** (building tasks): for a bad idea. Its app stops and it's
   recorded as dropped. Its folder and branch stay until **Remove worktree**,
   which commits anything uncommitted to the branch first and keeps the branch,

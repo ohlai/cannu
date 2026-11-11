@@ -1061,12 +1061,12 @@ const server = http.createServer(async (req, res) => {
     if (action === "remove" && f.status === "dropped" && f.dir && !f.removed) return send(res, 200, await removeFeature(f));
     if (f.status === "planned") {
       if (action === "start") return send(res, 200, startFeature(f, `Start task: ${f.title}`));
+      if (action === "model") return send(res, 200, update(f.slug, { model: b.model in MODELS ? b.model : "" }, `Set model: ${f.title}`));
       if (action === "edit") {
         const title = String(b.title || "").trim() || f.title;
         if (title !== f.title && loadFeatures().some((x) => x.slug !== f.slug && x.title.toLowerCase() === title.toLowerCase())) return send(res, 400, { msg: "A task already has that name." });
         const prompt = String(b.prompt ?? "").trim();
-        const model = b.model === undefined ? f.model || "" : b.model in MODELS ? b.model : "";
-        return send(res, 200, update(f.slug, { title, prompt, model, refs: mentions(prompt, f.slug) }, `Edit planned task: ${title}`));
+        return send(res, 200, update(f.slug, { title, prompt, refs: mentions(prompt, f.slug) }, `Edit planned task: ${title}`));
       }
     }
     if (!hasWorktree(f)) return send(res, 400, { msg: "This task has no branch or agent. Start it, or Reopen it." });
