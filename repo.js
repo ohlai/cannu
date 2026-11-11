@@ -1043,6 +1043,15 @@ const server = http.createServer(async (req, res) => {
     const action = m[2];
     if (req.method === "GET" && action === "notes") return send(res, 200, notes(f));
     if (req.method === "GET" && action === "chat") return send(res, 200, f.dir ? chat(f) : { messages: [] });
+    // An attached file, for the chat to show. Only images get their own type;
+    // anything else (svg included, which could carry script) downloads.
+    if (req.method === "GET" && action === "file") {
+      const file = path.join(ATTACH, f.slug, path.basename(url.searchParams.get("name") || ""));
+      if (!fs.existsSync(file)) return send(res, 404, {});
+      const type = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp" }[path.extname(file).slice(1).toLowerCase()];
+      res.writeHead(200, { "content-type": type || "application/octet-stream", "cache-control": "max-age=86400", ...(type ? {} : { "content-disposition": "attachment" }) });
+      return fs.createReadStream(file).pipe(res);
+    }
     if (req.method !== "POST") return send(res, 405, {});
     // A file pasted or dropped into the chat: the raw bytes, saved outside the
     // worktree so it never lands in git. The page puts its path in the message.
