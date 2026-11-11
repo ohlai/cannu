@@ -691,7 +691,7 @@ function schedText(f) {
 }
 function schedBanner(f) {
   const s = schedOf(f); if (!s) return "";
-  if (!s.missed) return `<div class="meta sched">⏰ ${esc(schedText(f))}</div>`;
+  if (!s.missed) return `<div class="meta sched">${esc(schedText(f))}</div>`;
   const what = schedWhat(s);
   return `<div class="banner">Was meant to start at ${resetTime(s.missed)}${what ? ` (${what})` : ""}, but ${s.why ? "couldn't: " + esc(s.why) : "Cannu wasn't running then: the computer was off or asleep"}. It hasn't started, and won't by itself.
     <div class="row" style="margin-top:8px"><button class="primary" data-act="start">Start now</button><button data-act="sched">Pick a new time</button><button data-act="unschedule">Clear</button></div></div>`;
@@ -1230,7 +1230,7 @@ function tile(f) {
     <div class="t">${esc(f.title)}</div>
     ${st.activity && cls === "working" ? `<div class="activity">${esc(st.activity)}</div>` : ""}
     ${k === "waiting" && st.lastReply ? `<div class="snip">${esc(st.lastReply.replace(/[#*`>|]/g, "").trim().slice(0, 240))}</div>` : ""}
-    ${schedOf(f) ? `<div class="activity">⏰ ${esc(schedText(f))}</div>` : ""}
+    ${schedOf(f) ? `<div class="activity">${esc(schedText(f))}</div>` : ""}
     <div class="foot">${view === "label" ? pill : f.label ? tagHtml(f.label) : ""}${f.merged && k !== "merged" ? `<span class="meta">merged</span>` : ""}<span class="when">${when}</span></div>
     ${u(f.slug).msg ? `<div class="msg ${u(f.slug).cls}">${esc(u(f.slug).msg)}</div>` : ""}</div>`;
 }
