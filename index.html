@@ -130,6 +130,9 @@
   .compose.multi { padding-bottom:44px; transition-delay:0s; }
   .compose.multi textarea { width:100%; transition-delay:.08s, 0s; }
   .chat .hint { padding:6px 10px 10px; }
+  .chat { position:relative; }
+  .chat.dragging::after { content:"Drop to attach"; position:absolute; inset:0; z-index:5; display:flex; align-items:center; justify-content:center;
+    border:2px dashed var(--mute); border-radius:8px; background:color-mix(in srgb, var(--bg) 70%, transparent); color:var(--fg); font-weight:600; pointer-events:none; }
   @media (prefers-reduced-motion: reduce) { .compose, .compose textarea { transition:none; } }
   /* The title row looks the same folded or not: everything sits at the top, and the
      details wrap under the title, left of the time and status. */
@@ -1683,17 +1686,18 @@ function markShortErrors() {
   }
 }
 async function attach(ta, files) {
-  const slug = ta.closest("[data-slug]").dataset.slug;
-  for (const file of files) {
-    say(`Attaching ${file.name || "image"}…`);
+  const slug = ta.closest("[data-slug]").dataset.slug, inPop = !!ta.closest("#popDlg"), s = u(slug);
+  for (const file of [...files]) {
     try {
       const r = await (await fetch(`/r/${encodeURIComponent(CUR)}/api/features/${slug}/attach?name=${encodeURIComponent(file.name || "pasted.png")}`, { method: "POST", body: file })).json();
       if (!r.path) throw 0;
+      // The card may have been redrawn while it uploaded: find its box again.
+      if (!ta.isConnected) ta = $(`${inPop ? "#popDlg" : "#list"} [data-slug="${slug}"] .compose textarea`);
+      if (!ta) { s.draft = (s.draft ? s.draft.trimEnd() + " " : "") + r.path + " "; continue; }
       ta.focus();
       ta.setRangeText((/\S$/.test(ta.value.slice(0, ta.selectionStart)) ? " " : "") + r.path + " ", ta.selectionStart, ta.selectionEnd, "end");
       ta.dispatchEvent(new Event("input", { bubbles: true }));
-      say("");
-    } catch { say(`Couldn't attach ${file.name}.`, "bad"); }
+    } catch { s.msg = `Couldn't attach ${file.name || "that file"}.`; s.cls = "bad"; render(all); }
   }
 }
 async function refresh() { try { const [fs, ls] = await Promise.all([api("/api/features"), api("/api/labels")]); LABELS = ls; render(fs); markShortErrors(); renderUsage(); } catch {} }
@@ -1709,8 +1713,20 @@ host.addEventListener("click", onClick);
 // Files pasted or dropped into a chat are saved by the server, and their paths
 // go into the message for the agent to read. Plain text pastes as usual.
 host.addEventListener("paste", (e) => { if (e.target.closest(".compose") && e.clipboardData.files.length) { e.preventDefault(); attach(e.target, e.clipboardData.files); } });
-host.addEventListener("dragover", (e) => { if (e.target.closest(".chat") && e.dataTransfer.types.includes("Files")) e.preventDefault(); });
-host.addEventListener("drop", (e) => { const c = e.target.closest(".chat"); if (c && e.dataTransfer.files.length) { e.preventDefault(); attach(c.querySelector(".compose textarea"), e.dataTransfer.files); } });
+// While files are dragged over a chat it shows a dashed drop zone. dragleave
+// also fires moving between the chat's own children, so the zone clears a
+// moment after the last dragover instead.
+let dragOff;
+host.addEventListener("dragover", (e) => {
+  const c = e.target.closest(".chat"); if (!c || !e.dataTransfer.types.includes("Files")) return;
+  e.preventDefault(); c.classList.add("dragging");
+  clearTimeout(dragOff); dragOff = setTimeout(() => c.classList.remove("dragging"), 150);
+});
+host.addEventListener("drop", (e) => {
+  const c = e.target.closest(".chat"); if (!c || !e.dataTransfer.files.length) return;
+  e.preventDefault(); c.classList.remove("dragging");
+  attach(c.querySelector(".compose textarea"), e.dataTransfer.files);
+});
 // Ctrl+Enter (or Cmd+Enter) does the main thing: send, or start the agent.
 host.addEventListener("keydown", (e) => {
   const act = KEYS[e.target.dataset?.field];
