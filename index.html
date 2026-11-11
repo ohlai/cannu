@@ -53,17 +53,6 @@
   button.second:hover { border-color:var(--mute); }
   textarea, input[type=text], input[type=search] { font:inherit; width:100%; padding:8px 10px; border-radius:7px; border:1px solid var(--line); background:var(--bg); color:var(--fg); }
   textarea { min-height: 70px; resize: vertical; }
-  /* Start agent ▾ and its menu. The day and time boxes look like a select; color-scheme lets their icons follow the theme. */
-  .startsplit { display:inline-flex; }
-  .startsplit > :first-child { border-radius:7px 0 0 7px; }
-  .startsplit > .chev { border-radius:0 7px 7px 0; border-left-color:color-mix(in srgb, var(--bg) 35%, var(--fg)); padding:6px 8px; }
-  .startmenu { position:fixed; z-index:50; min-width:290px; background:var(--card); border:1px solid var(--line); border-radius:9px; padding:5px; box-shadow:0 8px 24px rgba(0,0,0,.18); }
-  .startmenu > button { display:flex; width:100%; justify-content:space-between; gap:16px; border:0; background:none; text-align:left; padding:7px 10px; }
-  .startmenu > button:hover { background:var(--bg); }
-  .startmenu small { color:var(--mute); }
-  .startmenu hr { border:0; border-top:1px solid var(--line); margin:4px 0; }
-  .startmenu .pick { padding:4px 10px 8px; gap:6px; flex-wrap:nowrap; }
-  .startmenu input { font:inherit; font-size:13px; padding:6px 8px; border-radius:7px; border:1px solid var(--line); background:var(--bg); color:var(--fg); color-scheme:light dark; }
   .hint { color: var(--mute); font-size:12px; }
   .msg { margin-top:8px; font-size:13px; white-space:pre-wrap; }
   .msg.bad { color: var(--bad); } .msg.good { color: var(--idle); }
@@ -369,6 +358,20 @@
   .repomenu button.trash { width:30px; height:30px; flex:none; padding:0; justify-content:center; color:var(--mute); }
   .repomenu button.trash:hover, .repomenu button.trash:focus-visible { color:var(--bad); }
   .repomenu button.trash svg { width:15px; height:15px; fill:none; stroke:currentColor; stroke-width:2; }
+  /* Start agent ▾: the black button and a narrow ▾ joined into one. Its menu
+     is a .repomenu (the sort and repo menus' look) that opens upward, since
+     these buttons sit at the bottom of a card or popup. After .repomenu, so these win. */
+  .startsplit { position:relative; display:inline-flex; }
+  .startsplit > .primary:first-child { border-top-right-radius:0; border-bottom-right-radius:0; }
+  .startsplit > .chev { display:inline-flex; align-items:center; padding:0 7px; border-top-left-radius:0; border-bottom-left-radius:0; border-left-color:color-mix(in srgb, var(--bg) 30%, var(--fg)); }
+  .startsplit > .chev svg { width:12px; height:12px; fill:none; stroke:currentColor; stroke-width:2.5; transition:transform .15s; }
+  .startsplit > .chev[aria-expanded="true"] svg { transform:rotate(180deg); }
+  .startmenu { top:auto; bottom:calc(100% + 6px); right:0; width:max-content; max-width:none; text-align:left; font-weight:400; }
+  .startmenu button small { max-width:none; direction:ltr; }
+  /* The day and time boxes look like the app's other boxes; color-scheme lets their icons follow the theme. */
+  .startmenu .pick { display:flex; gap:6px; align-items:center; padding:2px 9px 8px; }
+  .startmenu .pick input { font:inherit; font-size:13px; padding:6px 8px; border-radius:7px; border:1px solid var(--line); background:var(--bg); color:var(--fg); color-scheme:light dark; }
+  .startmenu .pick button, .startmenu .pick button:hover { width:auto; padding:6px 12px; border-radius:7px; background:var(--fg); color:var(--bg); border:1px solid var(--fg); }
   /* Add repo: how to work on the picked repo, i.e. its cannu.json. */
   /* A set height, not floor to ceiling, that doesn't jump when a repo is picked: the body scrolls instead. */
   #repoDlg .panel { height:min(620px, calc(100vh - 160px)); }
@@ -512,7 +515,7 @@
     </div>
     <div class="dmsg" id="addMsg"></div>
     <footer class="row"><button data-close title="Keeps what you've typed here for next time, in this browser tab. Nothing is saved to the repo.">Close</button><span class="grow" style="min-width:0"></span>
-      <button class="second" id="addPlan" title="Records it on main without a branch or agent. Start it later from its card.">Save as planned</button><span class="startsplit"><button class="primary" id="add">Start agent</button><button class="primary chev" id="addChev" aria-label="Start later" title="Start it later: at a time, or just before a usage limit resets">▾</button></span></footer>
+      <button class="second" id="addPlan" title="Records it on main without a branch or agent. Start it later from its card.">Save as planned</button><span id="newStart"></span></footer>
   </div>
 </dialog>
 
@@ -701,60 +704,59 @@ function schedBanner(f) {
   if (!s.missed) return `<div class="meta sched">${esc(schedText(f))}</div>`;
   const what = schedWhat(s);
   return `<div class="banner">Was meant to start at ${resetTime(s.missed)}${what ? ` (${what})` : ""}, but ${s.why ? "couldn't: " + esc(s.why) : "Cannu wasn't running then: the computer was off or asleep"}. It hasn't started, and won't by itself.
-    <div class="row" style="margin-top:8px"><button class="primary" data-act="start">Start now</button><button data-act="chev">Pick a new time</button><button data-act="unschedule">Clear</button></div></div>`;
+    <div class="row" style="margin-top:8px"><button class="primary" data-act="start">Start now</button><button data-act="newtime">Pick a new time</button><button data-act="unschedule">Clear</button></div></div>`;
 }
 
 // Start agent's ▾: start now, pick a time, or just before a limit resets.
-// One menu at a time, floated by the ▾ that opened it and put in its popup
-// (or the page), so the card redrawing underneath doesn't close it.
-// pick() gets "now", { at }, { before, mins } or null (clear).
+// Built like the sort and repo menus: it sits in the button's own wrapper and
+// opens upward from it. One at a time: menuOpen is the slug of the card it's
+// on, or "new" for New feature. The 2s refresh waits while it's open, so a
+// redraw can't shut it or wipe a half-typed time.
 const BEFORE_MINS = 30;
-let startMenu = null;
-const closeStartMenu = () => { startMenu?.remove(); startMenu = null; };
-const startSplit = (main, chev) => `<span class="startsplit">${main}<button class="primary chev" ${chev} aria-label="Start later" title="Start it later: at a time, or just before a usage limit resets">▾</button></span>`;
-function openStartMenu(btn, { scheduled, pick }) {
-  closeStartMenu();
-  // A day and time box in this browser's zone: today, and the next whole hour.
+let menuOpen = null;
+const CHEV = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>`;
+function startMenuHtml(scheduled) {
+  // The day and time boxes, in this browser's zone: today, and the next whole hour.
   const local = (d) => { d = new Date(d); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString(); };
   const next = new Date(); next.setHours(next.getHours() + 1, 0, 0, 0);
   // When "before it resets" would be, from the usage reading (the server works it out the same way).
   const before = (k) => {
     const l = USAGE?.[k];
-    if (!l) return "reset time not known yet";
-    if (!l.resets) return "now: no window running";
-    if (Date.parse(l.resets) <= Date.now()) return "once the next reading is in";
+    if (!l) return "not known yet";
+    if (!l.resets) return "now";
+    if (Date.parse(l.resets) <= Date.now()) return "after the next reading";
     return resetTime(new Date(Math.max(Date.now(), Date.parse(l.resets) - BEFORE_MINS * 60e3)));
   };
-  const m = startMenu = document.createElement("div");
-  m.className = "startmenu";
-  m.innerHTML = `<button data-w="now"><span>Start now</span></button>
-    <button data-w="pick"><span>Pick a time…</span></button>
-    <div class="pick row" hidden><input type="date" aria-label="Day" value="${local(next).slice(0, 10)}" min="${local(new Date()).slice(0, 10)}"><input type="time" aria-label="Time" value="${local(next).slice(11, 16)}"><button class="primary" data-w="at">Set</button></div>
+  return `<div class="repomenu startmenu">
+    <button data-w="now">Start now</button>
+    <button data-w="pick">Pick a time…</button>
+    <div class="pick" hidden><input type="date" aria-label="Day" value="${local(next).slice(0, 10)}" min="${local(new Date()).slice(0, 10)}"><input type="time" aria-label="Time" value="${local(next).slice(11, 16)}"><button class="primary" data-w="at">Set</button></div>
     <hr>
-    <button data-w="session"><span>Before the 5-hour limit resets</span><small>${before("session")}</small></button>
-    <button data-w="weekly"><span>Before the weekly limit resets</span><small>${before("weekly")}</small></button>
-    ${scheduled ? `<hr><button data-w="clear"><span>Clear schedule</span></button>` : ""}`;
-  (btn.closest("dialog") || document.body).append(m);
-  const r = btn.getBoundingClientRect();
-  m.style.right = innerWidth - r.right + "px";
-  m.style.bottom = innerHeight - r.top + 6 + "px";
-  m.addEventListener("click", (e) => {
-    const w = e.target.closest("[data-w]")?.dataset.w; if (!w) return;
-    if (w === "pick") { m.querySelector(".pick").hidden = false; m.querySelector(".pick input").focus(); return; }
-    let v = w === "now" ? "now" : w === "clear" ? null : { before: w, mins: BEFORE_MINS };
-    if (w === "at") {
-      const [d, t] = m.querySelectorAll(".pick input"), ms = Date.parse(`${d.value}T${t.value}`);
-      if (!ms) return;
-      v = { at: new Date(ms).toISOString() }; // with its zone, so a server elsewhere gets the time you meant
-    }
-    closeStartMenu(); pick(v);
-  });
-  m.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.matches(".pick input")) m.querySelector('[data-w="at"]').click(); });
+    <button data-w="session">Before the 5-hour limit resets<small>${before("session")}</small></button>
+    <button data-w="weekly">Before the weekly limit resets<small>${before("weekly")}</small></button>
+    ${scheduled ? `<hr><button data-w="clear">Clear schedule</button>` : ""}</div>`;
+}
+// The black button with a ▾ beside it. key is what menuOpen is set to while its menu is open.
+const startSplit = (main, key, scheduled) => `<span class="startsplit">${main}<button class="primary chev" data-chev="${key}" aria-label="Start later" aria-expanded="${menuOpen === key}" title="Start it later: at a time, or just before a usage limit resets">${CHEV}</button>${menuOpen === key ? startMenuHtml(scheduled) : ""}</span>`;
+const closeMenu = () => { menuOpen = null; for (const m of document.querySelectorAll(".startmenu")) { m.closest(".startsplit")?.querySelector(".chev")?.setAttribute("aria-expanded", "false"); m.remove(); } };
+// A click on a menu item: "now", { at }, { before, mins }, null (clear), or
+// undefined for nothing to do yet (Pick a time… only opens the boxes).
+function menuChoice(b) {
+  const w = b.dataset.w, m = b.closest(".startmenu");
+  if (w === "pick") { const p = m.querySelector(".pick"); p.hidden = !p.hidden; if (!p.hidden) p.querySelector("input").focus(); return undefined; }
+  if (w === "now") return "now";
+  if (w === "clear") return null;
+  if (w !== "at") return { before: w, mins: BEFORE_MINS };
+  const [d, t] = m.querySelectorAll(".pick input"), ms = Date.parse(`${d.value}T${t.value}`);
+  return ms ? { at: new Date(ms).toISOString() } : undefined; // with its zone, so a server elsewhere gets the time you meant
 }
 // A click anywhere else, or Escape, closes it. Escape doesn't also close the popup under it.
-document.addEventListener("pointerdown", (e) => { if (startMenu && !startMenu.contains(e.target) && !e.target.closest(".startsplit .chev, [data-act=chev]")) closeStartMenu(); }, true);
-document.addEventListener("keydown", (e) => { if (e.key !== "Escape" || !startMenu) return; const d = startMenu.closest("dialog"); if (d) d._keep = true; closeStartMenu(); }, true);
-addEventListener("scroll", (e) => { if (startMenu && !startMenu.contains(e.target)) closeStartMenu(); }, true);
+document.addEventListener("pointerdown", (e) => { if (menuOpen && !e.target.closest(".startmenu, [data-chev]")) closeMenu(); }, true);
+document.addEventListener("keydown", (e) => {
+  if (!menuOpen) return;
+  if (e.key === "Escape") { const d = document.querySelector(".startmenu")?.closest("dialog"); if (d) d._keep = true; closeMenu(); }
+  else if (e.key === "Enter" && e.target.matches(".startmenu .pick input")) { e.preventDefault(); e.target.closest(".startmenu").querySelector('[data-w="at"]').click(); }
+}, true);
 // Mirrors the server: full at 100%, free again once its reset time passes.
 function limitFull() {
   for (const which of ["session", "weekly"]) {
@@ -982,7 +984,7 @@ function simpleCard(f, inPop) {
     ${actions(planned
       ? `${inPop ? "" : `<button data-act="edit">${s.edit ? "Cancel edit" : "Edit"}</button>`}<button data-act="drop" title="Keep it on record as dropped">Drop</button>`
       : `<button data-act="reopen">${s.reopen ? "Cancel reopen" : "Reopen"}</button>`,
-      planned ? `${s.edit && !inPop ? `<button class="second" data-act="edit-save" title="Save the name and description on main">Save</button>` : ""}${startSplit(`<button class="primary" data-act="start" title="Make its branch and start an agent on what it says. ${MAC ? "⌘" : "Ctrl"}+Enter in its boxes starts it.">Start agent${s.edit || inPop ? keysHint(true) : ""}</button>`, 'data-act="chev"')}`
+      planned ? `${s.edit && !inPop ? `<button class="second" data-act="edit-save" title="Save the name and description on main">Save</button>` : ""}${startSplit(`<button class="primary" data-act="start" title="Make its branch and start an agent on what it says. ${MAC ? "⌘" : "Ctrl"}+Enter in its boxes starts it.">Start agent${s.edit || inPop ? keysHint(true) : ""}</button>`, f.slug, !!schedOf(f))}`
       : leftover ? `<button class="primary" data-act="remove" title="Delete its folder. The unmerged branch is kept, so the work is still in git.">Remove worktree</button>` : "")}
     ${s.reopen ? `<div style="margin-top:10px; display:grid; gap:8px">
       <div class="hint">A new feature that continues this one. Start agent makes a new branch from current main with a new session, and the agent reads this feature's notes first. Save as planned records it to start later.</div>
@@ -1769,14 +1771,16 @@ function markShortErrors() {
     e.title = short ? "" : "Click to show more";
   }
 }
-async function refresh() { try { const [fs, ls] = await Promise.all([api("/api/features"), api("/api/labels")]); LABELS = ls; render(fs); markShortErrors(); renderUsage(); } catch {} }
+// An open Start ▾ menu holds the board still.
+async function refresh() { if (menuOpen) return; try { const [fs, ls] = await Promise.all([api("/api/features"), api("/api/labels")]); LABELS = ls; render(fs); markShortErrors(); renderUsage(); } catch {} }
 
 for (const host of [$("#list"), $("#popDlg")]) {
 host.addEventListener("input", (e) => {
   const c = e.target.closest("[data-slug]"); if (!c) return; const s = u(c.dataset.slug);
   if (e.target.dataset.field) s[e.target.dataset.field] = e.target.value;
   if (e.target.closest(".compose")) fitCompose(e.target);
-  if (e.target.dataset.field === "eprompt") fitPlan(e.target);});
+  if (e.target.dataset.field === "eprompt") fitPlan(e.target);
+});
 host.addEventListener("click", onClick);
 // Ctrl+Enter (or Cmd+Enter) does the main thing: send, or start the agent.
 host.addEventListener("keydown", (e) => {
@@ -1805,8 +1809,8 @@ for (const id of ["#newDlg", "#repoDlg", "#defaultsDlg"]) $(id).addEventListener
 });
 
 async function onClick(e) {
-  const b = e.target.closest("[data-act]"); if (!b) return;
-  const slug = b.closest("[data-slug]").dataset.slug; const s = u(slug); const act = b.dataset.act;
+  const b = e.target.closest("[data-act], [data-chev], .startmenu [data-w]"); if (!b) return;
+  const slug = b.closest("[data-slug]").dataset.slug; const s = u(slug); const act = b.dataset.act || (b.dataset.chev ? "chev" : "menu");
   const say = (msg, cls = "") => { s.msg = msg; s.cls = cls; render(all); refresh(); };
   const base = `/api/features/${slug}`;
   if (act === "collapse" && b.closest(".pop")) return; // the popup always shows everything
@@ -1902,15 +1906,16 @@ async function onClick(e) {
     return true;
   };
   if (act === "unschedule") { const r = await api(`${base}/schedule`, { schedule: null }); return say(r.msg, r.ok ? "" : "bad"); }
-  if (act === "chev") {
-    if (startMenu) return closeStartMenu();
-    return openStartMenu(b, { scheduled: !!schedOf(all.find((x) => x.slug === slug)), pick: async (v) => {
-      // Start now: the card's own Start agent, wherever the card is right now (it may have redrawn).
-      if (v === "now") return $(`[data-slug="${slug}"] [data-act="start"]`)?.click();
-      if (!(await saveTyped())) return;
-      const r = await api(`${base}/schedule`, { schedule: v });
-      say(!r.ok ? r.msg : v ? "Scheduled. It starts by itself when it's due." : r.msg, r.ok ? "good" : "bad");
-    } });
+  if (act === "chev") { menuOpen = menuOpen === slug ? null : slug; return render(all); }
+  // The missed banner: the same menu, with the day and time boxes already open.
+  if (act === "newtime") { menuOpen = slug; render(all); const p = $(".startmenu .pick"); if (p) { p.hidden = false; p.querySelector("input").focus(); } return; }
+  if (act === "menu") {
+    const v = menuChoice(b); if (v === undefined) return;
+    closeMenu();
+    if (v === "now") return $(`[data-slug="${slug}"] [data-act="start"]`)?.click(); // the card's own Start agent
+    if (!(await saveTyped())) return;
+    const r = await api(`${base}/schedule`, { schedule: v });
+    return say(!r.ok ? r.msg : v ? "Scheduled. It starts by itself when it's due." : r.msg, r.ok ? "good" : "bad");
   }
   if (act === "start") {
     if (!(await saveTyped())) return;
@@ -2088,15 +2093,21 @@ async function addFeature(plan) {
 // New feature's ▾. Start now starts it; anything else is remembered, and the
 // black button then says when, like "Schedule · 9:00 PM".
 let newSched = null;
-function setSched(v) {
-  newSched = v;
-  $("#add").firstChild.textContent = !v ? "Start agent" : `Schedule · ${v.at ? resetTime(v.at) : `before the ${LIMIT_NAME[v.before]} reset`}`;
+function setSched(v) { newSched = v; drawNewStart(); }
+function drawNewStart() {
+  const label = !newSched ? "Start agent" : `Schedule · ${newSched.at ? resetTime(newSched.at) : `before the ${LIMIT_NAME[newSched.before]} reset`}`;
+  $("#newStart").innerHTML = startSplit(`<button class="primary" id="add" title="${MAC ? "⌘" : "Ctrl"}+Enter ${newSched ? "schedules" : "starts"} it">${esc(label)}${keysHint(true)}</button>`, "new", !!newSched);
 }
-$("#addChev").onclick = (e) => startMenu ? closeStartMenu() : openStartMenu(e.currentTarget, { scheduled: !!newSched, pick: (v) => v === "now" ? (setSched(null), addFeature(false)) : setSched(v) });
-$("#add").onclick = () => addFeature(false);
+drawNewStart();
+$("#newStart").addEventListener("click", (e) => {
+  const b = e.target.closest("#add, [data-chev], .startmenu [data-w]"); if (!b) return;
+  if (b.id === "add") return addFeature(false);
+  if (b.dataset.chev) { menuOpen = menuOpen === "new" ? null : "new"; return drawNewStart(); }
+  const v = menuChoice(b); if (v === undefined) return;
+  closeMenu();
+  if (v === "now") { setSched(null); addFeature(false); } else setSched(v);
+});
 $("#addPlan").onclick = () => addFeature(true);
-$("#add").insertAdjacentHTML("beforeend", keysHint(true));
-$("#add").title = `${MAC ? "⌘" : "Ctrl"}+Enter starts it`;
 // Ctrl+Enter anywhere in these presses the main button. A disabled (busy) one ignores it.
 for (const d of ["#newDlg", "#repoDlg", "#defaultsDlg"]) $(d).addEventListener("keydown", (e) => {
   if (e.key !== "Enter" || !(e.ctrlKey || e.metaKey) || e.isComposing) return;
