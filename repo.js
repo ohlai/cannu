@@ -1080,6 +1080,7 @@ const server = http.createServer(async (req, res) => {
     if (action === "remove" && f.status === "dropped" && f.dir && !f.removed) return send(res, 200, await removeFeature(f));
     if (f.status === "planned") {
       if (action === "start") return send(res, 200, startFeature(f, `Start feature: ${f.title}`));
+      if (action === "model") return send(res, 200, update(f.slug, { model: b.model in MODELS ? b.model : "" }, `Set model: ${f.title}`));
       if (action === "edit") {
         const title = String(b.title || "").trim() || f.title;
         if (title !== f.title && loadFeatures().some((x) => x.slug !== f.slug && x.title.toLowerCase() === title.toLowerCase())) return send(res, 400, { msg: "A feature already has that name." });
