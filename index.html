@@ -1626,7 +1626,7 @@ function makeSeg(el, get, set) {
 makeSeg($("#viewSeg"), () => view, (v) => { view = v; store.set("view", v); });
 makeSeg($("#doneSeg"), () => (hideDone ? "hide" : "show"), (v) => { hideDone = v === "hide"; store.set("hideDone", hideDone); });
 // The sort dropdown, built like the repo one.
-const SORT_NAMES = { status: "Needs you first", active: "Last active", created: "Newest", name: "Name", manual: "Manual (drag)" };
+const SORT_NAMES = { status: "Needs you first", active: "Last active", created: "Newest", name: "Name", manual: "Manual" };
 $("#sortName").textContent = "Sort: " + SORT_NAMES[sortBy];
 function sortMenu(open) {
   $("#sortMenu").hidden = !open; $("#sortBtn").setAttribute("aria-expanded", open);
