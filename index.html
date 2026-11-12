@@ -826,13 +826,18 @@ function dateOk(raw) {
   return !(v.day && v.month && v.day > new Date(2028, v.month, 0).getDate()); // 2028: a leap year, so 29/02 is fine
 }
 // How long before a reset, typed short or long: "30", "90m", "1h", "1h30",
-// "1.5h", "1d", "1d 2h", "1 hour 30 minutes", "2 hrs". A bare number is
-// minutes. Returns minutes, or NaN.
+// "1.5h", "1d", "1d 2h", "1 hour 30 minutes", "2 hrs". A bare number is the
+// next unit down from the one before it ("1d2" is 1 day 2 hours, "1h30" is
+// 1 hour 30 minutes), or minutes on its own. Returns minutes, or NaN.
+const NEXT_UNIT = { d: "h", h: "m", m: "m" };
 function parseDur(text) {
   const s = String(text ?? "").toLowerCase().trim(), re = /(\d+(?:\.\d+)?)\s*(days?|d|hours?|hrs?|h|minutes?|mins?|m)?\s*/y;
-  let total = 0, m;
+  let total = 0, m, unit = null;
   re.lastIndex = 0;
-  while (re.lastIndex < s.length && (m = re.exec(s))) total += Number(m[1]) * { d: 1440, h: 60, m: 1 }[(m[2] || "m")[0]];
+  while (re.lastIndex < s.length && (m = re.exec(s))) {
+    unit = m[2] ? m[2][0] : unit ? NEXT_UNIT[unit] : "m";
+    total += Number(m[1]) * { d: 1440, h: 60, m: 1 }[unit];
+  }
   return s && re.lastIndex === s.length ? Math.round(total) : NaN;
 }
 // Minutes back in words, as the box (on leaving it) and the card show them: 90 is "1 hour 30 minutes".
@@ -844,10 +849,12 @@ function minsOk(raw, k) {
   const s = raw.trim().replace(/\.$/, "").replace(/[a-z]+$/i, (w) => (UNIT_WORDS.some((u) => u.startsWith(w.toLowerCase())) ? w[0] : "?"));
   return s === "" || parseDur(s) < minsLeft(k);
 }
-// The faded rest of a unit: "90" gets " minutes", "1 h" gets "our", "2 h" gets "ours".
+// The faded rest of a unit: "90" gets " minutes", "1 h" gets "our", "2 h" gets
+// "ours". A bare number gets the next unit down, as parseDur reads it: "1d2" gets " hours".
 function durGhost(t) {
   const m = t.match(/(\d+(?:\.\d+)?)(\s*)([a-z]*)$/i); if (!m) return "";
-  const [, n, sp, w] = m, word = (w ? { d: "day", h: "hour", m: "minute" }[w[0].toLowerCase()] : "minute") + (Number(n) === 1 ? "" : "s");
+  const before = t.slice(0, m.index).match(/([a-z])[a-z]*\s*$/i)?.[1].toLowerCase(); // the unit before this number
+  const [, n, sp, w] = m, word = { d: "day", h: "hour", m: "minute" }[w ? w[0].toLowerCase() : before ? NEXT_UNIT[before] : "m"] + (Number(n) === 1 ? "" : "s");
   if (!w) return (sp ? "" : " ") + word;
   return word?.startsWith(w.toLowerCase()) ? word.slice(w.length) : "";
 }
