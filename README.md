@@ -28,6 +28,17 @@ and shows them all on one board. Node built-ins only, nothing to install.
   terminal) is held. Held agents carry on by themselves once it resets. It
   reads Claude Code's login from `~/.claude/.credentials.json`; without that
   file the rings stay grey.
+- Schedule a task to start by itself: at a time, or a while before the
+  5-hour or weekly limit resets, so what's left of it isn't wasted. The ▾
+  beside **Start agent now** (in New task and on planned cards) chooses when,
+  and the button then says what it will do ("Schedule · 4:30 PM") and does it.
+  Type the day and time as you'd say them (14/11, tomorrow, 430pm) or paste a
+  standard date; how long before a reset takes 90, 1h30, 1d and the like, and
+  is remembered for each limit. A limit whose reset time isn't known yet can't
+  be chosen. A scheduled card says "Scheduled for 4:30 PM (in 2h)" above
+  **Cancel schedule**. Cannu has to be running to start it: if the computer
+  was off or asleep then, it doesn't start late by itself, and the card says
+  it was missed.
 - A small HTTP API, so another agent (Hermes) can drive it. See `hermes/`.
 
 **Why it's called Cannu.** It's named after Can Nü (蠶女), the silkworm girl of

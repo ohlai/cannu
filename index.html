@@ -378,6 +378,41 @@
   .repomenu button.trash { width:30px; height:30px; flex:none; padding:0; justify-content:center; color:var(--mute); }
   .repomenu button.trash:hover, .repomenu button.trash:focus-visible { color:var(--bad); }
   .repomenu button.trash svg { width:15px; height:15px; fill:none; stroke:currentColor; stroke-width:2; }
+  /* Start agent ▾: the black button and a narrow ▾ joined into one. Its menu
+     is a .repomenu (the sort and repo menus' look) that opens upward, since
+     these buttons sit at the bottom of a card or popup. After .repomenu, so these win. */
+  .startsplit { position:relative; display:inline-flex; }
+  .startsplit > .primary:first-child { border-top-right-radius:0; border-bottom-right-radius:0; }
+  .startsplit > .startchev { display:inline-flex; align-items:center; padding:0 7px; border-top-left-radius:0; border-bottom-left-radius:0; border-left-color:color-mix(in srgb, var(--bg) 30%, var(--fg)); }
+  .startsplit > .startchev svg { width:12px; height:12px; fill:none; stroke:currentColor; stroke-width:2.5; transition:transform .15s; }
+  .startsplit > .startchev[aria-expanded="true"] svg { transform:rotate(-180deg); }
+  /* A choice that can't be done (a time that has passed): greyed out, can't be pressed. */
+  .startsplit > .primary:first-child:disabled { background:var(--line); border-color:var(--line); color:var(--mute); cursor:default; }
+  /* One width whatever is chosen or known, so it never jumps about. */
+  .startmenu { top:auto; bottom:calc(100% + 6px); right:0; width:360px; max-width:calc(100vw - 32px); text-align:left; font-weight:400; }
+  /* The chosen option: ticked and bold. The time beside it stays regular. */
+  .startmenu > button.on { font-weight:600; }
+  .startmenu button small { max-width:none; direction:ltr; font-weight:400; }
+  /* A limit whose reset time isn't known can't be chosen. */
+  .startmenu > button:disabled { opacity:.5; cursor:default; }
+  .startmenu > button:disabled:hover { background:none; }
+  /* "Reset time unknown", under the greyed-out option, lined up with its words. */
+  .startmenu .unknown { display:flex; align-items:center; gap:5px; padding:0 9px 7px 31px; font-size:12px; color:var(--mute); }
+  .startmenu .unknown .info { width:13px; height:13px; flex:none; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; }
+  /* The boxes, lined up with the option's words: the item's 9px padding, 14px tick and 8px gap. */
+  .startmenu .pick { display:flex; gap:6px; align-items:center; padding:2px 9px 8px 31px; }
+  .startmenu .pick > span:not(.gbox) { color:var(--mute); font-size:13px; }
+  /* Each box has the faded rest of what you're typing laid over it: an invisible
+     copy of the typed text, then the rest. Same font, padding and border as the box, so they line up. */
+  .gbox { position:relative; display:inline-block; }
+  .gbox input, .gbox .ghost { font:inherit; font-size:13px; line-height:18px; padding:6px 8px; border:1px solid transparent; white-space:pre; }
+  .gbox input { border-color:var(--line); border-radius:7px; background:var(--bg); color:var(--fg); }
+  .gbox .ghost { position:absolute; inset:0; pointer-events:none; overflow:hidden; color:var(--mute); }
+  .gbox .ghost i { font-style:normal; visibility:hidden; }
+  .gbox .ghost b { font-weight:400; }
+  .gbox input[data-in=date] { width:8.5em; } .gbox input[data-in=time] { width:7em; } .gbox input[data-in=mins] { width:12em; }
+  /* Right, over the button that cancels it. */
+  .meta.sched { margin-top:10px; text-align:right; }
   /* Add repo: how to work on the picked repo, i.e. its cannu.json. */
   /* A set height, not floor to ceiling, that doesn't jump when a repo is picked: the body scrolls instead. */
   #repoDlg .panel { height:min(620px, calc(100vh - 160px)); }
@@ -518,7 +553,7 @@
     </div>
     <div class="dmsg" id="addMsg"></div>
     <footer class="row"><button data-close title="Keeps what you've typed here for next time, in this browser tab. Nothing is saved to the repo.">Close</button><span class="grow" style="min-width:0"></span>
-      <button class="second" id="addPlan" title="Records it on main without a branch or agent. Start it later from its card.">Save as planned</button><button class="primary" id="add">Start agent</button></footer>
+      <button class="second" id="addPlan" title="Records it on main without a branch or agent. Start it later from its card.">Save as planned</button><span id="newStart"></span></footer>
   </div>
 </dialog>
 
@@ -654,7 +689,7 @@ function errBlock(s, key, text) {
 
 // [status, detail]. The detail (needs you, background…) shows after it.
 function kind(f) {
-  if (!f.worktree) return f.status === "building" ? ["waiting", ""] : [f.status, ""];
+  if (!f.worktree) return f.status === "building" ? ["waiting", ""] : [f.status, schedOf(f) ? (schedOf(f).missed ? "missed its start" : "scheduled") : ""];
   const [cls, label] = status(f);
   if (cls === "merged") return ["merged", ""];
   if (cls === "working") return ["working", f.settingUp ? label : f.live?.background ? "background" : ""];
@@ -687,6 +722,384 @@ const resetTime = (iso) => {
 };
 const until = (iso) => { const ms = new Date(iso) - Date.now(), h = Math.floor(ms / 36e5); return h >= 24 ? `${Math.floor(h / 24)}d ${h % 24}h` : dur(ms); };
 const resetAt = (iso) => `${resetTime(iso)} (in ${until(iso)})`;
+
+// ---------- scheduled starts ----------
+// A planned feature can start by itself at a time, or some minutes before a
+// limit resets. The server keeps { at } or { before, mins }, with `due` once
+// it's known and `missed` if Cannu wasn't running when it was due.
+const schedOf = (f) => (f.status === "planned" && f.schedule) || null;
+const schedWhat = (s) => (s.at ? "" : `${durText(s.mins)} before your ${LIMIT_NAME[s.before]} limit resets`);
+// One line for the tile and the card, the same whether the start is still to
+// come or was missed: "Scheduled for 2:00 PM (in 13m)", or "(5m ago)".
+function schedText(f) {
+  const s = schedOf(f); if (!s) return "";
+  const what = schedWhat(s), t = s.missed || s.due;
+  if (!t) return `Scheduled for ${what}. Waiting on a usage reading to know when that is.`;
+  const ms = Date.parse(t) - Date.now();
+  return `Scheduled for ${resetTime(t)} (${Math.abs(ms) < 60e3 ? "now" : ms > 0 ? "in " + until(t) : ago(t)})${what ? `, ${what}` : ""}`;
+}
+// The bottom of a scheduled card, just above its buttons: a missed start's
+// warning, then when it was scheduled for. Nothing else goes below it, so
+// messages never push it about. The card's own Start agent now ▾ replaces a missed start.
+function schedFoot(f) {
+  const s = schedOf(f); if (!s) return "";
+  const missed = s.missed ? `<div class="banner">This task was meant to start at ${resetTime(s.missed)}, but ${s.why ? "couldn't: " + esc(s.why) : "Cannu wasn't running then"}. Please reschedule or start the task now.</div>` : "";
+  return `${missed}<div class="meta sched">${esc(schedText(f))}</div>`;
+}
+
+// Start agent's ▾ picks WHEN the black button starts the agent: now, at a
+// time, or some minutes before a limit resets. Picking only selects (ticked);
+// nothing starts or is scheduled until the black button is pressed, and its
+// text follows the choice. Built like the sort and repo menus: it sits in the
+// button's own wrapper and opens upward. One open at a time: menuOpen is the
+// slug of its card, or "new" for New feature. The 2s refresh waits while it's
+// open, so a redraw can't shut it or wipe a half-typed time.
+let menuOpen = null;
+const CHEV = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>`;
+// How many minutes before each limit's reset to start, remembered in this
+// browser for each limit. Until a limit has its own, it takes the other's, so
+// the first one you set fills in both.
+const beforeMins = (k) => { const b = store.get("beforeMins", {}); return b[k] ?? b[k === "session" ? "weekly" : "session"] ?? 30; };
+const saveBeforeMins = (k, n) => store.set("beforeMins", { ...store.get("beforeMins", {}), [k]: n });
+// Whether a limit's reset time is known: a reading with a reset still ahead.
+// Without one, "before it resets" can't be worked out, so that option is greyed out.
+const resetKnown = (k) => Date.parse(USAGE?.[k]?.resets) > Date.now();
+// Whole minutes until a limit resets. Starting that many minutes before it, or more, would be now or earlier.
+const minsLeft = (k) => (resetKnown(k) ? Math.floor((Date.parse(USAGE[k].resets) - Date.now()) / 60e3) : 0);
+// When "mins before it resets" is, from the usage reading (the server works it out the same way).
+function beforeAt(k, mins) {
+  if (!resetKnown(k)) return "";
+  return mins >= minsLeft(k) ? "before now" : resetTime(Date.parse(USAGE[k].resets) - mins * 60e3);
+}
+// A date as the browser keeps it (YYYY-MM-DD), in this browser's zone.
+const localIso = (d) => { d = new Date(d); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString(); };
+const pad2 = (n) => String(n).padStart(2, "0");
+// Whether this browser shows a 12-hour clock (1:30 PM) or a 24-hour one (13:30), and how it writes am and pm.
+const H12 = !/h2[34]/.test(new Intl.DateTimeFormat([], { hour: "numeric" }).resolvedOptions().hourCycle || "");
+const AMPM = (h) => new Intl.DateTimeFormat([], { hour: "numeric", hour12: true }).formatToParts(new Date(2026, 0, 1, h)).find((p) => p.type === "dayPeriod")?.value || (h < 12 ? "am" : "pm");
+// The order this browser writes a date in: ["day", "month", "year"] in Australia, month first in the US.
+const DATE_ORDER = new Intl.DateTimeFormat([], { day: "numeric", month: "numeric", year: "numeric" }).formatToParts(new Date(2026, 10, 12)).map((p) => p.type).filter((t) => t !== "literal");
+const dayText = (d) => DATE_ORDER.map((k) => (k === "year" ? d.getFullYear() : pad2(k === "day" ? d.getDate() : d.getMonth() + 1))).join("/");
+const DAY_WORDS = ["today", "tomorrow", "tmr", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+
+// The day, time and minutes boxes are plain text, typed the way you'd say
+// them. The browser's own boxes only moved on with Tab, so "1 30" became 1:00.
+// Masking libraries (IMask, Cleave.js, Inputmask) do this too, but Cannu takes
+// no dependencies, and these lines cover it:
+// - The separators go in as you type: "450" shows as 4:50, "1411" as 14/11
+//   (dd/mm here). A day of 4 to 9 or a month of 2 to 9 can't take a second
+//   digit, so it gets its 0 at once ("4" is 04), the same rule as Cleave's.
+// - A key that can't lead to a real day, time or number of minutes doesn't
+//   go in at all (timeOk, dateOk, minsOk).
+// - Clicking a box moves what's in it to the faded placeholder, so you just
+//   type. While you type, the rest is shown faded after it ("4:30" then "pm"),
+//   and leaving the box keeps it. Leaving it empty puts the old value back.
+function fmtTime(raw) {
+  const m = raw.match(/^([\d:.\s]*)(.*)$/), d = m[1].replace(/\D/g, "").slice(0, 4), am = m[2].trim();
+  const t = d.length < 3 ? d : `${d.slice(0, -2)}:${d.slice(-2)}`;
+  return am ? `${t} ${am}` : t;
+}
+function fmtDate(raw) {
+  if (/[a-z]/i.test(raw)) return raw; // a word: today, tomorrow, fri
+  const parts = [""];
+  for (const ch of raw) {
+    let i = parts.length - 1;
+    if (/\d/.test(ch)) {
+      if (parts[i].length >= (DATE_ORDER[i] === "year" ? 4 : 2)) { if (i === 2) continue; parts.push(""); i++; }
+      parts[i] += ch;
+      if (parts[i].length === 1 && ((DATE_ORDER[i] === "day" && ch > "3") || (DATE_ORDER[i] === "month" && ch > "1"))) parts[i] = "0" + ch;
+    } else if (parts[i] && i < 2) { // a separator ends this part
+      if (parts[i].length === 1 && DATE_ORDER[i] !== "year") parts[i] = "0" + parts[i];
+      parts.push("");
+    }
+  }
+  return parts.join("/");
+}
+// Whether a time box could still become a real time: hours to 23 (1 to 12
+// with am or pm), minutes to 59. "5" is fine (5:xx), "53" too (5:3x), "5330" isn't.
+function timeOk(raw) {
+  const m = fmtTime(raw).match(/^([\d:]*)(?:\s*([a-z.]+))?$/i); if (!m) return false;
+  const d = m[1].replace(":", ""), suf = (m[2] || "").toLowerCase().replace(/\./g, ""), hr = (s) => (suf ? +s >= 1 && +s <= 12 : +s <= 23);
+  if (suf && (!H12 || !d || !/^[ap]m?$/.test(suf))) return false;
+  if (d.length <= 1) return !suf || hr(d);
+  if (d.length === 2) return hr(d) || (!suf && +d[1] <= 5);
+  if (d.length === 3) return (hr(d[0]) && +d.slice(1) <= 59) || (!suf && +d.slice(0, 2) <= 23 && +d[2] <= 5);
+  return d.length === 4 && hr(d.slice(0, 2)) && +d.slice(2) <= 59;
+}
+// Whether a day box could still become a real day: the start of a word, or
+// days to 31, months to 12, a day that month has, and no year gone by.
+function dateOk(raw) {
+  const s = raw.trim().toLowerCase();
+  if (/[a-z]/.test(s)) return DAY_WORDS.some((w) => w.startsWith(s));
+  const parts = fmtDate(raw).split("/"), v = {};
+  if (parts.length > 3) return false;
+  for (let i = 0; i < parts.length; i++) {
+    const p = parts[i], k = DATE_ORDER[i];
+    if (!p) continue;
+    if (k === "year") { if (p.length === 4 && +p < new Date().getFullYear()) return false; continue; }
+    if (p.length === 2 && (+p < 1 || +p > (k === "day" ? 31 : 12))) return false;
+    if (p.length === 2) v[k] = +p;
+  }
+  return !(v.day && v.month && v.day > new Date(2028, v.month, 0).getDate()); // 2028: a leap year, so 29/02 is fine
+}
+// How long before a reset, typed short or long: "30", "90m", "1h", "1h30",
+// "1.5h", "1d", "1d 2h", "1 hour 30 minutes", "2 hrs". A bare number is the
+// next unit down from the one before it ("1d2" is 1 day 2 hours, "1h30" is
+// 1 hour 30 minutes), or minutes on its own. Returns minutes, or NaN.
+const NEXT_UNIT = { d: "h", h: "m", m: "m" };
+function parseDur(text) {
+  const s = String(text ?? "").toLowerCase().trim(), re = /(\d+(?:\.\d+)?)\s*(days?|d|hours?|hrs?|h|minutes?|mins?|m)?\s*/y;
+  let total = 0, m, unit = null;
+  re.lastIndex = 0;
+  while (re.lastIndex < s.length && (m = re.exec(s))) {
+    unit = m[2] ? m[2][0] : unit ? NEXT_UNIT[unit] : "m";
+    total += Number(m[1]) * { d: 1440, h: 60, m: 1 }[unit];
+  }
+  return s && re.lastIndex === s.length ? Math.round(total) : NaN;
+}
+// Minutes back in words, as the box (on leaving it) and the card show them: 90 is "1 hour 30 minutes".
+const durText = (n) => [[Math.floor(n / 1440), "day"], [Math.floor((n % 1440) / 60), "hour"], [n % 60, "minute"]].filter(([x]) => x).map(([x, u]) => `${x} ${u}${x === 1 ? "" : "s"}`).join(" ") || "0 minutes";
+const UNIT_WORDS = ["day", "days", "hour", "hours", "hr", "hrs", "minute", "minutes", "min", "mins"];
+// Minutes before a reset: something parseDur reads, or its start ("1.", "1 ho"),
+// and less than the time left until the reset.
+function minsOk(raw, k) {
+  const s = raw.trim().replace(/\.$/, "").replace(/[a-z]+$/i, (w) => (UNIT_WORDS.some((u) => u.startsWith(w.toLowerCase())) ? w[0] : "?"));
+  return s === "" || parseDur(s) < minsLeft(k);
+}
+// The faded rest of a unit: "90" gets " minutes", "1 h" gets "our", "2 h" gets
+// "ours". A bare number gets the next unit down, as parseDur reads it: "1d2" gets " hours".
+function durGhost(t) {
+  const m = t.match(/(\d+(?:\.\d+)?)(\s*)([a-z]*)$/i); if (!m) return "";
+  const before = t.slice(0, m.index).match(/([a-z])[a-z]*\s*$/i)?.[1].toLowerCase(); // the unit before this number
+  const [, n, sp, w] = m, word = { d: "day", h: "hour", m: "minute" }[w ? w[0].toLowerCase() : before ? NEXT_UNIT[before] : "m"] + (Number(n) === 1 ? "" : "s");
+  if (!w) return (sp ? "" : " ") + word;
+  return word?.startsWith(w.toLowerCase()) ? word.slice(w.length) : "";
+}
+// A date, or date and time, pasted in a standard form: "2026-11-12",
+// "2026-11-12T14:30:00Z", "2026-11-12 14:30", "12 Nov 2026 2:30 pm". Returns
+// { date, time } as the boxes show them (time only if one was given, in this
+// browser's zone, so a Z time is turned into local time), or null for anything
+// else, which then goes through the usual typing rules.
+function pastedWhen(text) {
+  const s = String(text || "").trim(), iso = s.match(/^(\d{4})-(\d{2})-(\d{2})$/), hasTime = /\d{1,2}:\d{2}/.test(s);
+  // The browser reads nearly anything as a date ("hello 2026" is 1 January), so only
+  // these shapes go to it: ISO with a time, or a month name with a day and a four-digit year.
+  const isoTime = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test(s);
+  const named = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b/i.test(s) && /\b\d{1,2}(st|nd|rd|th)?\b/i.test(s.replace(/\d{1,2}:\d{2}/g, "")) && /\b\d{4}\b/.test(s);
+  const d = iso ? new Date(+iso[1], iso[2] - 1, +iso[3]) : isoTime || named ? new Date(s.replace(/(\d)(st|nd|rd|th)\b/i, "$1")) : null;
+  if (!d || isNaN(d)) return null;
+  return { date: dayText(d), time: hasTime ? fmtTime(timeText(d)) : null };
+}
+// A day box on leaving it: a day it can read becomes that date ("tmr" is
+// 13/11/2026); anything else is tidied ("14/1" is 14/01).
+const tidyDate = (t) => { const iso = parseDate(t); return iso ? dayText(new Date(iso + "T00:00")) : fmtDate(t + "/").replace(/\/$/, ""); };
+
+// What's faded after the typed text: the rest of the time ("4:30" gets " pm",
+// "4" gets ":00 pm"), or of the day ("14" gets "/11/2026", the next 14th to come).
+function timeGhost(t, day) {
+  // Formatted, it's "4", "43" (4:3 on its way), "4:3", "4:30", maybe with "a"/"am"/"p"/"pm" after.
+  const m = t.match(/^(\d{1,2})(?::(\d{0,2}))?(\s*)([a-z.]*)$/i); if (!m) return "";
+  const [, a, mm, , suf] = m, lump = mm == null && a.length === 2 && +a > 23; // "43": hour 4, minutes 3x
+  const hour = lump ? +a[0] : +a, min = lump ? a[1] + "0" : (mm ?? "").padEnd(2, "0");
+  let full = suf ? t : lump ? `${a}0` : mm == null ? `${a}:00` : `${a}:${min}`;
+  if (H12 && hour >= 1 && hour <= 12) {
+    if (!suf) full += " " + AMPM(+parseTime(`${hour}:${min}`, day).slice(0, 2));
+    else if (/^[ap]$/i.test(suf)) full = t + (suf === suf.toUpperCase() ? "M" : "m");
+  }
+  return full.startsWith(t) ? full.slice(t.length) : "";
+}
+function dateGhost(t) {
+  if (/[a-z]/i.test(t)) { const w = DAY_WORDS.find((x) => x.startsWith(t.toLowerCase())); return w ? w.slice(t.length) : ""; }
+  if (DATE_ORDER[0] === "year") return "";
+  const parts = t.split("/"), want = {};
+  parts.forEach((p, i) => { if (p) want[DATE_ORDER[i]] = +p; });
+  if (want.year != null) return "";
+  const d = new Date(); d.setHours(0, 0, 0, 0);
+  for (let n = 0; n < 400 && !((want.day == null || d.getDate() === want.day) && (want.month == null || d.getMonth() + 1 === want.month)); n++) d.setDate(d.getDate() + 1);
+  const full = DATE_ORDER.map((k, i) => (parts[i] ? parts[i] : k === "year" ? d.getFullYear() : pad2(k === "day" ? d.getDate() : d.getMonth() + 1))).join("/");
+  return full.startsWith(t) ? full.slice(t.length) : "";
+}
+
+// "14/11", "14/11/26", "14/11/2026", "today", "tomorrow", "fri". No year: the
+// next one to come. Returns YYYY-MM-DD, or "" if it can't tell.
+function parseDate(text) {
+  const s = String(text || "").trim().toLowerCase(), today = new Date(); today.setHours(0, 0, 0, 0);
+  const plus = (n) => { const d = new Date(today); d.setDate(d.getDate() + n); return localIso(d).slice(0, 10); };
+  if (s === "today") return plus(0);
+  if (/^(tomorrow|tmrw?|tom)$/.test(s)) return plus(1);
+  const wd = s.length >= 3 && /^[a-z]+$/.test(s) ? ["sun", "mon", "tue", "wed", "thu", "fri", "sat"].indexOf(s.slice(0, 3)) : -1;
+  if (wd >= 0) return plus((wd - today.getDay() + 7) % 7);
+  const nums = s.split(/\D+/).filter(Boolean);
+  if (nums.length < 2 || nums.length > 3) return "";
+  const v = {};
+  (nums.length === 2 ? DATE_ORDER.filter((k) => k !== "year") : DATE_ORDER).forEach((k, i) => (v[k] = Number(nums[i])));
+  let y = v.year ?? today.getFullYear(); if (y < 100) y += 2000;
+  const d = new Date(y, v.month - 1, v.day);
+  if (d.getMonth() !== v.month - 1 || d.getDate() !== v.day) return ""; // 31/02 and the like
+  if (v.year == null && d < today) d.setFullYear(y + 1);
+  return localIso(d).slice(0, 10);
+}
+// "1:30", "1 30", "130", "1.30", "13:30", "1:30pm", "9pm". Returns "HH:MM" on
+// the day given (YYYY-MM-DD), or "" if it can't tell.
+function parseTime(text, date) {
+  const m = String(text || "").trim().toLowerCase().match(/^(\d{1,2})(?:[:.\s]?(\d{2}))?\s*(?:(a|p)\.?\s*m?\.?)?$/);
+  if (!m) return "";
+  let h = Number(m[1]); const min = Number(m[2] || 0);
+  if (h > 23 || min > 59) return "";
+  if (m[3]) { if (h < 1 || h > 12) return ""; h = (h % 12) + (m[3] === "p" ? 12 : 0); }
+  else if (H12 && h >= 1 && h <= 12) {
+    // No am or pm on a 12-hour clock: today, the next one still to come; another day,
+    // 7 to 11 is morning and 12 to 6 afternoon.
+    // ponytail: a guess for other days; the faded am/pm shows which it took, and typing one settles it.
+    const hr = h % 12, today = date === localIso(new Date()).slice(0, 10);
+    const at = (x) => Date.parse(`${date}T${pad2(x)}:${pad2(min)}`);
+    h = today ? (at(hr) > Date.now() ? hr : hr + 12) : hr >= 7 && hr <= 11 ? hr : hr + 12;
+  }
+  return `${pad2(h)}:${pad2(min)}`;
+}
+const timeText = (d) => new Date(d).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+// What's chosen, by menu key: { w: "now" | "at" | "session" | "weekly", date and time (as typed), mins: { session, weekly } }.
+// Nothing chosen yet: Start now, with the day and time on the next whole hour.
+const whenSel = new Map();
+function whenOf(key) {
+  if (whenSel.has(key)) return whenSel.get(key);
+  const next = new Date(); next.setHours(next.getHours() + 1, 0, 0, 0);
+  return { w: "now", date: dayText(next), time: fmtTime(timeText(next)), mins: {} };
+}
+const minsOf = (sel, k) => sel.mins[k] ?? beforeMins(k);
+const atMs = (sel) => { const day = parseDate(sel.date), t = day && parseTime(sel.time, day); return t ? Date.parse(`${day}T${t}`) : NaN; };
+// What the black button will do: "now", { at }, { before, mins }, or a string
+// saying why it can't (the button is greyed out, with that as its tooltip).
+function whenBody(sel) {
+  if (sel.w === "now") return "now";
+  if (sel.w !== "at") {
+    if (!resetKnown(sel.w)) return `When your ${LIMIT_NAME[sel.w]} limit resets isn't known yet.`;
+    const n = minsOf(sel, sel.w);
+    return n < minsLeft(sel.w) ? { before: sel.w, mins: n } : `Your ${LIMIT_NAME[sel.w]} limit resets in ${durText(minsLeft(sel.w))}, so ${durText(n)} before it has already passed.`;
+  }
+  if (!parseDate(sel.date)) return `Type a day, like ${dayText(new Date(Date.now() + 864e5)).slice(0, 5)} or tomorrow.`;
+  const ms = atMs(sel);
+  if (!ms) return "Type a time, like 4:30 pm.";
+  if (ms <= Date.now()) return "That time has already passed.";
+  return { at: new Date(ms).toISOString() }; // with its zone, so a server elsewhere gets the time you meant
+}
+// The black button's words for the choice: when it will start, whichever way it was chosen.
+function whenLabel(sel) {
+  if (sel.w === "now") return "Start agent now";
+  const v = whenBody(sel);
+  if (typeof v === "string") return "Schedule";
+  return `Schedule · ${v.at ? resetTime(v.at) : beforeAt(sel.w, v.mins)}`;
+}
+// Its tooltip: what pressing it does, or why it can't be pressed.
+function whenTitle(sel) {
+  const v = whenBody(sel);
+  if (typeof v === "string" && v !== "now") return v;
+  return v === "now" ? "Make its branch and start the agent now." : `Start the agent by itself at ${whenLabel(sel).replace("Schedule · ", "")}. Cannu has to be running then.`;
+}
+const INFO = `<svg class="info" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.5v.5"/></svg>`;
+// A text box with room for the faded rest of what you're typing.
+const ghostBox = (kind, value, ph, label) => `<span class="gbox"><input type="text" data-in="${kind}" aria-label="${label}" value="${esc(value)}" placeholder="${ph}" data-ph="${ph}" autocomplete="off"><span class="ghost" aria-hidden="true"><i></i><b></b></span></span>`;
+function startMenuHtml(sel) {
+  const item = (k, text, small = "", off = false) => `<button data-w="${k}" class="${sel.w === k ? "on" : ""}" aria-pressed="${sel.w === k}" ${off ? "disabled" : ""}>${sel.w === k ? TICK : `<span class="tick"></span>`}${text}${small}</button>`;
+  // Unknown reset times are said once, under the option (or under the last one when both are unknown).
+  const note = (text) => `<div class="unknown" title="Cannu doesn't have this from your Claude usage yet, so it can't work out when to start. It checks about once a minute.">${INFO}${text}</div>`;
+  const limit = (k, name) => resetKnown(k)
+    ? item(k, `Before the ${name} limit resets`, `<small>${beforeAt(k, minsOf(sel, k))}</small>`)
+      + (sel.w === k ? `<div class="pick">${ghostBox("mins", durText(minsOf(sel, k)), "30m, 1h, 1d", `How long before the ${name} limit resets`)}<span>before</span></div>` : "")
+    : item(k, `Before the ${name} limit resets`, "", true)
+      + (k === "weekly" ? note(resetKnown("session") ? "Reset time unknown" : "Reset times unknown") : resetKnown("weekly") ? note("Reset time unknown") : "");
+  const fmt = DATE_ORDER.map((k) => ({ day: "dd", month: "mm", year: "yyyy" })[k]).join("/");
+  return `<div class="repomenu startmenu">
+    ${item("now", "Start now")}
+    <hr>
+    ${item("at", "At a time")}
+    ${sel.w === "at" ? `<div class="pick">${ghostBox("date", sel.date, fmt, "Day")}${ghostBox("time", sel.time, H12 ? "1:30 pm" : "13:30", "Time")}</div>` : ""}
+    ${limit("session", "5-hour")}
+    ${limit("weekly", "weekly")}</div>`;
+}
+// The black button, saying what it will do, with a ▾ beside it. attrs are the
+// button's own (its data-act or id); after is what follows its words (a key hint).
+// It's greyed out while the choice can't be done, like a time that has passed.
+const whenBlocked = (sel) => { const v = whenBody(sel); return typeof v === "string" && v !== "now"; };
+const startSplit = (attrs, after, key, sel) => `<span class="startsplit" data-when="${key}"><button class="primary" ${attrs} title="${esc(whenTitle(sel))}" ${whenBlocked(sel) ? "disabled" : ""}>${esc(whenLabel(sel))}${after}</button><button class="primary startchev" data-chev="${key}" aria-label="When to start" aria-expanded="${menuOpen === key}" title="Start now or later">${CHEV}</button>${menuOpen === key ? startMenuHtml(sel) : ""}</span>`;
+// The ▾ turning as its menu opens (anticlockwise) or shuts. Clicking ▾ redraws the button, so
+// the CSS transition has nothing to turn from: play the turn on the new one.
+// (Shut by a click elsewhere, Escape or Enter, the button stays and CSS turns it.)
+const turnChev = (key, open) => { for (const s of document.querySelectorAll(`[data-chev="${key}"] svg`)) s.animate([{ transform: `rotate(${open ? 0 : -180}deg)` }, { transform: `rotate(${open ? -180 : 0}deg)` }], { duration: 150, easing: "ease" }); };
+const closeMenu = () => { menuOpen = null; for (const m of document.querySelectorAll(".startmenu")) { m.closest(".startsplit")?.querySelector(".startchev")?.setAttribute("aria-expanded", "false"); m.remove(); } };
+// Picks a menu item: it's ticked, and only its own boxes show. The menu stays
+// open until you click away, press Escape, or Enter in a box. redraw draws it again.
+function menuPick(b, key, redraw) {
+  whenSel.set(key, { ...whenOf(key), w: b.dataset.w });
+  redraw();
+}
+
+// The boxes at work. Each knows its menu (data-when on the wrapper) and the choice it feeds.
+const boxSel = (inp) => { const key = inp.closest(".startsplit").dataset.when; if (!whenSel.has(key)) whenSel.set(key, whenOf(key)); return whenSel.get(key); };
+const ghostOf = (inp, sel) => !inp.value ? "" : inp.dataset.in === "time" ? timeGhost(inp.value, parseDate(sel.date) || localIso(new Date()).slice(0, 10)) : inp.dataset.in === "date" ? dateGhost(inp.value) : durGhost(inp.value);
+// The choice takes what's typed plus its faded rest, so the black button already
+// says "Schedule · 4:30 PM" while the box shows "4:30". Nothing typed: the old value.
+function boxToSel(inp, sel) {
+  const kind = inp.dataset.in, typed = inp.value, v = typed ? typed + ghostOf(inp, sel) : inp.dataset.was ?? typed;
+  if (kind !== "mins") sel[kind] = v;
+  else { const n = parseDur(v); if (n < minsLeft(sel.w)) { sel.mins = { ...sel.mins, [sel.w]: n }; saveBeforeMins(sel.w, n); } } // only an amount that works is kept
+  const split = inp.closest(".startsplit"), main = split.querySelector(":scope > .primary"), g = inp.nextElementSibling;
+  g.firstChild.textContent = typed; g.lastChild.textContent = typed ? ghostOf(inp, sel) : "";
+  if (kind === "mins") split.querySelector(`[data-w="${sel.w}"] small`).textContent = beforeAt(sel.w, minsOf(sel, sel.w));
+  main.firstChild.textContent = whenLabel(sel);
+  main.title = whenTitle(sel);
+  main.disabled = whenBlocked(sel);
+}
+// A key that can't lead anywhere real doesn't go in.
+document.addEventListener("beforeinput", (e) => {
+  const inp = e.target.closest?.(".startmenu [data-in]"); if (!inp || !e.inputType.startsWith("insert")) return;
+  const v = inp.value, cand = v.slice(0, inp.selectionStart) + (e.data ?? e.dataTransfer?.getData("text") ?? "") + v.slice(inp.selectionEnd);
+  const kind = inp.dataset.in;
+  if (!(kind === "time" ? timeOk(cand) : kind === "date" ? dateOk(cand) : minsOk(cand, boxSel(inp).w))) e.preventDefault();
+});
+// Pasting a standard date (and time) into either box fills the day box, and the time box too if it had a time.
+document.addEventListener("paste", (e) => {
+  const inp = e.target.closest?.('.startmenu [data-in="date"], .startmenu [data-in="time"]'); if (!inp) return;
+  const p = pastedWhen(e.clipboardData?.getData("text")); if (!p) return;
+  e.preventDefault();
+  const pick = inp.closest(".pick"), sel = boxSel(inp);
+  for (const [kind, v] of [["date", p.date], ["time", p.time]]) {
+    const box = v != null && pick.querySelector(`[data-in="${kind}"]`);
+    if (box) { box.value = v; boxToSel(box, sel); }
+  }
+});
+// Typing: separators go in (while typing at the end, so an edit in the middle keeps its cursor), then the rest follows.
+document.addEventListener("input", (e) => {
+  const inp = e.target.closest(".startmenu [data-in]"); if (!inp) return;
+  const kind = inp.dataset.in;
+  if (kind !== "mins" && e.inputType?.startsWith("insert") && inp.selectionStart === inp.value.length) {
+    const v = (kind === "date" ? fmtDate : fmtTime)(inp.value);
+    if (v !== inp.value) inp.value = v;
+  }
+  boxToSel(inp, boxSel(inp));
+});
+// Clicking a box: what's in it becomes the faded placeholder, so you just type.
+document.addEventListener("focusin", (e) => {
+  const inp = e.target.closest?.(".startmenu [data-in]"); if (!inp || inp.dataset.was != null) return;
+  inp.dataset.was = inp.value; inp.placeholder = inp.value || inp.dataset.ph; inp.value = "";
+});
+// Leaving it: what you typed plus its faded rest stays, tidied ("14/1/2027" is 14/01/2027).
+// Nothing typed, or minutes that wouldn't work: the old value comes back.
+document.addEventListener("focusout", (e) => {
+  const inp = e.target.closest?.(".startmenu [data-in]"); if (!inp || inp.dataset.was == null) return;
+  const sel = boxSel(inp), kind = inp.dataset.in, full = inp.value + ghostOf(inp, sel);
+  const keep = kind === "mins" ? parseDur(full) < minsLeft(sel.w) : !!inp.value;
+  inp.value = !keep ? inp.dataset.was : kind === "date" ? tidyDate(full) : kind === "time" ? fmtTime(full) : durText(parseDur(full)); // "90" is 1 hour 30 minutes
+  delete inp.dataset.was; inp.placeholder = inp.dataset.ph;
+  boxToSel(inp, sel);
+});
+// A click anywhere else, Escape, or Enter in a box closes it. Escape doesn't also close the popup under it.
+document.addEventListener("pointerdown", (e) => { if (menuOpen && !e.target.closest(".startmenu, [data-chev]")) closeMenu(); }, true);
+document.addEventListener("keydown", (e) => {
+  if (!menuOpen) return;
+  if (e.key === "Escape") { const d = document.querySelector(".startmenu")?.closest("dialog"); if (d) d._keep = true; closeMenu(); }
+  else if (e.key === "Enter" && !e.ctrlKey && !e.metaKey && e.target.matches(".startmenu [data-in]")) { e.preventDefault(); closeMenu(); }
+}, true);
 // Mirrors the server: full at 100%, free again once its reset time passes.
 function limitFull() {
   for (const which of ["session", "weekly"]) {
@@ -749,6 +1162,8 @@ async function loadUsage() {
   if (FAKE) USAGE.session = { percent: 100, resets: at(72 * 60e3) };
   // ?fakeweek: the week nearly used up, resetting a couple of days out.
   if (FAKE_WEEK) USAGE.weekly = { percent: 92, resets: at(53 * 36e5) };
+  // ?nousage: no reading at all, as with no Claude login, so neither reset time is known.
+  if (Q.has("nousage")) USAGE = null;
   renderUsage();
 }
 loadUsage(); setInterval(loadUsage, 30e3);
@@ -925,10 +1340,15 @@ function simpleCard(f, inPop) {
     ${edit ? `<div style="margin-top:10px; display:grid; gap:8px">
       ${taskForm((k) => `data-field="e${k}"`, { title: s.etitle ?? f.title, prompt: s.eprompt ?? f.prompt ?? "", self: f.slug })}${linkedFrom(f, "hint")}
     </div>` : ""}
+    ${inPop ? "" : schedFoot(f)}
     ${actions(planned
       ? `${inPop ? "" : `<button data-act="edit">${s.edit ? "Cancel edit" : "Edit"}</button>`}<button data-act="drop" title="Keep it on record as dropped">Drop</button>`
       : `<button data-act="reopen">${s.reopen ? "Cancel reopen" : "Reopen"}</button>`,
-      planned ? `${s.edit && !inPop ? `<button class="second" data-act="edit-save" title="Save the name and description on main">Save</button>` : ""}<button class="primary" data-act="start" title="Make its branch and start an agent on what it says. ${MAC ? "⌘" : "Ctrl"}+Enter in its boxes starts it.">Start agent${s.edit || inPop ? keysHint(true) : ""}</button>`
+      planned ? `${s.edit && !inPop ? `<button class="second" data-act="edit-save" title="Save the name and description on main">Save</button>` : ""}${schedOf(f) && !schedOf(f).missed
+        // Scheduled: the black button cancels that, and then ▾ is back to choose again.
+        // Missed: the usual button, and whatever it does replaces the missed start.
+        ? `<button class="primary" data-act="unschedule" title="Don't start it then. It stays planned, and you can start or schedule it again.">Cancel schedule</button>`
+        : startSplit('data-act="start"', s.edit || inPop ? keysHint(true) : "", f.slug, whenOf(f.slug))}`
       : leftover ? `<button class="primary" data-act="remove" title="Delete its folder. The unmerged branch is kept, so the work is still in git.">Remove worktree</button>` : "")}
     ${s.reopen ? `<div style="margin-top:10px; display:grid; gap:8px">
       <div class="hint">A new task that continues this one. Start agent makes a new branch from current main with a new session, and the agent reads this task's notes first. Save as planned records it to start later.</div>
@@ -936,6 +1356,7 @@ function simpleCard(f, inPop) {
       <div class="row"><button class="second" data-act="reopen-plan" title="Records it on main without a branch or agent. Start it later from its card.">Save as planned</button><button class="primary" data-act="reopen-go" title="${MAC ? "⌘" : "Ctrl"}+Enter starts it">Start agent${keysHint(true)}</button></div>
     </div>` : ""}
     ${msgBlock(s)}
+    ${inPop ? schedFoot(f) : ""}
   </div>`;
 }
 
@@ -1235,6 +1656,7 @@ function tile(f) {
     <div class="t">${esc(f.title)}</div>
     ${st.activity && cls === "working" ? `<div class="activity">${esc(st.activity)}</div>` : ""}
     ${k === "waiting" && st.lastReply ? `<div class="snip">${esc(st.lastReply.replace(/[#*`>|]/g, "").trim().slice(0, 240))}</div>` : ""}
+    ${schedOf(f) ? `<div class="activity">${esc(schedText(f))}</div>` : ""}
     <div class="foot">${view === "label" ? pill : f.label ? tagHtml(f.label) : ""}${f.merged && k !== "merged" ? `<span class="meta">merged</span>` : ""}<span class="when">${when}</span></div>
     ${u(f.slug).msg ? `<div class="msg ${u(f.slug).cls}">${esc(u(f.slug).msg)}</div>` : ""}</div>`;
 }
@@ -1758,7 +2180,8 @@ async function attach(ta, files) {
     } catch { s.msg = `Couldn't attach ${name}.`; s.cls = "bad"; render(all); }
   }
 }
-async function refresh() { try { const [fs, ls] = await Promise.all([api("/api/features"), api("/api/labels")]); LABELS = ls; render(fs); markShortErrors(); renderUsage(); } catch {} }
+// An open Start ▾ menu holds the board still.
+async function refresh() { if (menuOpen) return; try { const [fs, ls] = await Promise.all([api("/api/features"), api("/api/labels")]); LABELS = ls; render(fs); markShortErrors(); renderUsage(); } catch {} }
 
 for (const host of [$("#list"), $("#popDlg")]) {
 host.addEventListener("input", (e) => {
@@ -1820,8 +2243,8 @@ for (const id of ["#newDlg", "#repoDlg", "#defaultsDlg"]) $(id).addEventListener
 });
 
 async function onClick(e) {
-  const b = e.target.closest("[data-act]"); if (!b) return;
-  const slug = b.closest("[data-slug]").dataset.slug; const s = u(slug); const act = b.dataset.act;
+  const b = e.target.closest("[data-act], [data-chev], .startmenu [data-w]"); if (!b) return;
+  const slug = b.closest("[data-slug]").dataset.slug; const s = u(slug); const act = b.dataset.act || (b.dataset.chev ? "chev" : "menu");
   const say = (msg, cls = "") => { s.msg = msg; s.cls = cls; render(all); refresh(); };
   const base = `/api/features/${slug}`;
   if (act === "collapse" && b.closest(".pop")) return; // the popup always shows everything
@@ -1909,15 +2332,31 @@ async function onClick(e) {
     if (r.msg) { sent.forEach((x) => x.remove()); s.draft = typed; s.files = files; showAtts(slug); if (box) { box.value = typed; fitCompose(box); } return after(r.msg, "bad"); }
     return after(r.sent ? "" : { "busy-terminal": "Waiting: the agent is mid-turn in its terminal. Your message goes as soon as it finishes.", busy: "Waiting: the agent is mid-turn. Your message goes as soon as it finishes.", "not-started": "Waiting: the agent hasn't started yet. Your message goes once it has.", limited: "Waiting: your Claude usage limit is full. Your message goes as soon as it resets." }[r.why] || "");
   }
-  if (act === "start") {
-    // Mid-edit: save what's in the boxes first, so the agent starts on what you just wrote.
-    if (s.etitle != null || s.eprompt != null) {
-      const f = all.find((x) => x.slug === slug), b = editBody(f, s);
-      const saved = await api(`${base}/edit`, b);
-      if (saved.msg) return say(saved.msg, "bad");
-      remember(f, b.title, b.prompt);
-      Object.assign(s, { edit: false, etitle: null, eprompt: null });
-    }
+  // Mid-edit: save what's in the boxes first, so the agent starts (or is
+  // scheduled) on what you just wrote. False if saving failed.
+  const saveTyped = async () => {
+    if (s.etitle == null && s.eprompt == null) return true;
+    const f = all.find((x) => x.slug === slug), body = editBody(f, s);
+    const saved = await api(`${base}/edit`, body);
+    if (saved.msg) { say(saved.msg, "bad"); return false; }
+    remember(f, body.title, body.prompt);
+    Object.assign(s, { edit: false, etitle: null, eprompt: null });
+    return true;
+  };
+  if (act === "unschedule") { whenSel.delete(slug); const r = await api(`${base}/schedule`, { schedule: null }); return say(r.ok ? "Not scheduled any more." : r.msg, r.ok ? "" : "bad"); }
+  if (act === "chev") { menuOpen = menuOpen === slug ? null : slug; render(all); return turnChev(slug, !!menuOpen); }
+  if (act === "menu") return menuPick(b, slug, () => render(all));
+  // The black button does what ▾ has chosen.
+  const v = act === "start" ? whenBody(whenOf(slug)) : null;
+  if (typeof v === "string" && v !== "now") return say(v, "bad"); // a day or time missing or past
+  if (v && v !== "now") {
+    if (!(await saveTyped())) return;
+    const r = await api(`${base}/schedule`, { schedule: v });
+    if (r.ok) whenSel.delete(slug); // done with: the card now shows its schedule and Cancel schedule
+    return say(r.ok ? "Scheduled. It starts by itself when it's due." : r.msg, r.ok ? "good" : "bad");
+  }
+  if (v === "now") {
+    if (!(await saveTyped())) return;
     // Back to the board: the card moves to Working and shows setup. A failure keeps the popup, with the error.
     say("Starting: making its branch and folder…");
     const r = await api(`${base}/start`, {});
@@ -2073,23 +2512,36 @@ $("#newOpen").onclick = () => openNew();
 async function addFeature(plan) {
   const typed = $("#newLabels [data-newpick]")?.value.replace(/\s+/g, " ").trim(); // typed in the + box but Enter never pressed: still meant
   const title = $("#title").value.trim(), prompt = $("#prompt").value.trim(), model = $("#newModel").value, label = typed || newLabel;
-  if (!title || (!plan && !prompt)) { dlgMsg("#addMsg", plan ? "Needs a name." : "Needs a name and what you want. Or save it as planned.", "bad"); return; }
+  // What ▾ chose. Either button keeps a schedule: both save it as planned, and it starts when due.
+  const v = whenBody(whenOf("new"));
+  if (typeof v === "string" && v !== "now") { dlgMsg("#addMsg", v, "bad"); return; } // a day or time missing or past
+  const schedule = v === "now" ? null : v;
+  if (!title || ((!plan || schedule) && !prompt)) { dlgMsg("#addMsg", schedule ? "Needs a name and what you want, so the agent has something to start on." : plan ? "Needs a name." : "Needs a name and what you want. Or save it as planned.", "bad"); return; }
   const keep = { title: $("#title").value, prompt: $("#prompt").value };
   closeModal($("#newDlg"));
   $("#title").value = ""; $("#prompt").value = ""; $("#newModel").value = ""; newLabel = ""; newDraft = {};
   try { sessionStorage.removeItem(NEW_KEY); } catch {}
-  const r = await api("/api/features", { title, prompt, plan, model, label }).catch(() => ({ msg: "Couldn't reach Cannu, or it sent back something unexpected." }));
+  const r = await api("/api/features", { title, prompt, plan, model, label, schedule }).catch(() => ({ msg: "Couldn't reach Cannu, or it sent back something unexpected." }));
   if (r.msg) {
     if ($("#title").value || $("#prompt").value) return boardSay(`Couldn't create “${title}”: ${r.msg}`); // already typing the next one
     $("#title").value = keep.title; $("#prompt").value = keep.prompt; newDraft = { model }; newLabel = label; saveNew();
     await openNew(); dlgMsg("#addMsg", r.msg, "bad"); return;
   }
+  whenSel.delete("new"); drawNewStart(); // kept for a retry; the next feature starts now unless told otherwise
   refresh();
 }
-$("#add").onclick = () => addFeature(false);
+// New feature's black button and ▾. ▾ only chooses; the black button does it.
+function drawNewStart() {
+  $("#newStart").innerHTML = startSplit('id="add"', keysHint(true), "new", whenOf("new"));
+}
+drawNewStart();
+$("#newStart").addEventListener("click", (e) => {
+  const b = e.target.closest("#add, [data-chev], .startmenu [data-w]"); if (!b) return;
+  if (b.id === "add") return addFeature(false);
+  if (b.dataset.chev) { menuOpen = menuOpen === "new" ? null : "new"; drawNewStart(); return turnChev("new", !!menuOpen); }
+  menuPick(b, "new", drawNewStart);
+});
 $("#addPlan").onclick = () => addFeature(true);
-$("#add").insertAdjacentHTML("beforeend", keysHint(true));
-$("#add").title = `${MAC ? "⌘" : "Ctrl"}+Enter starts it`;
 // Ctrl+Enter anywhere in these presses the main button. A disabled (busy) one ignores it.
 for (const d of ["#newDlg", "#repoDlg", "#defaultsDlg"]) $(d).addEventListener("keydown", (e) => {
   if (e.key !== "Enter" || !(e.ctrlKey || e.metaKey) || e.isComposing) return;
