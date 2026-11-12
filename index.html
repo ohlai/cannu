@@ -365,16 +365,23 @@
   .startsplit > .primary:first-child { border-top-right-radius:0; border-bottom-right-radius:0; }
   .startsplit > .startchev { display:inline-flex; align-items:center; padding:0 7px; border-top-left-radius:0; border-bottom-left-radius:0; border-left-color:color-mix(in srgb, var(--bg) 30%, var(--fg)); }
   .startsplit > .startchev svg { width:12px; height:12px; fill:none; stroke:currentColor; stroke-width:2.5; transition:transform .15s; }
-  .startsplit > .startchev[aria-expanded="true"] svg { transform:rotate(180deg); }
+  .startsplit > .startchev[aria-expanded="true"] svg { transform:rotate(-180deg); }
+  /* A choice that can't be done (a time that has passed): greyed out, can't be pressed. */
+  .startsplit > .primary:first-child:disabled { background:var(--line); border-color:var(--line); color:var(--mute); cursor:default; }
   .startmenu { top:auto; bottom:calc(100% + 6px); right:0; width:max-content; max-width:none; text-align:left; font-weight:400; }
   .startmenu button small { max-width:none; direction:ltr; }
   /* The day and time boxes look like the app's other boxes; color-scheme lets their icons follow the theme. */
   /* Lined up with the option's words: the item's 9px padding, 14px tick and 8px gap. */
   .startmenu .pick { display:flex; gap:6px; align-items:center; padding:2px 9px 8px 31px; }
   .startmenu .pick input { font:inherit; font-size:13px; padding:6px 8px; border-radius:7px; border:1px solid var(--line); background:var(--bg); color:var(--fg); color-scheme:light dark; }
-  .meta.sched { margin-top:10px; }
-  /* The chosen option: ticked, like the sort menu's. */
+  /* Right, over the button that cancels it. */
+  .meta.sched { margin-top:10px; text-align:right; }
+  /* The chosen option: ticked and bold. Each label keeps room for its bold
+     version (a hidden copy), so choosing one doesn't widen the menu. */
   .startmenu > button.on { font-weight:600; }
+  .startmenu .lbl { display:inline-flex; flex-direction:column; }
+  .startmenu .lbl::after { content:attr(data-text); font-weight:600; height:0; overflow:hidden; visibility:hidden; }
+  .startmenu .pick input[data-in=time] { width:7em; }
   /* A limit whose reset time isn't known can't be chosen. */
   .startmenu > button:disabled { opacity:.5; cursor:default; }
   .startmenu > button:disabled:hover { background:none; }
@@ -745,55 +752,90 @@ function beforeAt(k, mins) {
 // Whether a limit's reset time is known: a reading with a reset still ahead.
 // Without one, "before it resets" can't be worked out, so that option is greyed out.
 const resetKnown = (k) => Date.parse(USAGE?.[k]?.resets) > Date.now();
-// A day and a time box's values, in this browser's zone.
+// A day box's value, in this browser's zone.
 const localIso = (d) => { d = new Date(d); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString(); };
-// What's chosen, by menu key: { w: "now" | "at" | "session" | "weekly", date, time, mins: { session, weekly } }.
+const pad2 = (n) => String(n).padStart(2, "0");
+// Whether this browser shows a 12-hour clock (1:30 PM) or a 24-hour one (13:30).
+const H12 = !/h2[34]/.test(new Intl.DateTimeFormat([], { hour: "numeric" }).resolvedOptions().hourCycle || "");
+// The time box is plain text, typed the way you'd say it: "1:30", "1 30",
+// "130", "1.30", "13:30", "1:30pm", "9pm". (The browser's own time box only
+// moved to the minutes on Tab, so "1 30" became 1:00.) Returns "HH:MM" on
+// the day given, or "" if it can't tell.
+function parseTime(text, date) {
+  const m = String(text || "").trim().toLowerCase().match(/^(\d{1,2})(?:[:.\s]?(\d{2}))?\s*(?:(a|p)\.?\s*m?\.?)?$/);
+  if (!m) return "";
+  let h = Number(m[1]); const min = Number(m[2] || 0);
+  if (h > 23 || min > 59) return "";
+  if (m[3]) { if (h < 1 || h > 12) return ""; h = (h % 12) + (m[3] === "p" ? 12 : 0); }
+  else if (H12 && h >= 1 && h <= 12) {
+    // No am or pm on a 12-hour clock: today, the next one still to come; another day,
+    // 7 to 11 is morning and 12 to 6 afternoon.
+    // ponytail: a guess for other days; the button shows the time it took, and "am"/"pm" settles it.
+    const hr = h % 12, today = date === localIso(new Date()).slice(0, 10);
+    const at = (x) => Date.parse(`${date}T${pad2(x)}:${pad2(min)}`);
+    h = today ? (at(hr) > Date.now() ? hr : hr + 12) : hr >= 7 && hr <= 11 ? hr : hr + 12;
+  }
+  return `${pad2(h)}:${pad2(min)}`;
+}
+const timeText = (d) => new Date(d).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+// What's chosen, by menu key: { w: "now" | "at" | "session" | "weekly", date, time (as typed), mins: { session, weekly } }.
 // Nothing chosen yet: Start now, with the day and time on today and the next whole hour.
 const whenSel = new Map();
 function whenOf(key) {
   if (whenSel.has(key)) return whenSel.get(key);
   const next = new Date(); next.setHours(next.getHours() + 1, 0, 0, 0);
-  return { w: "now", date: localIso(next).slice(0, 10), time: localIso(next).slice(11, 16), mins: {} };
+  return { w: "now", date: localIso(next).slice(0, 10), time: timeText(next), mins: {} };
 }
 const minsOf = (sel, k) => sel.mins[k] ?? beforeMins(k);
-// What the black button will do: "now", { at }, { before, mins }, or a string saying what's missing.
+const atMs = (sel) => { const t = parseTime(sel.time, sel.date); return t ? Date.parse(`${sel.date}T${t}`) : NaN; };
+// What the black button will do: "now", { at }, { before, mins }, or a string
+// saying why it can't (the button is greyed out, with that as its tooltip).
 function whenBody(sel) {
   if (sel.w === "now") return "now";
-  if (sel.w !== "at") return resetKnown(sel.w) ? { before: sel.w, mins: minsOf(sel, sel.w) } : `When your ${LIMIT_NAME[sel.w]} limit resets isn't known yet. Pick another option from ▾.`;
-  const ms = Date.parse(`${sel.date}T${sel.time}`);
-  if (!ms) return "Type a day and a time to start it.";
-  if (ms <= Date.now()) return `${resetTime(ms)} has already passed. Pick a later time from ▾.`;
+  if (sel.w !== "at") return resetKnown(sel.w) ? { before: sel.w, mins: minsOf(sel, sel.w) } : `When your ${LIMIT_NAME[sel.w]} limit resets isn't known yet.`;
+  const ms = atMs(sel);
+  if (!ms) return "Type a day and a time.";
+  if (ms <= Date.now()) return "That time has already passed.";
   return { at: new Date(ms).toISOString() }; // with its zone, so a server elsewhere gets the time you meant
 }
 // The black button's words for the choice: when it will start, whichever way it was chosen.
 function whenLabel(sel) {
   if (sel.w === "now") return "Start agent now";
   if (sel.w !== "at") return resetKnown(sel.w) ? `Schedule · ${beforeAt(sel.w, minsOf(sel, sel.w))}` : "Schedule";
-  const ms = Date.parse(`${sel.date}T${sel.time}`);
+  const ms = atMs(sel);
   return ms ? `Schedule · ${resetTime(ms)}` : "Schedule";
+}
+// Its tooltip: what pressing it does, or why it can't be pressed.
+function whenTitle(sel) {
+  const v = whenBody(sel);
+  if (typeof v === "string" && v !== "now") return v;
+  return v === "now" ? "Make its branch and start the agent now." : `Start the agent by itself at ${whenLabel(sel).replace("Schedule · ", "")}. Cannu has to be running then.`;
 }
 const INFO = `<svg class="info" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.5v.5"/></svg>`;
 function startMenuHtml(sel) {
-  const item = (k, text, small = "", off = false) => `<button data-w="${k}" class="${sel.w === k ? "on" : ""}" aria-pressed="${sel.w === k}" ${off ? "disabled" : ""}>${sel.w === k ? TICK : `<span class="tick"></span>`}${text}${small}</button>`;
+  // The words sit in .lbl, which keeps room for their bold version, so choosing one doesn't widen the menu.
+  const item = (k, text, small = "", off = false) => `<button data-w="${k}" class="${sel.w === k ? "on" : ""}" aria-pressed="${sel.w === k}" ${off ? "disabled" : ""}>${sel.w === k ? TICK : `<span class="tick"></span>`}<span class="lbl" data-text="${text}">${text}</span>${small}</button>`;
   const limit = (k, name) => resetKnown(k)
     ? item(k, `Before the ${name} limit resets`, `<small>${beforeAt(k, minsOf(sel, k))}</small>`)
       + (sel.w === k ? `<div class="pick"><input type="number" data-in="mins" min="0" max="1440" step="5" value="${minsOf(sel, k)}" aria-label="Minutes before the ${name} limit resets"><span>min before</span></div>` : "")
-    : item(k, `Before the ${name} limit resets`, `<small title="Cannu has no usage reading with this limit's reset time in it, so it can't work out when to start. It checks about once a minute.">${INFO}reset time unknown</small>`, true);
+    : item(k, `Before the ${name} limit resets`, `<small title="Cannu doesn't have this limit's reset time from your usage yet, so it can't work out when to start.">${INFO}reset time unknown</small>`, true);
   return `<div class="repomenu startmenu">
     ${item("now", "Start now")}
-    ${item("at", "At a time")}
-    ${sel.w === "at" ? `<div class="pick"><input type="date" data-in="date" aria-label="Day" value="${sel.date}" min="${localIso(new Date()).slice(0, 10)}"><input type="time" data-in="time" aria-label="Time" value="${sel.time}"></div>` : ""}
     <hr>
+    ${item("at", "At a time")}
+    ${sel.w === "at" ? `<div class="pick"><input type="date" data-in="date" aria-label="Day" value="${sel.date}" min="${localIso(new Date()).slice(0, 10)}"><input type="text" data-in="time" aria-label="Time" value="${esc(sel.time)}" placeholder="${H12 ? "1:30 pm" : "13:30"}" autocomplete="off"></div>` : ""}
     ${limit("session", "5-hour")}
     ${limit("weekly", "weekly")}</div>`;
 }
-// The black button, saying what it will do, with a ▾ beside it. open is its
-// opening tag and after what follows its words (a key hint) before </button>.
-const startSplit = (open, after, key, sel) => `<span class="startsplit" data-when="${key}">${open}${esc(whenLabel(sel))}${after}</button><button class="primary startchev" data-chev="${key}" aria-label="When to start" aria-expanded="${menuOpen === key}" title="Choose when the agent starts: now, at a time, or just before a usage limit resets">${CHEV}</button>${menuOpen === key ? startMenuHtml(sel) : ""}</span>`;
-// The ▾ turning as its menu opens or shuts. Clicking ▾ redraws the button, so
+// The black button, saying what it will do, with a ▾ beside it. attrs are the
+// button's own (its data-act or id); after is what follows its words (a key hint).
+// It's greyed out while the choice can't be done, like a time that has passed.
+const whenBlocked = (sel) => { const v = whenBody(sel); return typeof v === "string" && v !== "now"; };
+const startSplit = (attrs, after, key, sel) => `<span class="startsplit" data-when="${key}"><button class="primary" ${attrs} title="${esc(whenTitle(sel))}" ${whenBlocked(sel) ? "disabled" : ""}>${esc(whenLabel(sel))}${after}</button><button class="primary startchev" data-chev="${key}" aria-label="When to start" aria-expanded="${menuOpen === key}" title="Start now or later">${CHEV}</button>${menuOpen === key ? startMenuHtml(sel) : ""}</span>`;
+// The ▾ turning as its menu opens (anticlockwise) or shuts. Clicking ▾ redraws the button, so
 // the CSS transition has nothing to turn from: play the turn on the new one.
 // (Shut by a click elsewhere, Escape or Enter, the button stays and CSS turns it.)
-const turnChev = (key, open) => { for (const s of document.querySelectorAll(`[data-chev="${key}"] svg`)) s.animate([{ transform: `rotate(${open ? 0 : 180}deg)` }, { transform: `rotate(${open ? 180 : 0}deg)` }], { duration: 150, easing: "ease" }); };
+const turnChev = (key, open) => { for (const s of document.querySelectorAll(`[data-chev="${key}"] svg`)) s.animate([{ transform: `rotate(${open ? 0 : -180}deg)` }, { transform: `rotate(${open ? -180 : 0}deg)` }], { duration: 150, easing: "ease" }); };
 const closeMenu = () => { menuOpen = null; for (const m of document.querySelectorAll(".startmenu")) { m.closest(".startsplit")?.querySelector(".startchev")?.setAttribute("aria-expanded", "false"); m.remove(); } };
 // Picks a menu item: it's ticked, and only its own boxes show. The menu stays
 // open until you click away, press Escape, or Enter in a box. redraw draws it again.
@@ -801,11 +843,10 @@ function menuPick(b, key, redraw) {
   whenSel.set(key, { ...whenOf(key), w: b.dataset.w });
   redraw();
 }
-// Typing in a box updates the choice, the time shown beside a limit, and the black button's words.
+// Typing in a box updates the choice, the time shown beside a limit, and the black button.
 document.addEventListener("input", (e) => {
   const inp = e.target.closest(".startmenu [data-in]"); if (!inp) return;
   const split = inp.closest(".startsplit"), key = split.dataset.when;
-  // Its boxes can show before anything is picked (a card's current schedule), so start from that.
   if (!whenSel.has(key)) whenSel.set(key, whenOf(key));
   const sel = whenSel.get(key);
   if (inp.dataset.in === "mins") {
@@ -814,7 +855,10 @@ document.addEventListener("input", (e) => {
     sel.mins = { ...sel.mins, [sel.w]: n }; saveBeforeMins(sel.w, n);
     split.querySelector(`[data-w="${sel.w}"] small`).textContent = beforeAt(sel.w, n);
   } else sel[inp.dataset.in] = inp.value;
-  split.querySelector(":scope > .primary").firstChild.textContent = whenLabel(sel);
+  const main = split.querySelector(":scope > .primary");
+  main.firstChild.textContent = whenLabel(sel);
+  main.title = whenTitle(sel);
+  main.disabled = whenBlocked(sel);
 });
 // A click anywhere else, Escape, or Enter in a box closes it. Escape doesn't also close the popup under it.
 document.addEventListener("pointerdown", (e) => { if (menuOpen && !e.target.closest(".startmenu, [data-chev]")) closeMenu(); }, true);
@@ -1054,8 +1098,8 @@ function simpleCard(f, inPop) {
       planned ? `${s.edit && !inPop ? `<button class="second" data-act="edit-save" title="Save the name and description on main">Save</button>` : ""}${schedOf(f) && !schedOf(f).missed
         // Scheduled: the black button cancels that, and then ▾ is back to choose again.
         // Missed: the usual button, and whatever it does replaces the missed start.
-        ? `<button class="primary" data-act="unschedule" title="Stop it starting by itself. It stays planned.">Cancel schedule</button>`
-        : startSplit(`<button class="primary" data-act="start" title="Starts or schedules it, as chosen with ▾. ${MAC ? "⌘" : "Ctrl"}+Enter in its boxes does the same.">`, s.edit || inPop ? keysHint(true) : "", f.slug, whenOf(f.slug))}`
+        ? `<button class="primary" data-act="unschedule" title="Don't start it then. It stays planned, and you can start or schedule it again.">Cancel schedule</button>`
+        : startSplit('data-act="start"', s.edit || inPop ? keysHint(true) : "", f.slug, whenOf(f.slug))}`
       : leftover ? `<button class="primary" data-act="remove" title="Delete its folder. The unmerged branch is kept, so the work is still in git.">Remove worktree</button>` : "")}
     ${s.reopen ? `<div style="margin-top:10px; display:grid; gap:8px">
       <div class="hint">A new feature that continues this one. Start agent makes a new branch from current main with a new session, and the agent reads this feature's notes first. Save as planned records it to start later.</div>
@@ -1976,7 +2020,7 @@ async function onClick(e) {
     Object.assign(s, { edit: false, etitle: null, eprompt: null });
     return true;
   };
-  if (act === "unschedule") { whenSel.delete(slug); const r = await api(`${base}/schedule`, { schedule: null }); return say(r.ok ? "Not scheduled any more. Start it or schedule it again with ▾." : r.msg, r.ok ? "" : "bad"); }
+  if (act === "unschedule") { whenSel.delete(slug); const r = await api(`${base}/schedule`, { schedule: null }); return say(r.ok ? "Not scheduled any more." : r.msg, r.ok ? "" : "bad"); }
   if (act === "chev") { menuOpen = menuOpen === slug ? null : slug; render(all); return turnChev(slug, !!menuOpen); }
   if (act === "menu") return menuPick(b, slug, () => render(all));
   // The black button does what ▾ has chosen.
@@ -2164,7 +2208,7 @@ async function addFeature(plan) {
 }
 // New feature's black button and ▾. ▾ only chooses; the black button does it.
 function drawNewStart() {
-  $("#newStart").innerHTML = startSplit(`<button class="primary" id="add" title="Starts or schedules it, as chosen with ▾. ${MAC ? "⌘" : "Ctrl"}+Enter does the same.">`, keysHint(true), "new", whenOf("new"));
+  $("#newStart").innerHTML = startSplit('id="add"', keysHint(true), "new", whenOf("new"));
 }
 drawNewStart();
 $("#newStart").addEventListener("click", (e) => {
