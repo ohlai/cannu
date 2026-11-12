@@ -369,12 +369,16 @@
   .startmenu { top:auto; bottom:calc(100% + 6px); right:0; width:max-content; max-width:none; text-align:left; font-weight:400; }
   .startmenu button small { max-width:none; direction:ltr; }
   /* The day and time boxes look like the app's other boxes; color-scheme lets their icons follow the theme. */
-  .startmenu .pick { display:flex; gap:6px; align-items:center; padding:2px 9px 8px; }
+  /* Lined up with the option's words: the item's 9px padding, 14px tick and 8px gap. */
+  .startmenu .pick { display:flex; gap:6px; align-items:center; padding:2px 9px 8px 31px; }
   .startmenu .pick input { font:inherit; font-size:13px; padding:6px 8px; border-radius:7px; border:1px solid var(--line); background:var(--bg); color:var(--fg); color-scheme:light dark; }
-  .meta.sched { margin-top:8px; display:flex; align-items:center; gap:8px; }
-  .meta.sched button { padding:1px 8px; font-size:12px; }
+  .meta.sched { margin-top:10px; }
   /* The chosen option: ticked, like the sort menu's. */
   .startmenu > button.on { font-weight:600; }
+  /* A limit whose reset time isn't known can't be chosen. */
+  .startmenu > button:disabled { opacity:.5; cursor:default; }
+  .startmenu > button:disabled:hover { background:none; }
+  .startmenu small .info { width:13px; height:13px; margin-right:4px; vertical-align:-2px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; }
   /* Typed, not picked: no calendar or clock button in the day and time boxes. */
   .startmenu .pick input::-webkit-calendar-picker-indicator { display:none; }
   .startmenu .pick input[type=number] { width:5.5em; }
@@ -707,14 +711,14 @@ function schedText(f) {
   if (!s.due) return `Starts ${what}. Waiting on a usage reading to know when that is.`;
   return Date.parse(s.due) <= Date.now() ? "Starting now" : `Starts ${resetAt(s.due)}${what ? `, ${what}` : ""}`;
 }
+// A missed start: just the words. The card's own button cancels it, and then ▾ starts it or picks a new time.
 function schedBanner(f) {
-  const s = schedOf(f); if (!s) return "";
-  // Clear lives here, not in ▾: the menu only chooses what the black button does.
-  if (!s.missed) return `<div class="meta sched">${esc(schedText(f))}<button data-act="unschedule" title="Don't start it by itself. It stays planned.">Clear</button></div>`;
+  const s = schedOf(f); if (!s?.missed) return "";
   const what = schedWhat(s);
-  return `<div class="banner">Was meant to start at ${resetTime(s.missed)}${what ? ` (${what})` : ""}, but ${s.why ? "couldn't: " + esc(s.why) : "Cannu wasn't running then: the computer was off or asleep"}. It hasn't started, and won't by itself.
-    <div class="row" style="margin-top:8px"><button class="primary" data-act="startnow">Start now</button><button data-act="newtime">Pick a new time</button><button data-act="unschedule">Clear</button></div></div>`;
+  return `<div class="banner">Was meant to start at ${resetTime(s.missed)}${what ? ` (${what})` : ""}, but ${s.why ? "couldn't: " + esc(s.why) : "Cannu wasn't running then: the computer was off or asleep"}. It hasn't started, and won't by itself.</div>`;
 }
+// When a scheduled card starts, just above its buttons.
+const schedLine = (f) => schedOf(f) && !schedOf(f).missed ? `<div class="meta sched">${esc(schedText(f))}</div>` : "";
 
 // Start agent's ▾ picks WHEN the black button starts the agent: now, at a
 // time, or some minutes before a limit resets. Picking only selects (ticked);
@@ -738,39 +742,43 @@ function beforeAt(k, mins) {
   if (Date.parse(l.resets) <= Date.now()) return "after the next reading";
   return resetTime(new Date(Math.max(Date.now(), Date.parse(l.resets) - mins * 60e3)));
 }
+// Whether a limit's reset time is known: a reading with a reset still ahead.
+// Without one, "before it resets" can't be worked out, so that option is greyed out.
+const resetKnown = (k) => Date.parse(USAGE?.[k]?.resets) > Date.now();
 // A day and a time box's values, in this browser's zone.
 const localIso = (d) => { d = new Date(d); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString(); };
 // What's chosen, by menu key: { w: "now" | "at" | "session" | "weekly", date, time, mins: { session, weekly } }.
-// Nothing chosen yet: a card's current schedule, else Start now, with the
-// day and time on today and the next whole hour.
+// Nothing chosen yet: Start now, with the day and time on today and the next whole hour.
 const whenSel = new Map();
-function whenOf(key, f) {
+function whenOf(key) {
   if (whenSel.has(key)) return whenSel.get(key);
   const next = new Date(); next.setHours(next.getHours() + 1, 0, 0, 0);
-  const s = f && schedOf(f)?.missed ? null : f && schedOf(f), at = s?.at ? new Date(s.at) : next; // a missed one starts from the next hour
-  return { w: s?.at ? "at" : s?.before || "now", date: localIso(at).slice(0, 10), time: localIso(at).slice(11, 16), mins: s?.before ? { [s.before]: s.mins } : {} };
+  return { w: "now", date: localIso(next).slice(0, 10), time: localIso(next).slice(11, 16), mins: {} };
 }
 const minsOf = (sel, k) => sel.mins[k] ?? beforeMins(k);
 // What the black button will do: "now", { at }, { before, mins }, or a string saying what's missing.
 function whenBody(sel) {
   if (sel.w === "now") return "now";
-  if (sel.w !== "at") return { before: sel.w, mins: minsOf(sel, sel.w) };
+  if (sel.w !== "at") return resetKnown(sel.w) ? { before: sel.w, mins: minsOf(sel, sel.w) } : `When your ${LIMIT_NAME[sel.w]} limit resets isn't known yet. Pick another option from ▾.`;
   const ms = Date.parse(`${sel.date}T${sel.time}`);
   if (!ms) return "Type a day and a time to start it.";
   if (ms <= Date.now()) return `${resetTime(ms)} has already passed. Pick a later time from ▾.`;
   return { at: new Date(ms).toISOString() }; // with its zone, so a server elsewhere gets the time you meant
 }
-// The black button's words for the choice.
+// The black button's words for the choice: when it will start, whichever way it was chosen.
 function whenLabel(sel) {
-  if (sel.w === "now") return "Start agent";
-  if (sel.w !== "at") return `Schedule · ${minsOf(sel, sel.w)} min before the ${LIMIT_NAME[sel.w]} reset`;
+  if (sel.w === "now") return "Start agent now";
+  if (sel.w !== "at") return resetKnown(sel.w) ? `Schedule · ${beforeAt(sel.w, minsOf(sel, sel.w))}` : "Schedule";
   const ms = Date.parse(`${sel.date}T${sel.time}`);
   return ms ? `Schedule · ${resetTime(ms)}` : "Schedule";
 }
+const INFO = `<svg class="info" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.5v.5"/></svg>`;
 function startMenuHtml(sel) {
-  const item = (k, text, small = "") => `<button data-w="${k}" class="${sel.w === k ? "on" : ""}" aria-pressed="${sel.w === k}">${sel.w === k ? TICK : `<span class="tick"></span>`}${text}${small}</button>`;
-  const limit = (k, name) => item(k, `Before the ${name} limit resets`, `<small>${beforeAt(k, minsOf(sel, k))}</small>`)
-    + (sel.w === k ? `<div class="pick"><input type="number" data-in="mins" min="0" max="1440" step="5" value="${minsOf(sel, k)}" aria-label="Minutes before the ${name} limit resets"><span>min before</span></div>` : "");
+  const item = (k, text, small = "", off = false) => `<button data-w="${k}" class="${sel.w === k ? "on" : ""}" aria-pressed="${sel.w === k}" ${off ? "disabled" : ""}>${sel.w === k ? TICK : `<span class="tick"></span>`}${text}${small}</button>`;
+  const limit = (k, name) => resetKnown(k)
+    ? item(k, `Before the ${name} limit resets`, `<small>${beforeAt(k, minsOf(sel, k))}</small>`)
+      + (sel.w === k ? `<div class="pick"><input type="number" data-in="mins" min="0" max="1440" step="5" value="${minsOf(sel, k)}" aria-label="Minutes before the ${name} limit resets"><span>min before</span></div>` : "")
+    : item(k, `Before the ${name} limit resets`, `<small title="Cannu has no usage reading with this limit's reset time in it, so it can't work out when to start. It checks about once a minute.">${INFO}reset time unknown</small>`, true);
   return `<div class="repomenu startmenu">
     ${item("now", "Start now")}
     ${item("at", "At a time")}
@@ -783,22 +791,18 @@ function startMenuHtml(sel) {
 // opening tag and after what follows its words (a key hint) before </button>.
 const startSplit = (open, after, key, sel) => `<span class="startsplit" data-when="${key}">${open}${esc(whenLabel(sel))}${after}</button><button class="primary startchev" data-chev="${key}" aria-label="When to start" aria-expanded="${menuOpen === key}" title="Choose when the agent starts: now, at a time, or just before a usage limit resets">${CHEV}</button>${menuOpen === key ? startMenuHtml(sel) : ""}</span>`;
 const closeMenu = () => { menuOpen = null; for (const m of document.querySelectorAll(".startmenu")) { m.closest(".startsplit")?.querySelector(".startchev")?.setAttribute("aria-expanded", "false"); m.remove(); } };
-// Picks a menu item: it's ticked, and only its own boxes show. Start now has none, so the menu closes.
-// redraw draws that menu again. Returns nothing.
-function menuPick(b, key, f, redraw) {
-  const sel = { ...whenOf(key, f), w: b.dataset.w };
-  whenSel.set(key, sel);
-  if (sel.w === "now") menuOpen = null;
+// Picks a menu item: it's ticked, and only its own boxes show. The menu stays
+// open until you click away, press Escape, or Enter in a box. redraw draws it again.
+function menuPick(b, key, redraw) {
+  whenSel.set(key, { ...whenOf(key), w: b.dataset.w });
   redraw();
-  const box = document.querySelector(`.startsplit[data-when="${key}"] .pick input`);
-  if (box) { box.focus(); if (box.type === "number") box.select(); }
 }
 // Typing in a box updates the choice, the time shown beside a limit, and the black button's words.
 document.addEventListener("input", (e) => {
   const inp = e.target.closest(".startmenu [data-in]"); if (!inp) return;
   const split = inp.closest(".startsplit"), key = split.dataset.when;
   // Its boxes can show before anything is picked (a card's current schedule), so start from that.
-  if (!whenSel.has(key)) whenSel.set(key, whenOf(key, all.find((x) => x.slug === key)));
+  if (!whenSel.has(key)) whenSel.set(key, whenOf(key));
   const sel = whenSel.get(key);
   if (inp.dataset.in === "mins") {
     const n = Math.round(Number(inp.value));
@@ -1039,10 +1043,14 @@ function simpleCard(f, inPop) {
       <textarea data-field="eprompt" data-mention data-self="${f.slug}" placeholder="What you want and why. This is what the agent starts on.">${esc(s.eprompt ?? f.prompt ?? "")}</textarea>
       ${mentionHint(s.eprompt ?? f.prompt, f.slug)}${linkedFrom(f, "hint")}
     </div>` : ""}
+    ${schedLine(f)}
     ${actions(planned
       ? `${inPop ? "" : `<button data-act="edit">${s.edit ? "Cancel edit" : "Edit"}</button>`}<button data-act="drop" title="Keep it on record as dropped">Drop</button>`
       : `<button data-act="reopen">${s.reopen ? "Cancel reopen" : "Reopen"}</button>`,
-      planned ? `${s.edit && !inPop ? `<button class="second" data-act="edit-save" title="Save the name and description on main">Save</button>` : ""}${startSplit(`<button class="primary" data-act="start" title="Starts or schedules it, as chosen with ▾. ${MAC ? "⌘" : "Ctrl"}+Enter in its boxes does the same.">`, s.edit || inPop ? keysHint(true) : "", f.slug, whenOf(f.slug, f))}`
+      planned ? `${s.edit && !inPop ? `<button class="second" data-act="edit-save" title="Save the name and description on main">Save</button>` : ""}${schedOf(f)
+        // Scheduled (or missed): the black button cancels that, and then ▾ is back to choose again.
+        ? `<button class="primary" data-act="unschedule" title="Stop it starting by itself. It stays planned.">Cancel schedule</button>`
+        : startSplit(`<button class="primary" data-act="start" title="Starts or schedules it, as chosen with ▾. ${MAC ? "⌘" : "Ctrl"}+Enter in its boxes does the same.">`, s.edit || inPop ? keysHint(true) : "", f.slug, whenOf(f.slug))}`
       : leftover ? `<button class="primary" data-act="remove" title="Delete its folder. The unmerged branch is kept, so the work is still in git.">Remove worktree</button>` : "")}
     ${s.reopen ? `<div style="margin-top:10px; display:grid; gap:8px">
       <div class="hint">A new feature that continues this one. Start agent makes a new branch from current main with a new session, and the agent reads this feature's notes first. Save as planned records it to start later.</div>
@@ -1963,18 +1971,16 @@ async function onClick(e) {
     Object.assign(s, { edit: false, etitle: null, eprompt: null });
     return true;
   };
-  if (act === "unschedule") { whenSel.delete(slug); const r = await api(`${base}/schedule`, { schedule: null }); return say(r.msg, r.ok ? "" : "bad"); }
+  if (act === "unschedule") { whenSel.delete(slug); const r = await api(`${base}/schedule`, { schedule: null }); return say(r.ok ? "Not scheduled any more. Start it or schedule it again with ▾." : r.msg, r.ok ? "" : "bad"); }
   if (act === "chev") { menuOpen = menuOpen === slug ? null : slug; return render(all); }
-  // The missed banner: the same menu, with At a time chosen and its boxes open.
-  if (act === "newtime") { menuOpen = slug; return menuPick({ dataset: { w: "at" } }, slug, all.find((x) => x.slug === slug), () => render(all)); }
-  if (act === "menu") return menuPick(b, slug, all.find((x) => x.slug === slug), () => render(all));
-  // The black button does what ▾ has chosen. The missed banner's Start now always starts.
-  const v = act === "start" ? whenBody(whenOf(slug, all.find((x) => x.slug === slug))) : act === "startnow" ? "now" : null;
+  if (act === "menu") return menuPick(b, slug, () => render(all));
+  // The black button does what ▾ has chosen.
+  const v = act === "start" ? whenBody(whenOf(slug)) : null;
   if (typeof v === "string" && v !== "now") return say(v, "bad"); // a day or time missing or past
   if (v && v !== "now") {
     if (!(await saveTyped())) return;
     const r = await api(`${base}/schedule`, { schedule: v });
-    if (r.ok) whenSel.delete(slug); // from now on the card's schedule is the choice
+    if (r.ok) whenSel.delete(slug); // done with: the card now shows its schedule and Cancel schedule
     return say(r.ok ? "Scheduled. It starts by itself when it's due." : r.msg, r.ok ? "good" : "bad");
   }
   if (v === "now") {
@@ -2160,7 +2166,7 @@ $("#newStart").addEventListener("click", (e) => {
   const b = e.target.closest("#add, [data-chev], .startmenu [data-w]"); if (!b) return;
   if (b.id === "add") return addFeature(false);
   if (b.dataset.chev) { menuOpen = menuOpen === "new" ? null : "new"; return drawNewStart(); }
-  menuPick(b, "new", null, drawNewStart);
+  menuPick(b, "new", drawNewStart);
 });
 $("#addPlan").onclick = () => addFeature(true);
 // Ctrl+Enter anywhere in these presses the main button. A disabled (busy) one ignores it.
