@@ -390,7 +390,7 @@
   .gbox .ghost { position:absolute; inset:0; pointer-events:none; overflow:hidden; color:var(--mute); }
   .gbox .ghost i { font-style:normal; visibility:hidden; }
   .gbox .ghost b { font-weight:400; }
-  .gbox input[data-in=date] { width:8.5em; } .gbox input[data-in=time] { width:7em; } .gbox input[data-in=mins] { width:4.5em; }
+  .gbox input[data-in=date] { width:8.5em; } .gbox input[data-in=time] { width:7em; } .gbox input[data-in=mins] { width:7em; }
   /* Right, over the button that cancels it. */
   .meta.sched { margin-top:10px; text-align:right; }
   /* Add repo: how to work on the picked repo, i.e. its cannu.json. */
@@ -711,7 +711,7 @@ const resetAt = (iso) => `${resetTime(iso)} (in ${until(iso)})`;
 // limit resets. The server keeps { at } or { before, mins }, with `due` once
 // it's known and `missed` if Cannu wasn't running when it was due.
 const schedOf = (f) => (f.status === "planned" && f.schedule) || null;
-const schedWhat = (s) => (s.at ? "" : `${s.mins} min before your ${LIMIT_NAME[s.before]} limit resets`);
+const schedWhat = (s) => (s.at ? "" : `${durText(s.mins)} before your ${LIMIT_NAME[s.before]} limit resets`);
 // One line for the tile and the card, the same whether the start is still to
 // come or was missed: "Scheduled for 2:00 PM (in 13m)", or "(5m ago)".
 function schedText(f) {
@@ -826,7 +826,20 @@ function dateOk(raw) {
   return !(v.day && v.month && v.day > new Date(2028, v.month, 0).getDate()); // 2028: a leap year, so 29/02 is fine
 }
 // Minutes before a reset: a whole number, and less than the minutes left until it.
-const minsOk = (raw, k) => /^\d{0,4}$/.test(raw) && (raw === "" || +raw < minsLeft(k));
+// How long before a reset, typed with shortcuts: "30", "90m", "1h", "1h30",
+// "1.5h", "1d", "1d 2h". A bare number is minutes. Returns minutes, or NaN.
+function parseDur(text) {
+  const s = String(text ?? "").toLowerCase().replace(/\s+/g, "");
+  if (!/^(\d+(\.\d+)?[dhm]?)+$/.test(s)) return NaN;
+  let total = 0;
+  for (const [, n, u] of s.matchAll(/(\d+(?:\.\d+)?)([dhm]?)/g)) total += Number(n) * { d: 1440, h: 60, m: 1, "": 1 }[u];
+  return Math.round(total);
+}
+// Minutes back as the box and the card show them: 90 is "1h 30m", 1440 is "1d".
+const durText = (n) => [[Math.floor(n / 1440), "d"], [Math.floor((n % 1440) / 60), "h"], [n % 60, "m"]].filter(([x]) => x).map(([x, u]) => x + u).join(" ") || "0m";
+// Minutes before a reset: something parseDur reads (or its start, like "1." or "1h "),
+// and less than the time left until the reset.
+const minsOk = (raw, k) => { const s = raw.trim().replace(/\.$/, ""); return s === "" || parseDur(s) < minsLeft(k); };
 
 // What's faded after the typed text: the rest of the time ("4:30" gets " pm",
 // "4" gets ":00 pm"), or of the day ("14" gets "/11/2026", the next 14th to come).
@@ -909,7 +922,7 @@ function whenBody(sel) {
   if (sel.w !== "at") {
     if (!resetKnown(sel.w)) return `When your ${LIMIT_NAME[sel.w]} limit resets isn't known yet.`;
     const n = minsOf(sel, sel.w);
-    return n < minsLeft(sel.w) ? { before: sel.w, mins: n } : `Your ${LIMIT_NAME[sel.w]} limit resets in ${minsLeft(sel.w)} min, so ${n} min before it has already passed.`;
+    return n < minsLeft(sel.w) ? { before: sel.w, mins: n } : `Your ${LIMIT_NAME[sel.w]} limit resets in ${durText(minsLeft(sel.w))}, so ${durText(n)} before it has already passed.`;
   }
   if (!parseDate(sel.date)) return `Type a day, like ${dayText(new Date(Date.now() + 864e5)).slice(0, 5)} or tomorrow.`;
   const ms = atMs(sel);
@@ -932,14 +945,14 @@ function whenTitle(sel) {
 }
 const INFO = `<svg class="info" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.5v.5"/></svg>`;
 // A text box with room for the faded rest of what you're typing.
-const ghostBox = (kind, value, ph, label) => `<span class="gbox"><input type="text" data-in="${kind}" ${kind === "mins" ? 'inputmode="numeric"' : ""} aria-label="${label}" value="${esc(value)}" placeholder="${ph}" data-ph="${ph}" autocomplete="off"><span class="ghost" aria-hidden="true"><i></i><b></b></span></span>`;
+const ghostBox = (kind, value, ph, label) => `<span class="gbox"><input type="text" data-in="${kind}" aria-label="${label}" value="${esc(value)}" placeholder="${ph}" data-ph="${ph}" autocomplete="off"><span class="ghost" aria-hidden="true"><i></i><b></b></span></span>`;
 function startMenuHtml(sel) {
   const item = (k, text, small = "", off = false) => `<button data-w="${k}" class="${sel.w === k ? "on" : ""}" aria-pressed="${sel.w === k}" ${off ? "disabled" : ""}>${sel.w === k ? TICK : `<span class="tick"></span>`}${text}${small}</button>`;
   // Unknown reset times are said once, under the option (or under the last one when both are unknown).
   const note = (text) => `<div class="unknown" title="Cannu doesn't have this from your Claude usage yet, so it can't work out when to start. It checks about once a minute.">${INFO}${text}</div>`;
   const limit = (k, name) => resetKnown(k)
     ? item(k, `Before the ${name} limit resets`, `<small>${beforeAt(k, minsOf(sel, k))}</small>`)
-      + (sel.w === k ? `<div class="pick">${ghostBox("mins", minsOf(sel, k), "", `Minutes before the ${name} limit resets`)}<span>min before</span></div>` : "")
+      + (sel.w === k ? `<div class="pick">${ghostBox("mins", durText(minsOf(sel, k)), "30m, 1h, 1d", `How long before the ${name} limit resets`)}<span>before</span></div>` : "")
     : item(k, `Before the ${name} limit resets`, "", true)
       + (k === "weekly" ? note(resetKnown("session") ? "Reset time unknown" : "Reset times unknown") : resetKnown("weekly") ? note("Reset time unknown") : "");
   const fmt = DATE_ORDER.map((k) => ({ day: "dd", month: "mm", year: "yyyy" })[k]).join("/");
@@ -970,16 +983,16 @@ function menuPick(b, key, redraw) {
 
 // The boxes at work. Each knows its menu (data-when on the wrapper) and the choice it feeds.
 const boxSel = (inp) => { const key = inp.closest(".startsplit").dataset.when; if (!whenSel.has(key)) whenSel.set(key, whenOf(key)); return whenSel.get(key); };
-const ghostOf = (inp, sel) => !inp.value ? "" : inp.dataset.in === "time" ? timeGhost(inp.value, parseDate(sel.date) || localIso(new Date()).slice(0, 10)) : inp.dataset.in === "date" ? dateGhost(inp.value) : "";
+const ghostOf = (inp, sel) => !inp.value ? "" : inp.dataset.in === "time" ? timeGhost(inp.value, parseDate(sel.date) || localIso(new Date()).slice(0, 10)) : inp.dataset.in === "date" ? dateGhost(inp.value) : /\d$/.test(inp.value) ? "m" : ""; // a bare number is minutes
 // The choice takes what's typed plus its faded rest, so the black button already
 // says "Schedule · 4:30 PM" while the box shows "4:30". Nothing typed: the old value.
 function boxToSel(inp, sel) {
   const kind = inp.dataset.in, typed = inp.value, v = typed ? typed + ghostOf(inp, sel) : inp.dataset.was ?? typed;
   if (kind !== "mins") sel[kind] = v;
-  else if (v !== "" && +v < minsLeft(sel.w)) { sel.mins = { ...sel.mins, [sel.w]: +v }; saveBeforeMins(sel.w, +v); } // only a number that works is kept
-  const split = inp.closest(".startsplit"), main = split.querySelector(":scope > .primary");
+  else { const n = parseDur(v); if (n < minsLeft(sel.w)) { sel.mins = { ...sel.mins, [sel.w]: n }; saveBeforeMins(sel.w, n); } } // only an amount that works is kept
+  const split = inp.closest(".startsplit"), main = split.querySelector(":scope > .primary"), g = inp.nextElementSibling;
+  g.firstChild.textContent = typed; g.lastChild.textContent = typed ? ghostOf(inp, sel) : "";
   if (kind === "mins") split.querySelector(`[data-w="${sel.w}"] small`).textContent = beforeAt(sel.w, minsOf(sel, sel.w));
-  else { const g = inp.nextElementSibling; g.firstChild.textContent = typed; g.lastChild.textContent = typed ? ghostOf(inp, sel) : ""; }
   main.firstChild.textContent = whenLabel(sel);
   main.title = whenTitle(sel);
   main.disabled = whenBlocked(sel);
@@ -1011,8 +1024,8 @@ document.addEventListener("focusin", (e) => {
 document.addEventListener("focusout", (e) => {
   const inp = e.target.closest?.(".startmenu [data-in]"); if (!inp || inp.dataset.was == null) return;
   const sel = boxSel(inp), kind = inp.dataset.in, full = inp.value + ghostOf(inp, sel);
-  const keep = kind === "mins" ? minsOk(inp.value, sel.w) && inp.value !== "" : !!inp.value;
-  inp.value = !keep ? inp.dataset.was : kind === "date" ? fmtDate(full + "/").replace(/\/$/, "") : kind === "time" ? fmtTime(full) : full;
+  const keep = kind === "mins" ? parseDur(full) < minsLeft(sel.w) : !!inp.value;
+  inp.value = !keep ? inp.dataset.was : kind === "date" ? fmtDate(full + "/").replace(/\/$/, "") : kind === "time" ? fmtTime(full) : durText(parseDur(full)); // "90" is 1h 30m
   delete inp.dataset.was; inp.placeholder = inp.dataset.ph;
   boxToSel(inp, sel);
 });

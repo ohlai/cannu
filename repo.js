@@ -195,7 +195,8 @@ function dueAt(s) {
 function parseSchedule(b) {
   if (b.before) {
     if (!["session", "weekly"].includes(b.before)) throw new Error("Unknown limit.");
-    return { before: b.before, mins: Math.max(0, Math.min(24 * 60, Math.round(Number(b.mins) || 0))) };
+    // Up to a week: "2d before the weekly reset" is a fair thing to ask.
+    return { before: b.before, mins: Math.max(0, Math.min(7 * 24 * 60, Math.round(Number(b.mins) || 0))) };
   }
   const t = Date.parse(b.at);
   if (!t) throw new Error("Pick a time to start it.");
