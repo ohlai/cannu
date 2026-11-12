@@ -46,6 +46,7 @@ export const CLAUDE_SETTINGS = all.claudeSettings && fs.existsSync(abs(all.claud
 const HOME = path.join(abs(all.stateDir || path.join(META, "local")), me.name);
 export const STATE = path.join(HOME, "state");
 export const FEEDBACK = path.join(HOME, "feedback");
+export const ATTACH = path.join(HOME, "attachments"); // files pasted or dropped into a chat
 const RUNTIME = path.join(HOME, "features.json");
 fs.mkdirSync(STATE, { recursive: true });
 
@@ -147,7 +148,7 @@ export const stamp = (d = new Date()) => {
 };
 
 // Anything the dashboard adds to a prompt starts with this, so prompts.md
-// shows what was Oli's words and what was added.
+// shows what was the user's words and what was added.
 export const AUTO = "[Added by the dashboard, not my words]";
 
 // ---------- agent defaults ----------
@@ -156,7 +157,7 @@ export const MODELS = { "": "Claude Code's default", "claude-opus-5-5": "Opus 5.
 export const BUILT_IN = {
   model: "",
   systemPrompt: "",
-  // Sent when Oli presses Carry on after an agent was cut off mid-turn.
+  // Sent when the user presses Carry on after an agent was cut off mid-turn.
   resumeText: "You were interrupted mid-turn (the dashboard or the PC restarted, or the session was closed). Check git status and your log.md, work out where you got to, then carry on with what you were doing.",
   // Agents held by a full usage limit carry on by themselves once it resets.
   // Off: their cards offer Carry on instead.
@@ -233,26 +234,35 @@ export function liveStatus(st, running = false) {
 // usage is just unknown and nothing is held. Refreshed every minute.
 // Every Cannu process on this machine (the dashboard, each repo, each feature's
 // own copy) shares one reading through USAGE_FILE: one fetch a minute between
-// them all, a rate limit backs them all off (retry-after, at least 1 min), and a restart shows
+// them all, a rate limit backs them all off (retry-after, 1 to 5 min), and a restart shows
 // the last reading straight away. Polling separately got the endpoint to
 // refuse them all, and a restarted one then had nothing.
+// Processes outlive merges (nothing restarts them, feature apps are detached),
+// so the file also gets written by older code: never wait more than 5 min past
+// the last write, whatever wait it asks for. Feature app copies only read it:
+// the endpoint's limit is shared with Claude Code itself, so fewer callers.
 const USAGE_FILE = path.join(os.tmpdir(), "cannu-usage.json");
 let usageNow = null;
 async function readUsage(force = false) {
-  let c = {};
-  try { c = JSON.parse(fs.readFileSync(USAGE_FILE, "utf8")); } catch {}
+  let c = {}, wrote = 0;
+  try { c = JSON.parse(fs.readFileSync(USAGE_FILE, "utf8")); wrote = fs.statSync(USAGE_FILE).mtimeMs; } catch {}
   if (c.usage) usageNow = c.usage;
-  if (Date.now() < (force ? c.backoff || 0 : c.next || 0)) return;
+  if (process.env.FEATURE_SLUG) return;
+  if (Date.now() < Math.min(force ? c.backoff || 0 : c.next || 0, wrote + 5 * 60e3)) return;
   const save = (o) => { try { fs.writeFileSync(USAGE_FILE, JSON.stringify({ usage: usageNow, ...o })); } catch {} };
   save({ next: Date.now() + 55e3 }); // claimed: the others wait for this fetch
   try {
     const tok = JSON.parse(fs.readFileSync(path.join(os.homedir(), ".claude", ".credentials.json"), "utf8")).claudeAiOauth?.accessToken;
     if (!tok) return;
     const r = await fetch("https://api.anthropic.com/api/oauth/usage", { headers: { authorization: `Bearer ${tok}`, "anthropic-beta": "oauth-2025-04-20" }, signal: AbortSignal.timeout(10e3) });
-    // Back off as long as it asks, at least a minute. A flat 5 minutes lost
-    // every slot to anything polling the same login each minute (it sends retry-after: 0).
-    if (r.status === 429) { const t = Date.now() + Math.max(60e3, (+r.headers.get("retry-after") || 0) * 1e3); return save({ next: t, backoff: t }); }
-    if (!r.ok) return;
+    // Back off as long as it asks, between 1 and 5 minutes. A flat 5 minutes lost
+    // every slot to anything polling each minute (it often sends retry-after: 0);
+    // honouring a long one uncapped left the rings stale for hours.
+    if (r.status === 429) {
+      const ra = r.headers.get("retry-after"), t = Date.now() + Math.min(5 * 60e3, Math.max(60e3, (+ra || 0) * 1e3));
+      return save({ next: t, backoff: t, last: `429 retry-after ${ra} at ${new Date().toISOString()}` });
+    }
+    if (!r.ok) return save({ next: Date.now() + 55e3, last: `${r.status} at ${new Date().toISOString()}` });
     const j = await r.json();
     // limits[] carries the severity the apps colour by; five_hour and seven_day are the fallback.
     const pick = (kind, old) => {

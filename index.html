@@ -13,7 +13,7 @@
   main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 80px; }
   h1 { font-size: 20px; margin: 0 0 4px; }
   h2 { font-size: 15px; margin: 28px 0 10px; color: var(--mute); font-weight: 600; }
-  .sub { color: var(--mute); margin: 0 0 20px; }
+  .sub { color: var(--mute); margin: 0 0 20px; } #totals:empty { display:none; }
   .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px 16px; margin-bottom:12px; }
   .card.past { padding: 10px 16px; }
   .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
@@ -37,7 +37,7 @@
   .md ul, .md ol { padding-left: 20px; } .md li { margin: 2px 0; }
   .md h1, .md h2, .md h3, .md h4 { font-size: 13.5px; margin: 10px 0 4px; }
   .md code { font-family: ui-monospace, monospace; font-size: 12px; background: var(--bg); padding: 1px 4px; border-radius: 4px; }
-  .md pre { background: var(--bg); padding: 8px 10px; border-radius: 6px; overflow-x: auto; }
+  .md pre { background: var(--bg); padding: 8px 10px; border-radius: 6px; white-space: pre-wrap; overflow-wrap: anywhere; } /* wrapped: one long line used to widen the whole chat */
   .md pre code { padding: 0; background: none; }
   .md blockquote { border-left: 2px solid var(--line); padding-left: 10px; color: var(--mute); }
   .md table { border-collapse: collapse; margin: 6px 0; } .md td, .md th { border: 1px solid var(--line); padding: 3px 8px; text-align: left; }
@@ -130,6 +130,26 @@
   .compose.multi { padding-bottom:44px; transition-delay:0s; }
   .compose.multi textarea { width:100%; transition-delay:.08s, 0s; }
   .chat .hint { padding:6px 10px 10px; }
+  .chat { position:relative; }
+  .atts { display:flex; flex-wrap:wrap; gap:6px; }
+  /* Files waiting to send float over the bottom of the thread, so the
+     messages keep their full height. */
+  .compose .atts { position:absolute; left:0; bottom:calc(100% + 6px); z-index:2; }
+  .compose .att { box-shadow:0 2px 10px rgba(0,0,0,.18); }
+  .att { position:relative; display:flex; align-items:center; height:56px; border:1px solid var(--line); border-radius:8px; overflow:hidden; background:var(--bg); color:var(--fg); text-decoration:none; }
+  .att:has(img) { border:0; background:none; }
+  .att img { height:56px; max-width:120px; object-fit:cover; display:block; border-radius:8px; }
+  /* A sent message's attachments, above its bubble on the same side. */
+  .atts.sent { align-self:flex-start; justify-content:flex-start; max-width:85%; margin-bottom:-6px; }
+  .atts.sent.me, .atts.sent.dashboard { align-self:flex-end; justify-content:flex-end; }
+  .atts.sent img { height:72px; max-width:160px; object-fit:cover; display:block; border-radius:8px; }
+  .atts.sent .att { height:36px; }
+  .bubble.bare { background:none; padding:0; color:var(--fg); }
+  .bubble.me.bare { text-align:right; }
+  .att .name { padding:0 26px 0 10px; font-size:12px; max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .att button { position:absolute; top:3px; right:3px; width:18px; height:18px; padding:0; border-radius:50%; font-size:10px; line-height:1; display:flex; align-items:center; justify-content:center; }
+  .chat.dragging::after { content:"Drop to attach"; position:absolute; inset:0; z-index:5; display:flex; align-items:center; justify-content:center;
+    border:2px dashed var(--mute); border-radius:8px; background:color-mix(in srgb, var(--bg) 70%, transparent); color:var(--fg); font-weight:600; pointer-events:none; }
   @media (prefers-reduced-motion: reduce) { .compose, .compose textarea { transition:none; } }
   /* The title row looks the same folded or not: everything sits at the top, and the
      details wrap under the title, left of the time and status. */
@@ -452,18 +472,18 @@
 <main>
   <div class="row" id="top" style="margin-bottom:36px">
     <div class="grow">
-      <div class="brand"><img src="/logo.png?v=2" alt=""><h1>Cannu <span>Parallel agent management</span></h1></div>
-      <p class="sub" style="margin:12px 0 0" id="totals">One branch, folder and Claude session per feature.</p>
+      <div class="brand"><img src="/logo.png?v=2" alt=""><h1>Cannu <span>Agent board</span></h1></div>
+      <p class="sub" style="margin:12px 0 0" id="totals"></p>
     </div>
     <div class="rings" id="rings" tabindex="0" aria-label="Claude usage"></div>
     <button id="defaultsOpen" title="Model, system prompt and everything else every agent is given">Agent defaults</button>
     <div class="seg" id="notify">
       <span class="thumb"></span>
       <button data-mode="silent" title="No notifications"></button>
-      <button data-mode="select" title="Notify me about features with their bell on"></button>
-      <button data-mode="all" title="Notify me about every feature"></button>
+      <button data-mode="select" title="Notify me about tasks with their bell on"></button>
+      <button data-mode="all" title="Notify me about every task"></button>
     </div>
-    <button class="primary" id="newOpen">+ New feature</button>
+    <button class="primary" id="newOpen">+ New task</button>
     <div class="repopick" id="repoPick">
       <button id="repoBtn" aria-haspopup="true" aria-expanded="false" title="Which repo this board shows"><span id="repoName">Repo</span><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
       <div class="repomenu" id="repoMenu" hidden></div>
@@ -479,8 +499,8 @@
       <button data-val="label" title="A board with a column per label. Drag a card to another column to relabel it">Labels</button>
     </div>
     <div class="seg text" id="doneSeg"><span class="thumb"></span>
-      <button data-val="show" title="Every feature, merged and dropped too">Show All</button>
-      <button data-val="hide" title="Hide merged and dropped features">Hide Completed</button>
+      <button data-val="show" title="Every task, merged and dropped too">Show All</button>
+      <button data-val="hide" title="Hide merged and dropped tasks">Hide Completed</button>
     </div>
     <div class="repopick" id="sortPick">
       <button id="sortBtn" aria-haspopup="true" aria-expanded="false" title="How cards are ordered, in every column and the list"><span id="sortName"></span><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
@@ -488,7 +508,7 @@
     </div>
     <div class="chips" id="chips"></div>
     <span class="grow" id="gap" style="min-width:0"></span>
-    <span class="searchbox"><input type="search" id="search" placeholder="Search features"><button type="button" id="searchClear" title="Clear search" aria-label="Clear search">×</button></span>
+    <span class="searchbox"><input type="search" id="search" placeholder="Search tasks"><button type="button" id="searchClear" title="Clear search" aria-label="Clear search">×</button></span>
   </div>
   <div class="msg bad" id="boardMsg" hidden style="margin-bottom:10px"></div>
   <div id="board"></div>
@@ -507,15 +527,15 @@
         <h3>How to work on it</h3>
         <div class="hint" id="repoSetHint"></div>
         <div class="two">
-          <div class="field"><label for="cMain">Main branch</label><input type="text" id="cMain"><div class="hint">Features start from it and merge into it.</div></div>
+          <div class="field"><label for="cMain">Main branch</label><input type="text" id="cMain"><div class="hint">Tasks start from it and merge into it.</div></div>
           <div class="field"><label for="cMerge">Ship with</label><select id="cMerge"><option value="local">Check and merge, locally</option><option value="pr">A pull request on GitHub</option></select><div class="hint">The main button. Both are always on the card.</div></div>
         </div>
-        <div class="field"><label for="cSetup">Setup</label><textarea id="cSetup" rows="2" placeholder="pnpm install --frozen-lockfile"></textarea><div class="hint">Run once in each new feature folder, in order. One command per line.</div></div>
-        <div class="field"><label for="cCopy">Copy into each feature</label><textarea id="cCopy" rows="2" placeholder=".env&#10;data/app.db"></textarea><div class="hint">Files and folders git doesn't have, copied from the main folder. One per line.</div></div>
-        <div class="field"><label for="cApp">App</label><input type="text" id="cApp" placeholder="Empty if there's nothing to preview"><div class="hint">Runs each feature's own copy. It must listen on <code>$PORT</code>, and gets <code>$DATA_DIR</code> for its data.</div></div>
+        <div class="field"><label for="cSetup">Setup</label><textarea id="cSetup" rows="2" placeholder="pnpm install --frozen-lockfile"></textarea><div class="hint">Run once in each new task folder, in order. One command per line.</div></div>
+        <div class="field"><label for="cCopy">Copy into each task</label><textarea id="cCopy" rows="2" placeholder=".env&#10;data/app.db"></textarea><div class="hint">Files and folders git doesn't have, copied from the main folder. One per line.</div></div>
+        <div class="field"><label for="cApp">App</label><input type="text" id="cApp" placeholder="Empty if there's nothing to preview"><div class="hint">Runs each task's own copy. It must listen on <code>$PORT</code>, and gets <code>$DATA_DIR</code> for its data.</div></div>
         <div class="field"><label for="cSeed">Seed</label><textarea id="cSeed" rows="2" placeholder="node scripts/seed.js"></textarea><div class="hint">Run once the app is up, such as demo data. One command per line.</div></div>
         <div class="field"><label for="cCheck">Check</label><input type="text" id="cCheck" placeholder="Empty for no check"><div class="hint">Must pass before Check and merge merges. <code>$APP_URL</code> points at a fresh copy of the branch's app.</div></div>
-        <label class="switch"><input type="checkbox" id="cNotes">Commit each feature's notes and prompts to the repo</label>
+        <label class="switch"><input type="checkbox" id="cNotes">Commit each task's notes and prompts to the repo</label>
       </div>
     </div>
     <div class="dmsg" id="repoMsg"></div>
@@ -525,14 +545,11 @@
 
 <dialog class="modal" id="newDlg">
   <div class="panel">
-    <header><h2>New feature</h2></header>
+    <header class="row"><h2>New task</h2><span class="grow" style="min-width:0"></span><select id="newModel" title="The model its agent runs on" aria-label="Model"></select></header>
     <div class="body">
       <div class="labels" id="newLabels" style="margin-top:0"></div>
-      <input type="text" id="title" placeholder="Feature name, e.g. Client can hide Training now">
-      <textarea id="prompt" class="tall" data-mention placeholder="What you want and why. Saved word for word in the feature's notes. Optional if you're only planning it."></textarea>
-      <div class="hint">@ to tag a related feature. The agent reads their notes first.</div>
-      <div class="hint" data-tags></div>
-      <div class="field"><label for="newModel">Model</label><select id="newModel"></select></div>      <div class="banner" id="limitNew" hidden></div>
+      <div id="newForm" style="display:contents"></div>
+      <div class="banner" id="limitNew" hidden></div>
     </div>
     <div class="dmsg" id="addMsg"></div>
     <footer class="row"><button data-close title="Keeps what you've typed here for next time, in this browser tab. Nothing is saved to the repo.">Close</button><span class="grow" style="min-width:0"></span>
@@ -540,7 +557,7 @@
   </div>
 </dialog>
 
-<dialog class="modal popdlg" id="popDlg" aria-label="Feature">
+<dialog class="modal popdlg" id="popDlg" aria-label="Task">
   <div class="panel pop">
     <div class="body" id="popTop"></div>
     <footer class="row" id="popFoot"><button data-close>Close</button><div class="grow" id="popActs"></div></footer>
@@ -557,7 +574,7 @@
 
 <dialog class="modal" id="defaultsDlg">
   <div class="panel">
-    <header><h2>Agent defaults</h2><div class="hint">What every feature agent is given. Saved under <code>agent</code> in the repo's <code>cannu.json</code> and committed on main. Agents that already started get changes from their next run.</div></header>
+    <header><h2>Agent defaults</h2><div class="hint">What every task's agent is given. Saved under <code>agent</code> in the repo's <code>cannu.json</code> and committed on main. Agents that already started get changes from their next run.</div></header>
     <div class="body" id="defaultsBody"></div>
     <div class="dmsg" id="defaultsMsg"></div>
     <footer class="row"><button data-close>Close</button><span class="grow" style="min-width:0"></span><button class="primary" id="defaultsSave">Save</button></footer>
@@ -633,7 +650,7 @@ const collapsed = new Set(store.get("collapsed", []));
 let turned = null; // the card just folded or unfolded, so only its arrow animates
 const ago = (iso) => { if (!iso) return ""; const s = (Date.now() - new Date(iso)) / 1000; return s < 60 ? "just now" : s < 3600 ? Math.round(s/60) + "m ago" : s < 86400 ? Math.round(s/3600) + "h ago" : Math.round(s/86400) + "d ago"; };
 const day = (iso) => (iso ? iso.slice(0, 10) : "");
-// Which repo this tab shows: from the address (#macros), else the last one
+// Which repo this tab shows: from the address (#my-project), else the last one
 // picked, else the first. Every /api call goes to that repo's Cannu.
 let REPOS = [], CUR = decodeURIComponent(location.hash.slice(1)) || store.get("repo", "");
 const api = async (url, body) => {
@@ -649,7 +666,7 @@ const u = (slug) => (ui[slug] ??= { fb: false, draft: "", msg: "", cls: "", full
 // of how much it needs looking at: waiting on you first, dropped last.
 const KINDS = ["waiting", "working", "planned", "merged", "dropped"]; // by urgency: sorts the cards
 const CHIPS = ["planned", "working", "waiting", "merged", "dropped"]; // by timeline: orders the filter chips
-const KIND_TIPS = { all: "Every feature", waiting: "An agent has stopped and it's your turn: it finished, needs you, or was cut off", working: "An agent is working on it", planned: "No branch or agent yet", merged: "In main, finished", dropped: "Kept on record, not doing it" };
+const KIND_TIPS = { all: "Every task", waiting: "An agent has stopped and it's your turn: it finished, needs you, or was cut off", working: "An agent is working on it", planned: "No branch or agent yet", merged: "In main, finished", dropped: "Kept on record, not doing it" };
 const cap = (s) => s[0].toUpperCase() + s.slice(1);
 let filter = store.get("filter", "all");
 if (filter !== "all" && !KINDS.includes(filter)) filter = "all";
@@ -1121,9 +1138,9 @@ function renderUsage() {
   // Under the header: a full limit, or features waiting to carry on after one.
   const full = limitFull(), held = all.filter((f) => f.worktree && f.live?.state === "limited");
   const wait = held.map(heldUntil).filter(Boolean).sort().at(-1);
-  const n = held.length, ones = `${n} ${n === 1 ? "feature" : "features"}`;
+  const n = held.length, ones = `${n} ${n === 1 ? "task" : "tasks"}`;
   const auto = DEF?.autoContinue !== false, then = auto ? "Held agents carry on by themselves once it resets." : "Once it resets, held agents will wait for you to click resume.";
-  const note = full ? `Your ${LIMIT_NAME[full.which]} Claude limit is full. It resets ${resetAt(full.resets)}.<br>Until then Cannu doesn't start agents: new features are set up and wait, and messages stay queued.${n ? ` ${ones} ${n === 1 ? "is" : "are"} held.` : ""} ${then}`
+  const note = full ? `Your ${LIMIT_NAME[full.which]} Claude limit is full. It resets ${resetAt(full.resets)}.<br>Until then Cannu doesn't start agents: new tasks are set up and wait, and messages stay queued.${n ? ` ${ones} ${n === 1 ? "is" : "are"} held.` : ""} ${then}`
     : wait ? `${ones} ${n === 1 ? "is" : "are"} held by your Claude usage limit until ${resetAt(wait)}. ${then}`
     : n ? `Your Claude limit has reset. ${ones} held${auto ? ", carrying on by themselves shortly" : ""}. <button class="primary" data-act="continueall">${auto ? "Resume now" : "Resume all"}</button>` : "";
   const lm = $("#limitMsg");
@@ -1132,7 +1149,7 @@ function renderUsage() {
   if (note && lm.dataset.html !== banner) { lm.innerHTML = banner; lm.dataset.html = banner; }
   const ln = $("#limitNew");
   ln.hidden = !full;
-  if (full) ln.textContent = `Your ${LIMIT_NAME[full.which]} Claude limit is full until ${resetAt(full.resets)}. Start agent sets the feature up now and its agent waits, then ${DEF?.autoContinue !== false ? "starts by itself" : "waits for you to click Resume on its card"} once the limit resets.`;
+  if (full) ln.textContent = `Your ${LIMIT_NAME[full.which]} Claude limit is full until ${resetAt(full.resets)}. Start agent sets the task up now and its agent waits, then ${DEF?.autoContinue !== false ? "starts by itself" : "waits for you to click Resume on its card"} once the limit resets.`;
 }
 // ?fakelimit shows the board as if the 5-hour limit were full, to see how
 // that looks. Only this page is fooled: the server still starts agents.
@@ -1165,7 +1182,7 @@ $("#limitMsg").addEventListener("click", async (e) => {
   refresh();
 });
 
-const mentionHint = (text, self) => `<div class="hint">@ to tag a related feature. The agent reads their notes first.</div><div class="hint" data-tags>${tagsHtml(text, self)}</div>`;
+const mentionHint = (text, self) => `<div class="hint">@ to tag a related task. The agent reads their notes first.</div><div class="hint" data-tags>${tagsHtml(text, self)}</div>`;
 const port = (slug) => all.find((x) => x.slug === slug).port;
 // The preview is on the machine serving this page, which is localhost on a
 // laptop and the server's name when Cannu runs on one.
@@ -1184,23 +1201,29 @@ function bellBtn(f) {
   const can = mode === "select" && !!f.worktree;
   const noAgent = { planned: "No agent yet. You can turn this on once it's started.", merged: "Its agent has finished and its folder is removed, so there's nothing to notify you about.", dropped: "Dropped, so there's nothing to notify you about." }[f.status] || "No agent running for it right now.";
   const title = mode === "silent" ? "Notifications are muted. Change it with the bells at the top."
-    : mode === "all" ? "Notifying you about every feature. Pick the middle option at the top to choose which."
-    : !f.worktree ? noAgent : on ? "Notifying you about this feature. Click to stop." : "Not notifying you about this feature. Click to turn it on.";
+    : mode === "all" ? "Notifying you about every task. Pick the middle option at the top to choose which."
+    : !f.worktree ? noAgent : on ? "Notifying you about this task. Click to stop." : "Not notifying you about this task. Click to turn it on.";
   return `<button class="sq bell ${on ? "on" : ""} ${can ? "" : "off"}" data-act="bell" ${can ? "" : 'aria-disabled="true"'} title="${title}">${on ? ICON.all : ICON.off}</button>`;
 }
 // Every card ends with the same row: everyday buttons on the left, the one
 // that moves the feature on (in black) on the right.
 const actions = (left, right) => `<div class="row actions">${left}<span class="grow" style="min-width:0"></span>${right}</div>`;
 
+// Files waiting to go with the next message: a thumbnail for an image, the
+// name for anything else, each with an ✕ to take it off.
+const attsHtml = (s) => (s.files || []).map((a, i) => `<span class="att" title="${esc(a.name)}">${a.url ? `<img src="${a.url}" alt="${esc(a.name)}">` : `<span class="name">${esc(a.name)}</span>`}<button data-act="unattach" data-i="${i}" title="Remove" aria-label="Remove ${esc(a.name)}">✕</button></span>`).join("");
+function showAtts(slug) { for (const el of document.querySelectorAll(`[data-slug="${slug}"] .compose .atts`)) el.innerHTML = attsHtml(u(slug)); }
+
 function chatBox(f, s, cls) {
   return `<div class="chat">
       <div class="thread" data-chat></div>
       <div class="compose ${s.multi ? "multi" : ""}">
-        <textarea data-field="draft" data-mention rows="1" placeholder="Message the agent. ${MAC ? "⌘" : "Ctrl"}+Enter sends.">${esc(s.draft)}</textarea>
+        <div class="atts">${attsHtml(s)}</div>
+        <textarea data-field="draft" data-mention rows="1" placeholder="Message the agent">${esc(s.draft)}</textarea>
         <button class="primary send" data-act="send" title="${MAC ? "⌘+Enter" : "Ctrl+Enter"} sends">Send${keysHint(true)}</button>
       </div>
       <div class="hint" data-tags>${tagsHtml(s.draft)}</div>
-      <div class="hint">${f.live?.open ? "Its terminal is open. Sending closes that terminal session and carries on here (the conversation is kept). " : f.live?.background || cls === "working" ? "It's mid-turn. Your message waits and goes as soon as this turn ends. " : ""}Saved word for word in its prompts.md. @ to tag a related feature. The agent reads their notes first.</div>
+      <div class="hint">${f.live?.open ? "Its terminal is open. Sending closes that terminal session and carries on here (the conversation is kept). " : f.live?.background || cls === "working" ? "It's mid-turn. Your message waits and goes as soon as this turn ends. " : ""}@ to tag a related task. The agent reads their notes first. Paste or drag in images and files to attach them.</div>
     </div>`;
 }
 
@@ -1224,7 +1247,7 @@ function card(f, inPop) {
     banner = wait ? `<div class="banner">Held by your ${full ? LIMIT_NAME[full.which] + " " : ""}Claude usage limit. It resets ${resetAt(wait)}, and then ${auto ? `this agent will ${what} by itself` : "it waits for you to click Resume"}.</div>`
       : `<div class="banner">Held by your Claude usage limit, which should have reset.${auto ? ` This agent will ${what} by itself shortly.` : ""} <button class="primary" data-act="continue">Resume${auto ? " now" : ""}</button></div>`;
   }
-  else if (cls === "not-started") banner = `<div class="banner">The terminal for this feature never started a session. <button data-act="resume-term">Start it now</button></div>`;
+  else if (cls === "not-started") banner = `<div class="banner">The terminal for this task never started a session. <button data-act="resume-term">Start it now</button></div>`;
   const c = !inPop && collapsed.has(f.slug);
   // Three lines: where it lives, its git state, then time and cost.
   const details = `<div class="meta">created ${day(f.created)} · ${esc(f.branch)}${f.model ? " · " + esc(MODELS[f.model] || f.model) : ""}</div>
@@ -1248,7 +1271,7 @@ function card(f, inPop) {
     ${c ? "" : body}
     ${(s.fb || inPop) && !c ? chatBox(f, s, cls) : ""}
     ${msgBlock(s)}
-    ${actions(`${REPO.app ? `<span class="split"><button data-act="${f.appUp ? "app" : "appstart"}" title="${f.appUp ? "Open this feature's app" : "Start this feature's app and open it"}">Preview ↗</button><button data-act="appstop" title="Stop this feature's app" ${f.appUp ? "" : "disabled"}>✕</button></span>`
+    ${actions(`${REPO.app ? `<span class="split"><button data-act="${f.appUp ? "app" : "appstart"}" title="${f.appUp ? "Open this task's app" : "Start this task's app and open it"}">Preview ↗</button><button data-act="appstop" title="Stop this task's app" ${f.appUp ? "" : "disabled"}>✕</button></span>`
       : `<button class="nopreview" data-act="nopreview" aria-disabled="true" title="This repo has no app to preview. Set &quot;app&quot; in its cannu.json">Preview ↗</button>`}
       <button data-act="open">Open session</button>
       <button data-act="fb">${s.fb ? "Hide chat" : "Chat"}${st.queue?.length ? ` (${st.queue.length} waiting)` : ""}</button>
@@ -1279,6 +1302,16 @@ function shipButtons(f) {
   return (prFirst ? local + pr : pr + local).replace(/<button data-act="(merge|prmerge|pr)"([^>]*)>([^<]*)<\/button>$/, '<button class="primary" data-act="$1"$2>$3</button>');
 }
 
+// The same name and description boxes in New task, a planned task and Reopen.
+// The name and description boxes: one form for New task, a planned task and
+// Reopen, so their wording can't drift apart. `at(k)` hooks each box up: ids
+// in New task, data-fields on a card. The model picker sits top right in each.
+function taskForm(at, { title = "", prompt = "", self = "" } = {}) {
+  return `<input type="text" ${at("title")} placeholder="Task name" value="${esc(title)}">
+    <textarea ${at("prompt")} data-mention${self ? ` data-self="${self}"` : ""} placeholder="What needs doing?">${esc(prompt)}</textarea>
+    ${mentionHint(prompt, self)}`;
+}
+const modelPick = (attr, sel, title) => `<select class="model" ${attr} title="${title}" aria-label="Model">${modelOptions(sel, true)}</select>`;
 // A feature with no branch or agent: planned, dropped, imported from the old
 // board, or merged and its worktree removed.
 function simpleCard(f, inPop) {
@@ -1301,12 +1334,11 @@ function simpleCard(f, inPop) {
         ${edit ? "" : linksHtml(f)}
       </div>
       ${head(f, cls, label, "")}
+      ${planned ? modelPick("data-model", f.model || "", "The model its agent runs on. Changeable until it starts.") : s.reopen ? modelPick('data-field="rmodel"', s.rmodel ?? f.model ?? "", "The model the new task's agent runs on") : ""}
     </div>
     ${planned && !edit && f.prompt ? `<div class="plan md">${md(f.prompt)}</div>` : ""}
     ${edit ? `<div style="margin-top:10px; display:grid; gap:8px">
-      <input type="text" data-field="etitle" value="${esc(s.etitle ?? f.title)}">
-      <textarea data-field="eprompt" data-mention data-self="${f.slug}" placeholder="What you want and why. This is what the agent starts on.">${esc(s.eprompt ?? f.prompt ?? "")}</textarea>
-      ${mentionHint(s.eprompt ?? f.prompt, f.slug)}${linkedFrom(f, "hint")}
+      ${taskForm((k) => `data-field="e${k}"`, { title: s.etitle ?? f.title, prompt: s.eprompt ?? f.prompt ?? "", self: f.slug })}${linkedFrom(f, "hint")}
     </div>` : ""}
     ${inPop ? "" : schedFoot(f)}
     ${actions(planned
@@ -1319,10 +1351,8 @@ function simpleCard(f, inPop) {
         : startSplit('data-act="start"', s.edit || inPop ? keysHint(true) : "", f.slug, whenOf(f.slug))}`
       : leftover ? `<button class="primary" data-act="remove" title="Delete its folder. The unmerged branch is kept, so the work is still in git.">Remove worktree</button>` : "")}
     ${s.reopen ? `<div style="margin-top:10px; display:grid; gap:8px">
-      <div class="hint">A new feature that continues this one. Start agent makes a new branch from current main with a new session, and the agent reads this feature's notes first. Save as planned records it to start later.</div>
-      <input type="text" data-field="rtitle" value="${esc(s.rtitle || f.title + " (continued)")}">
-      <textarea data-field="rprompt" data-mention data-self="${f.slug}" placeholder="What you want changed this time, and why.">${esc(s.rprompt)}</textarea>
-      ${mentionHint(s.rprompt, f.slug)}
+      <div class="hint">A new task that continues this one. Start agent makes a new branch from current main with a new session, and the agent reads this task's notes first. Save as planned records it to start later.</div>
+      ${taskForm((k) => `data-field="r${k}"`, { title: s.rtitle || f.title + " (continued)", prompt: s.rprompt, self: f.slug })}
       <div class="row"><button class="second" data-act="reopen-plan" title="Records it on main without a branch or agent. Start it later from its card.">Save as planned</button><button class="primary" data-act="reopen-go" title="${MAC ? "⌘" : "Ctrl"}+Enter starts it">Start agent${keysHint(true)}</button></div>
     </div>` : ""}
     ${msgBlock(s)}
@@ -1380,7 +1410,7 @@ function render(features) {
   const live = features.filter((f) => f.usage);
   const ms = live.reduce((a, f) => a + f.usage.ms, 0), cost = live.reduce((a, f) => a + f.usage.cost, 0);
   // The totals go on their own line under the tagline.
-  $("#totals").innerHTML = `One branch, folder and Claude session per feature.${ms || cost ? `<br>All features: ${dur(ms)} agent time, ≈$${cost.toFixed(2)} at API prices.` : ""}`;
+  $("#totals").textContent = ms || cost ? `All tasks: ${dur(ms)} agent time, ≈$${cost.toFixed(2)} at API prices.` : "";
   const typing = document.activeElement?.closest?.("#list") && document.activeElement.matches("textarea, input[type=text]");
   // Filter chips, with how many features each would show.
   const inGroup = (f, g) => g === "all" || kind(f)[0] === g;
@@ -1411,7 +1441,7 @@ function render(features) {
   const shown = features.filter((f) => inGroup(f, filter) && (!q || (f.title + " " + (f.prompt || "")).toLowerCase().includes(q)));
   shown.sort(bySort);
   const html = shown.length ? shown.map((f) => (f.worktree ? card(f) : simpleCard(f)))
-    : [`<div class="card empty">${q ? "Nothing matches that search." : filter === "all" ? "No features yet. Add one with + New feature." : `Nothing is ${filter} right now.`}</div>`];
+    : [`<div class="card empty">${q ? "Nothing matches that search." : filter === "all" ? "No tasks yet. Add one with + New task." : `Nothing is ${filter} right now.`}</div>`];
   patchList(html);
   for (const t of document.querySelectorAll('#list [data-field="eprompt"]')) fitPlan(t);
   for (const f of shown) {
@@ -1454,6 +1484,24 @@ function patchList(html) {
   for (const el of old.values()) el.remove();
 }
 
+// A message's attachments went as paths on their own lines: show those as
+// previews (a thumbnail for an image, the name for anything else) and the rest
+// as text. The previews sit above the message's bubble, not inside it.
+const ATT_LINE = /^\S.*[\\/]attachments[\\/]([a-z0-9-]+)[\\/](\d+-([\w.-]+))$/;
+function bubble(who, text, foot) {
+  const b = msgBody(text);
+  return (b.pics ? `<div class="atts sent ${who}">${b.pics}</div>` : "") + `<div class="bubble ${who}${b.bare ? " bare" : ""}">${b.html}<div class="who">${foot}</div></div>`;
+}
+function msgBody(text) {
+  const lines = text.split("\n"), atts = lines.map((l) => l.trim().match(ATT_LINE)).filter(Boolean);
+  const rest = lines.filter((l) => !ATT_LINE.test(l.trim())).join("\n").trim();
+  const pics = atts.map(([, slug, file, name]) => {
+    const src = `/r/${encodeURIComponent(CUR)}/api/features/${slug}/file?name=${encodeURIComponent(file)}`;
+    return /\.(png|jpe?g|gif|webp)$/i.test(name) ? `<a href="${src}" target="_blank"><img src="${src}" alt="${esc(name)}"></a>` : `<a class="att" href="${src}"><span class="name">${esc(name)}</span></a>`;
+  }).join("");
+  return { pics, html: rest ? `<div class="md">${md(rest)}</div>` : "", bare: !rest && atts.length > 0 };
+}
+
 // The conversation, newest at the bottom. Reloaded when the agent's state
 // changes; stays scrolled to the bottom unless you've scrolled up.
 async function loadChat(slug) {
@@ -1466,10 +1514,8 @@ async function loadChat(slug) {
   const first = !el.dataset.loaded;
   const following = first || atNewest(el);
   const count = el.children.length, y = el.scrollTop;
-  el.innerHTML = r.messages?.length ? r.messages.map((m) => `<div class="bubble ${m.who}">
-      <div class="md">${md(m.who === "dashboard" ? m.text.replace(/^\[Added by the dashboard, not my words\]\s*/, "") : m.text)}</div>
-      <div class="who">${{ me: "You", agent: "Agent", dashboard: "Sent by the dashboard" }[m.who]}${m.queued ? " · waiting to send" : m.sending ? " · sending…" : m.at ? " · " + new Date(m.at).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : ""}</div>
-    </div>`).join("") : `<div class="hint">${r.saved === false ? "This session has no saved conversation yet." : "No messages yet."}</div>`;
+  el.innerHTML = r.messages?.length ? r.messages.map((m) => bubble(m.who, m.who === "dashboard" ? m.text.replace(/^\[Added by the dashboard, not my words\]\s*/, "") : m.text,
+      `${{ me: "You", agent: "Agent", dashboard: "Sent by the dashboard" }[m.who]}${m.queued ? " · waiting to send" : m.sending ? " · sending…" : m.at ? " · " + new Date(m.at).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : ""}`)).join("") : `<div class="hint">${r.saved === false ? "This session has no saved conversation yet." : "No messages yet."}</div>`;
   el.dataset.loaded = "1";
   // Still sending: no state change marks it landing, so reload on every refresh until it has.
   el.dataset.at = r.messages?.some((m) => m.sending) ? "" : String(f?.st?.at) + (f?.st?.queue?.length || 0);
@@ -1628,8 +1674,8 @@ function renderBoard(features) {
     ? CHIPS.filter((k) => !(hide && ["merged", "dropped"].includes(k))).map((k) => ({ key: k, head: `<span class="pill ${k}"><span class="dot"></span></span>${cap(k)}`, items: shown.filter((f) => kind(f)[0] === k) }))
     : [...labels(), ""].map((l) => ({ key: l, head: l ? `<span class="editcol" data-editcol tabindex="0" title="Click to rename, describe or recolour">${tagHtml(l)}</span>` : "Unlabelled", menu: l ? colMenu(l) : "", desc: LABELS[l]?.description || "", items: shown.filter((f) => (f.label || "") === l) }));
   const empty = view === "label" ? "Drag a card here to label it" : "Nothing here";
-  const add = view === "label" ? `<div class="col newcol" data-newcol tabindex="0" title="Click to make an empty label, or drop a feature here to give it a new one"><div class="colhead">+ New label</div><div class="none">Click to name it, or drag a feature here.</div></div>` : "";
-  const plus = (l) => view === "label" ? `<button class="coladd" data-addcol title="${l ? `New feature labelled ${esc(l)}` : "New feature without a label"}" aria-label="New feature"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M5 1v8M1 5h8"/></svg></button>` : "";
+  const add = view === "label" ? `<div class="col newcol" data-newcol tabindex="0" title="Click to make an empty label, or drop a task here to give it a new one"><div class="colhead">+ New label</div><div class="none">Click to name it, or drag a task here.</div></div>` : "";
+  const plus = (l) => view === "label" ? `<button class="coladd" data-addcol title="${l ? `New task labelled ${esc(l)}` : "New task without a label"}" aria-label="New task"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M5 1v8M1 5h8"/></svg></button>` : "";
   const html = `<div class="board">${cols.map((c) => `<div class="col" data-col="${esc(c.key)}"><div class="colhead"${view === "label" && c.key ? ' data-dragcol title="Drag to move this column"' : ""}>${c.head}<span class="n">${c.items.length}</span>${plus(c.key)}${c.menu || ""}</div>${c.desc ? `<div class="desc">${esc(c.desc)}</div>` : ""}${c.items.map(tile).join("") || `<div class="none">${empty}</div>`}</div>`).join("")}${add}</div>`;
   const host = $("#board");
   if (host._html === html) return;
@@ -1670,9 +1716,9 @@ async function labelAction(name, act) {
   if (act === "edit") return editCol(name);
   if (act === "duplicate") { const r = await api("/api/labels/duplicate", { name }); if (!r.ok) boardSay(r.msg); return refresh(); }
   const n = inside.length;
-  const text = n ? `“${name}” has ${n} ${n === 1 ? "feature" : "features"} in it: ${inside.map((f) => f.title).join(", ")}. ${n === 1 ? "It" : "They"} will be deleted too, notes and all. Building ones are dropped and their worktrees removed first; a branch that isn't merged is kept in git.`
-    : `“${name}” has no features in it.`;
-  if (!(await ask(`Delete “${name}”?`, text, n ? `Delete label and ${n} ${n === 1 ? "feature" : "features"}` : "Delete label"))) return;
+  const text = n ? `“${name}” has ${n} ${n === 1 ? "task" : "tasks"} in it: ${inside.map((f) => f.title).join(", ")}. ${n === 1 ? "It" : "They"} will be deleted too, notes and all. Building ones are dropped and their worktrees removed first; a branch that isn't merged is kept in git.`
+    : `“${name}” has no tasks in it.`;
+  if (!(await ask(`Delete “${name}”?`, text, n ? `Delete label and ${n} ${n === 1 ? "task" : "tasks"}` : "Delete label"))) return;
   const r = await api("/api/labels/delete", { name });
   if (!r.ok) boardSay(r.msg);
   refresh();
@@ -1728,12 +1774,26 @@ function follow() {
     if (!over.matches("[data-newcol]")) {
       const tiles = [...over.querySelectorAll(".tile")].filter((t) => t !== el);
       const f = all.find((x) => x.slug === el.dataset.open);
-      // manual: above the first card whose middle is below the pointer; otherwise where the sort puts it
-      // Like the columns: the card's middle, as if it followed the pointer fully, swaps once it's a
-      // fifth into the next card. Coming from another column there's no next, so it's halfway.
-      const mid = py - held.gy + el.offsetHeight / 2, mine = [...over.querySelectorAll(".tile")], me = mine.indexOf(el);
-      const before = sortBy === "manual" ? tiles.find((t) => { const L = lay(t), i = mine.indexOf(t); return mid < L.y + L.h * (me < 0 ? 0.5 : i > me ? 0.2 : 0.8); })
-        : over === el.closest(".col") ? el.nextElementSibling : tiles.find((t) => bySort(f, all.find((x) => x.slug === t.dataset.open)) < 0);
+      // vt: the card's top if it followed the pointer fully. h: its height.
+      const h = el.offsetHeight, vt = py - held.gy;
+      let before = el.nextElementSibling; // stays put unless something below says otherwise
+      if (el.closest(".col") !== over) {
+        // just arrived from another column: manual goes by middles, otherwise where the sort puts it
+        held.lock = null;
+        before = sortBy === "manual" ? tiles.find((t) => { const L = lay(t); return vt + h / 2 < L.y + L.h / 2; })
+          : tiles.find((t) => bySort(f, all.find((x) => x.slug === t.dataset.open)) < 0);
+      } else if (sortBy === "manual") {
+        // It passes the card next to it once it has moved d from its own slot, whatever either card's
+        // height: the gap plus a fifth of that card plus half its own, capped so tall cards switch
+        // as soon as short ones. Undoing the last swap only needs going back 12px past where it
+        // happened (lock): the slot jumped a whole card, so measuring from it would swap straight back.
+        const S = lay(el).y, gap = parseFloat(getComputedStyle(el).marginBottom) || 0, lock = held.lock;
+        const d = (t) => gap + Math.min(t.offsetHeight * 0.2 + h / 2, 40);
+        const next = el.nextElementSibling?.matches(".tile") ? el.nextElementSibling : null;
+        const prev = el.previousElementSibling?.matches(".tile") ? el.previousElementSibling : null;
+        if (next && (lock?.t === next ? vt > lock.at + 12 : vt > S + d(next))) { before = next.nextElementSibling; held.lock = { t: next, at: vt }; }
+        else if (prev && (lock?.t === prev ? vt < lock.at - 12 : vt < S - d(prev))) { before = prev; held.lock = { t: prev, at: vt }; }
+      }
       shift(el, over, before || null);
     }
   }
@@ -1991,14 +2051,18 @@ function openPop(slug) {
   else if (plan) { fitPlan(plan); plan.focus(); plan.selectionStart = plan.selectionEnd = plan.value.length; }
   else $("#popDlg [data-close]").focus();
 }
+// A planned task's boxes as they stand, for /edit.
+const editBody = (f, s) => ({ title: (s.etitle ?? f.title).trim(), prompt: (s.eprompt ?? f.prompt ?? "").trim() });
 // Closing a planned feature's popup (Close, Escape, a click outside) saves
 // what you changed. Nothing changed, nothing committed.
 async function saveOnClose(slug) {
   const s = u(slug), f = all.find((x) => x.slug === slug);
-  const title = (s.etitle ?? f?.title ?? "").trim(), prompt = (s.eprompt ?? f?.prompt ?? "").trim();
+  if (!f) return;
+  const b = editBody(f, s);
   s.etitle = s.eprompt = null;
-  if (!f || f.status !== "planned" || (title === f.title && prompt === (f.prompt || "").trim())) return;
-  const r = await api(`/api/features/${slug}/edit`, { title, prompt });
+  if (f.status !== "planned" || (b.title === f.title && b.prompt === (f.prompt || "").trim())) return;
+  const { title, prompt } = b;
+  const r = await api(`/api/features/${slug}/edit`, b);
   if (!r.msg) remember(f, title, prompt);
   s.msg = r.msg || "Saved and committed on main."; s.cls = r.msg ? "bad" : "good";
   render(all); refresh();
@@ -2014,13 +2078,13 @@ $("#popDlg").addEventListener("scroll", (e) => { if (e.target.matches?.("[data-c
 function renderPop() {
   const f = all.find((x) => x.slug === popSlug); if (!f) return closeModal($("#popDlg"));
   const s = u(f.slug);
-  const lab = `<div class="labels" data-slug="${f.slug}">${labels().map((l) => `<button class="tag ${l === f.label ? "" : "off"}" style="--h:${hue(l)}" data-act="label" data-label="${esc(l)}" title="${l === f.label ? "Click to remove this label" : "Label it " + esc(l) + " (a feature has one label)"}">${esc(l)}</button>`).join("")}
+  const lab = `<div class="labels" data-slug="${f.slug}">${labels().map((l) => `<button class="tag ${l === f.label ? "" : "off"}" style="--h:${hue(l)}" data-act="label" data-label="${esc(l)}" title="${l === f.label ? "Click to remove this label" : "Label it " + esc(l) + " (a task has one label)"}">${esc(l)}</button>`).join("")}
     <span class="newlabel" data-act="newlabel" title="New label"><span class="plus"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M5 1v8M1 5h8"/></svg></span><input type="text" data-newlabel placeholder="New label" maxlength="40" aria-label="New label"></span></div>`;
   // Built without anything typed (the message, an edit, a reopen): typing
   // isn't a change to redraw for. Every refresh redrew it, which threw the
   // cursor out of the box you were typing in.
   const typed = Object.fromEntries(TYPED.map((k) => [k, s[k]]));
-  Object.assign(s, { draft: "", etitle: null, eprompt: null, rtitle: "", rprompt: "" });
+  Object.assign(s, { draft: "", etitle: null, eprompt: null, rtitle: "", rprompt: "", rmodel: null });
   const html = (f.worktree ? card(f, true) : simpleCard(f, true)) + "\u0000" + lab;
   Object.assign(s, typed);
   const top = $("#popTop");
@@ -2083,7 +2147,7 @@ document.addEventListener("focusin", (e) => {
   for (const v of [...past.slice(1), now]) { el.select(); document.execCommand(v ? "insertText" : "delete", false, v); }
 });
 
-const TYPED = ["draft", "etitle", "eprompt", "rtitle", "rprompt"];
+const TYPED = ["draft", "etitle", "eprompt", "rtitle", "rprompt", "rmodel"];
 // What Ctrl+Enter in each box presses. Plain Enter is never a save.
 const KEYS = { draft: "send", etitle: "start", eprompt: "start", rtitle: "reopen-go", rprompt: "reopen-go" };
 
@@ -2104,6 +2168,18 @@ function markShortErrors() {
     e.title = short ? "" : "Click to show more";
   }
 }
+async function attach(ta, files) {
+  const slug = ta.closest("[data-slug]").dataset.slug, s = u(slug);
+  for (const file of [...files]) {
+    const name = file.name || "pasted.png";
+    try {
+      const r = await (await fetch(`/r/${encodeURIComponent(CUR)}/api/features/${slug}/attach?name=${encodeURIComponent(name)}`, { method: "POST", body: file })).json();
+      if (!r.path) throw 0;
+      (s.files ||= []).push({ path: r.path, name, url: file.type.startsWith("image/") ? URL.createObjectURL(file) : "" });
+      showAtts(slug);
+    } catch { s.msg = `Couldn't attach ${name}.`; s.cls = "bad"; render(all); }
+  }
+}
 // An open Start ▾ menu holds the board still.
 async function refresh() { if (menuOpen) return; try { const [fs, ls] = await Promise.all([api("/api/features"), api("/api/labels")]); LABELS = ls; render(fs); markShortErrors(); renderUsage(); } catch {} }
 
@@ -2115,6 +2191,31 @@ host.addEventListener("input", (e) => {
   if (e.target.dataset.field === "eprompt") fitPlan(e.target);
 });
 host.addEventListener("click", onClick);
+// Files pasted or dropped into a chat are saved by the server, and their paths
+// go into the message for the agent to read. Plain text pastes as usual.
+host.addEventListener("paste", (e) => { if (e.target.closest(".compose") && e.clipboardData.files.length) { e.preventDefault(); attach(e.target, e.clipboardData.files); } });
+// While files are dragged over a chat it shows a dashed drop zone. dragleave
+// also fires moving between the chat's own children, so the zone clears a
+// moment after the last dragover instead.
+let dragOff;
+host.addEventListener("dragover", (e) => {
+  const c = e.target.closest(".chat"); if (!c || !e.dataTransfer.types.includes("Files")) return;
+  e.preventDefault(); c.classList.add("dragging");
+  clearTimeout(dragOff); dragOff = setTimeout(() => c.classList.remove("dragging"), 150);
+});
+host.addEventListener("drop", (e) => {
+  const c = e.target.closest(".chat"); if (!c || !e.dataTransfer.files.length) return;
+  e.preventDefault(); c.classList.remove("dragging");
+  attach(c.querySelector(".compose textarea"), e.dataTransfer.files);
+});
+// A planned feature's model, saved as soon as it's picked.
+host.addEventListener("change", async (e) => {
+  if (!e.target.matches("[data-model]")) return;
+  const slug = e.target.closest("[data-slug]").dataset.slug, s = u(slug);
+  const r = await api(`/api/features/${slug}/model`, { model: e.target.value });
+  if (r.msg) { s.msg = r.msg; s.cls = "bad"; render(all); }
+  refresh();
+});
 // Ctrl+Enter (or Cmd+Enter) does the main thing: send, or start the agent.
 host.addEventListener("keydown", (e) => {
   const act = KEYS[e.target.dataset?.field];
@@ -2205,9 +2306,12 @@ async function onClick(e) {
   if (act === "unstick" || act === "stopturn") { const r = await api(`${base}/${act}`, { pid: b.dataset.pid }); return say(r.msg, r.ok ? "good" : "bad"); }
   if (act === "continue") { const r = await api(`${base}/continue`, {}); return say(r.msg, r.ok ? "good" : "bad"); }
   if (act === "resume-bg" || act === "resume-term") { const r = await api(`${base}/resume`, { where: act === "resume-bg" ? "background" : "terminal" }); return say(r.msg, r.ok ? "good" : "bad"); }
+  if (act === "unattach") { s.files.splice(+b.dataset.i, 1); return showAtts(slug); }
   if (act === "send") {
-    const text = s.draft.trim(); if (!text) return;
-    s.draft = "";
+    // Attached files go as their paths after the message; the agent reads them from there.
+    const files = s.files || [], typed = s.draft.trim();
+    const text = [typed, ...files.map((a) => a.path)].filter(Boolean).join("\n"); if (!text) return;
+    s.draft = ""; s.files = []; showAtts(slug);
     // Ctrl+Enter sends with the cursor still in the box, which stops the card
     // redrawing. Step out, let it redraw, then put the cursor back.
     const inBox = document.activeElement?.closest?.(".compose");
@@ -2216,25 +2320,26 @@ async function onClick(e) {
     // Show the message now instead of after the server answers and the chat
     // reloads. The reload replaces this bubble; a failure removes it.
     const chat = $(`[data-slug="${slug}"] [data-chat]`), box = $(`[data-slug="${slug}"] .compose textarea`);
-    let bubble;
+    let sent = [];
     if (chat) {
       chat.querySelector(".hint")?.remove();
-      chat.insertAdjacentHTML("beforeend", `<div class="bubble me"><div class="md">${md(text)}</div><div class="who">You · sending…</div></div>`);
-      bubble = chat.lastElementChild; chat.scrollTop = chat.scrollHeight;
+      const n = chat.children.length;
+      chat.insertAdjacentHTML("beforeend", bubble("me", text, "You · sending…"));
+      sent = [...chat.children].slice(n); chat.scrollTop = chat.scrollHeight;
     }
     if (box) { box.value = ""; fitCompose(box); }
     const r = await api(`${base}/feedback`, { text });
-    if (r.msg) { bubble?.remove(); s.draft = text; if (box) { box.value = text; fitCompose(box); } return after(r.msg, "bad"); }
+    if (r.msg) { sent.forEach((x) => x.remove()); s.draft = typed; s.files = files; showAtts(slug); if (box) { box.value = typed; fitCompose(box); } return after(r.msg, "bad"); }
     return after(r.sent ? "" : { "busy-terminal": "Waiting: the agent is mid-turn in its terminal. Your message goes as soon as it finishes.", busy: "Waiting: the agent is mid-turn. Your message goes as soon as it finishes.", "not-started": "Waiting: the agent hasn't started yet. Your message goes once it has.", limited: "Waiting: your Claude usage limit is full. Your message goes as soon as it resets." }[r.why] || "");
   }
   // Mid-edit: save what's in the boxes first, so the agent starts (or is
   // scheduled) on what you just wrote. False if saving failed.
   const saveTyped = async () => {
     if (s.etitle == null && s.eprompt == null) return true;
-    const f = all.find((x) => x.slug === slug);
-    const saved = await api(`${base}/edit`, { title: s.etitle ?? f.title, prompt: s.eprompt ?? f.prompt ?? "" });
+    const f = all.find((x) => x.slug === slug), body = editBody(f, s);
+    const saved = await api(`${base}/edit`, body);
     if (saved.msg) { say(saved.msg, "bad"); return false; }
-    remember(f, s.etitle ?? f.title, s.eprompt ?? f.prompt ?? "");
+    remember(f, body.title, body.prompt);
     Object.assign(s, { edit: false, etitle: null, eprompt: null });
     return true;
   };
@@ -2258,12 +2363,12 @@ async function onClick(e) {
     if (!r.msg && popSlug === slug) closeModal($("#popDlg"));
     return say(r.msg || "Started. The agent begins in the background once setup finishes.", r.msg ? "bad" : "good");
   }
-  if (act === "edit") { s.edit = !s.edit; s.etitle = null; s.eprompt = null; return render(all); }
+  if (act === "edit") { s.edit = !s.edit; s.etitle = s.eprompt = null; return render(all); }
   if (act === "edit-save") {
-    const f = all.find((x) => x.slug === slug);
-    const r = await api(`${base}/edit`, { title: s.etitle ?? f.title, prompt: s.eprompt ?? f.prompt ?? "" });
+    const f = all.find((x) => x.slug === slug), b = editBody(f, s);
+    const r = await api(`${base}/edit`, b);
     if (r.msg) return say(r.msg, "bad");
-    remember(f, s.etitle ?? f.title, s.eprompt ?? f.prompt ?? "");
+    remember(f, b.title, b.prompt);
     s.edit = false; return say("Saved and committed on main.", "good");
   }
   if (act === "drop") {
@@ -2286,7 +2391,7 @@ async function onClick(e) {
   }
   if (act === "remove") {
     const f = all.find((x) => x.slug === slug);
-    if (!(await ask(`Remove the worktree for “${f.title}”?`, f.status === "dropped" ? "Deletes this dropped feature's folder. Its branch is kept in git." : "Deletes this feature's folder and branch. The feature and its notes stay in the list.", "Remove"))) return;
+    if (!(await ask(`Remove the worktree for “${f.title}”?`, f.status === "dropped" ? "Deletes this dropped task's folder. Its branch is kept in git." : "Deletes this task's folder and branch. The task and its notes stay in the list.", "Remove"))) return;
     const r = await api(`${base}/remove`, {});
     if (r.ok && popSlug === slug) closeModal($("#popDlg"));
     return say(r.msg, r.ok ? "good" : "bad");
@@ -2296,9 +2401,9 @@ async function onClick(e) {
     const title = (s.rtitle || f.title + " (continued)").trim(), prompt = s.rprompt.trim();
     if (!prompt && !plan) return say("Say what you want changed this time.", "bad");
     say("Creating…");
-    const r = await api(`${base}/reopen`, { title, prompt, plan });
+    const r = await api(`${base}/reopen`, { title, prompt, plan, model: s.rmodel ?? f.model ?? "" });
     if (r.msg) return say(r.msg, "bad");
-    Object.assign(s, { reopen: false, rtitle: "", rprompt: "" });
+    Object.assign(s, { reopen: false, rtitle: "", rprompt: "", rmodel: null });
     if (!plan && popSlug === slug) closeModal($("#popDlg")); // started: back to the board
     return say(plan ? `Saved "${r.title}" as planned.` : `Started ${r.branch}.`, "good");
   }
@@ -2372,6 +2477,7 @@ async function loadDefaults() { const r = await api("/api/defaults"); setModels(
 // popup to look at another feature doesn't lose it. Cleared once it's created.
 const NEW_KEY = "newFeature";
 let newLabel = "";
+$("#newForm").innerHTML = taskForm((k) => ({ title: 'id="title"', prompt: 'id="prompt" class="tall"' })[k]);
 const saveNew = () => { try { sessionStorage.setItem(NEW_KEY, JSON.stringify({ title: $("#title").value, prompt: $("#prompt").value, model: $("#newModel").value, label: newLabel })); } catch {} };
 let newDraft = {}; try { newDraft = JSON.parse(sessionStorage.getItem(NEW_KEY)) || {}; } catch {}
 $("#title").value = newDraft.title || ""; $("#prompt").value = newDraft.prompt || ""; newLabel = newDraft.label || "";
@@ -2447,7 +2553,7 @@ for (const d of ["#newDlg", "#repoDlg", "#defaultsDlg"]) $(d).addEventListener("
 let defaultsDirty = false, builtIn = {};
 const TEXTS = [
   ["resumeText", "Carry on message", "Sent when you press Carry on after an agent was cut off mid-turn."],
-  ["freshText", "New session message", "Sent when a feature's saved conversation is gone and a new session starts. {title} and {slug} are filled in."],
+  ["freshText", "New session message", "Sent when a task's saved conversation is gone and a new session starts. {title} and {slug} are filled in."],
   ["conflictText", "Merge conflict message", "Filled into the chat box when Check and merge hits a conflict, for you to check and send. {files} is filled in."],
 ];
 const FIELD_EL = { systemPrompt: "#dSystem", env: "#dEnv", allowedTools: "#dAllow", disallowedTools: "#dDeny" };
@@ -2459,7 +2565,7 @@ function defaultsForm(r) {
   const pony = r.plugins.includes("ponytail") ? ` Ponytail switches itself on at the start of every session, at its own default level, which is <b>${esc(r.ponytailLevel)}</b> on this machine. That's why it isn't in the system prompt. ${v.env.PONYTAIL_DEFAULT_MODE ? `Agents run it at <b>${esc(v.env.PONYTAIL_DEFAULT_MODE)}</b>, from <code>PONYTAIL_DEFAULT_MODE</code> below.` : `To pick a level for agents only, add <code>PONYTAIL_DEFAULT_MODE=full</code> (or <code>off</code>, <code>lite</code>, <code>ultra</code>) under Environment variables.`}` : "";
   return `
     <div class="field"><label for="dModel">Model</label><select id="dModel">${modelOptions(v.model, false)}</select>
-      <div class="hint">Used by every feature that doesn't pick its own in New feature.</div></div>
+      <div class="hint">Used by every task that doesn't pick its own in New task.</div></div>
     <div class="field"><label class="switch"><input type="checkbox" id="dAuto" ${v.autoContinue ? "checked" : ""}>Carry on by itself after a usage limit resets</label>
       <div class="hint">Agents held by a full 5-hour or weekly limit start or carry on in the background once it resets. Off: their cards offer Carry on instead. Also on the limit banner above the board while a limit is full.</div></div>
     <div class="field"><label for="dSystem">System prompt for ${esc(CUR)}${reset("systemPrompt")}</label>
@@ -2476,11 +2582,11 @@ function defaultsForm(r) {
     <div class="field"><label for="dDeny">Background turns can never${reset("disallowedTools")}</label>
       <textarea id="dDeny">${esc(v.disallowedTools.join("\n"))}</textarea></div>
     <details class="fixed"><summary>Also sent, and fixed because the dashboard relies on it</summary><ul>
-      <li>The first message: your words, then a marked block naming the feature and where to find the notes of continued and @tagged features.</li>
+      <li>The first message: your words, then a marked block naming the task and where to find the notes of continued and @tagged tasks.</li>
       <li>A short system prompt saying how Cannu works: its branch, never push, where its notes go, how to restart its app and which check to run.</li>
       <li>Environment: <code>FEATURE_SLUG</code>, <code>PORT</code>, <code>DATA_DIR</code>, <code>APP_URL</code>, <code>CANNU_URL</code> and the git author. These win over yours if the names clash.</li>
       <li>Hooks that report what the agent is doing and write <code>prompts.md</code>.</li>
-      <li>Background turns run with edits allowed (<code>--permission-mode acceptEdits</code>), resume the feature's own session, and are named after the feature.</li>
+      <li>Background turns run with edits allowed (<code>--permission-mode acceptEdits</code>), resume the task's own session, and are named after the task.</li>
       <li>The credentials file from Cannu's <code>config.json</code> (<code>--settings</code>), if set, so the dashboard never reads the key.</li>
     </ul></details>`;
 }
@@ -2545,7 +2651,7 @@ function tagsHtml(text, self) {
   const slugs = [...new Set([...String(text || "").matchAll(/@([a-z0-9][a-z0-9-]*)/g)].map((m) => m[1]))].filter((x) => x !== self);
   const ok = slugs.map((x) => all.find((f) => f.slug === x)).filter(Boolean), bad = slugs.filter((x) => !all.some((f) => f.slug === x));
   return [ok.length && `Linked to: ${refList(ok)}`,
-    bad.length && `<span class="noref">Not linked, no such feature: ${bad.map((x) => "@" + esc(x)).join(", ")}</span>`].filter(Boolean).join(" · ");
+    bad.length && `<span class="noref">Not linked, no such task: ${bad.map((x) => "@" + esc(x)).join(", ")}</span>`].filter(Boolean).join(" · ");
 }
 const refList = (fs) => fs.map((f) => `<span class="ref" data-goto="${f.slug}" title="Open it">${esc(f.title)}</span>`).join(", ");
 // A feature's saved links both ways: the features its description @s, and those that @ it.
@@ -2623,7 +2729,7 @@ $("#repoPick").addEventListener("keydown", (e) => {
 
 // Remove: off the board only. The repo and everything Cannu kept for it stay.
 async function removeRepo(name) {
-  if (!(await ask(`Remove “${name}” from Cannu?`, "Its board goes away and its running previews stop. Nothing on disk is deleted: the repo, its feature folders and notes all stay, and adding it back picks up where it left off.", "Remove"))) return;
+  if (!(await ask(`Remove “${name}” from Cannu?`, "Its board goes away and its running previews stop. Nothing on disk is deleted: the repo, its task folders and notes all stay, and adding it back picks up where it left off.", "Remove"))) return;
   const r = await fetch("/api/repos/remove", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name }) }).then((x) => x.json()).catch(() => ({ msg: "Couldn't reach Cannu." }));
   if (!r.ok) return ask("Couldn't remove it", r.msg, "OK");
   REPOS = await fetch("/api/repos").then((x) => x.json());
