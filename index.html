@@ -397,7 +397,7 @@
   .startmenu > button:disabled { opacity:.5; cursor:default; }
   .startmenu > button:disabled:hover { background:none; }
   /* "Reset time unknown", under the greyed-out option, lined up with its words. */
-  .startmenu .unknown { display:flex; align-items:center; gap:5px; padding:0 9px 7px 31px; font-size:12px; color:var(--mute); }
+  .startmenu .unknown { display:flex; align-items:center; gap:5px; padding:0 9px 7px 31px; margin-top:-4px; font-size:12px; color:var(--mute); }
   .startmenu .unknown .info { width:13px; height:13px; flex:none; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; }
   /* The boxes, lined up with the option's words: the item's 9px padding, 14px tick and 8px gap. */
   .startmenu .pick { display:flex; gap:6px; align-items:center; padding:2px 9px 8px 31px; }
@@ -1001,13 +1001,13 @@ const INFO = `<svg class="info" viewBox="0 0 24 24" aria-hidden="true"><circle c
 const ghostBox = (kind, value, ph, label) => `<span class="gbox"><input type="text" data-in="${kind}" aria-label="${label}" value="${esc(value)}" placeholder="${ph}" data-ph="${ph}" autocomplete="off"><span class="ghost" aria-hidden="true"><i></i><b></b></span></span>`;
 function startMenuHtml(sel) {
   const item = (k, text, small = "", off = false) => `<button data-w="${k}" class="${sel.w === k ? "on" : ""}" aria-pressed="${sel.w === k}" ${off ? "disabled" : ""}>${sel.w === k ? TICK : `<span class="tick"></span>`}${text}${small}</button>`;
-  // Unknown reset times are said once, under the option (or under the last one when both are unknown).
+  // An unknown reset time is said right under its own greyed-out option.
   const note = (text) => `<div class="unknown" title="Cannu doesn't have this from your Claude usage yet, so it can't work out when to start. It checks about once a minute.">${INFO}${text}</div>`;
   const limit = (k, name) => resetKnown(k)
     ? item(k, `Before the ${name} limit resets`, `<small>${beforeAt(k, minsOf(sel, k))}</small>`)
       + (sel.w === k ? `<div class="pick">${ghostBox("mins", durText(minsOf(sel, k)), "30m, 1h, 1d", `How long before the ${name} limit resets`)}<span>before</span></div>` : "")
     : item(k, `Before the ${name} limit resets`, "", true)
-      + (k === "weekly" ? note(resetKnown("session") ? "Reset time unknown" : "Reset times unknown") : resetKnown("weekly") ? note("Reset time unknown") : "");
+      + note("Reset time unknown");
   const fmt = DATE_ORDER.map((k) => ({ day: "dd", month: "mm", year: "yyyy" })[k]).join("/");
   return `<div class="repomenu startmenu">
     ${item("now", "Start now")}
