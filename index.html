@@ -369,7 +369,8 @@
   /* A choice that can't be done (a time that has passed): greyed out, can't be pressed. */
   .startsplit > .primary:first-child:disabled { background:var(--line); border-color:var(--line); color:var(--mute); cursor:default; }
   .startmenu { top:auto; bottom:calc(100% + 6px); right:0; width:max-content; max-width:none; text-align:left; font-weight:400; }
-  .startmenu button small { max-width:none; direction:ltr; }
+  /* Regular weight even on the chosen option: a bold time was what still widened the menu. */
+  .startmenu button small { max-width:none; direction:ltr; font-weight:400; }
   /* The day and time boxes look like the app's other boxes; color-scheme lets their icons follow the theme. */
   /* Lined up with the option's words: the item's 9px padding, 14px tick and 8px gap. */
   .startmenu .pick { display:flex; gap:6px; align-items:center; padding:2px 9px 8px 31px; }
@@ -381,11 +382,13 @@
   .startmenu > button.on { font-weight:600; }
   .startmenu .lbl { display:inline-flex; flex-direction:column; }
   .startmenu .lbl::after { content:attr(data-text); font-weight:600; height:0; overflow:hidden; visibility:hidden; }
-  .startmenu .pick input[data-in=time] { width:7em; }
+  .startmenu .pick input[data-in=time] { width:7em; } .startmenu .pick input[data-in=date] { width:8.5em; }
   /* A limit whose reset time isn't known can't be chosen. */
   .startmenu > button:disabled { opacity:.5; cursor:default; }
   .startmenu > button:disabled:hover { background:none; }
-  .startmenu small .info { width:13px; height:13px; margin-right:4px; vertical-align:-2px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; }
+  /* "Reset time unknown", under the greyed-out option, lined up with its words. */
+  .startmenu .unknown { display:flex; align-items:center; gap:5px; padding:0 9px 7px 31px; font-size:12px; color:var(--mute); }
+  .startmenu .unknown .info { width:13px; height:13px; flex:none; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; }
   /* Typed, not picked: no calendar or clock button in the day and time boxes. */
   .startmenu .pick input::-webkit-calendar-picker-indicator { display:none; }
   .startmenu .pick input[type=number] { width:5.5em; }
@@ -742,26 +745,74 @@ const CHEV = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"
 // the first one you set fills in both.
 const beforeMins = (k) => { const b = store.get("beforeMins", {}); return b[k] ?? b[k === "session" ? "weekly" : "session"] ?? 30; };
 const saveBeforeMins = (k, n) => store.set("beforeMins", { ...store.get("beforeMins", {}), [k]: n });
-// When that would be, from the usage reading (the server works it out the same way).
-function beforeAt(k, mins) {
-  const l = USAGE?.[k];
-  if (!l) return "not known yet";
-  if (!l.resets) return "now";
-  if (Date.parse(l.resets) <= Date.now()) return "after the next reading";
-  return resetTime(new Date(Math.max(Date.now(), Date.parse(l.resets) - mins * 60e3)));
-}
 // Whether a limit's reset time is known: a reading with a reset still ahead.
 // Without one, "before it resets" can't be worked out, so that option is greyed out.
 const resetKnown = (k) => Date.parse(USAGE?.[k]?.resets) > Date.now();
-// A day box's value, in this browser's zone.
+// Whole minutes until a limit resets. Starting that many minutes before it, or more, would be now or earlier.
+const minsLeft = (k) => (resetKnown(k) ? Math.floor((Date.parse(USAGE[k].resets) - Date.now()) / 60e3) : 0);
+// When "mins before it resets" is, from the usage reading (the server works it out the same way).
+function beforeAt(k, mins) {
+  if (!resetKnown(k)) return "";
+  return mins >= minsLeft(k) ? "before now" : resetTime(Date.parse(USAGE[k].resets) - mins * 60e3);
+}
+// A date as the browser keeps it (YYYY-MM-DD), in this browser's zone.
 const localIso = (d) => { d = new Date(d); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString(); };
 const pad2 = (n) => String(n).padStart(2, "0");
 // Whether this browser shows a 12-hour clock (1:30 PM) or a 24-hour one (13:30).
 const H12 = !/h2[34]/.test(new Intl.DateTimeFormat([], { hour: "numeric" }).resolvedOptions().hourCycle || "");
-// The time box is plain text, typed the way you'd say it: "1:30", "1 30",
-// "130", "1.30", "13:30", "1:30pm", "9pm". (The browser's own time box only
-// moved to the minutes on Tab, so "1 30" became 1:00.) Returns "HH:MM" on
-// the day given, or "" if it can't tell.
+// The order this browser writes a date in: ["day", "month", "year"] in Australia, month first in the US.
+const DATE_ORDER = new Intl.DateTimeFormat([], { day: "numeric", month: "numeric", year: "numeric" }).formatToParts(new Date(2026, 10, 12)).map((p) => p.type).filter((t) => t !== "literal");
+const dayText = (d) => DATE_ORDER.map((k) => (k === "year" ? d.getFullYear() : pad2(k === "day" ? d.getDate() : d.getMonth() + 1))).join("/");
+
+// The day and time boxes are plain text, typed the way you'd say them. The
+// browser's own boxes only moved on with Tab, so "1 30" became 1:00. Masking
+// libraries (IMask, Cleave.js, Inputmask) do this too, but Cannu takes no
+// dependencies, and these few lines cover it. As you type, the separators go in:
+// "450" shows as 4:50, and "1411" as 14/11 (dd/mm here). A day of 4 to 9 or a
+// month of 2 to 9 can't take a second digit, so it gets its 0 at once ("4" is
+// 04/), the same rule as Cleave's.
+function fmtTime(raw) {
+  const m = raw.match(/^([\d:.\s]*)(.*)$/), d = m[1].replace(/\D/g, "").slice(0, 4), am = m[2].trim();
+  const t = d.length < 3 ? d : `${d.slice(0, -2)}:${d.slice(-2)}`;
+  return am ? `${t} ${am}` : t;
+}
+function fmtDate(raw) {
+  if (/[a-z]/i.test(raw)) return raw; // a word: today, tomorrow, fri
+  const parts = [""];
+  for (const ch of raw) {
+    let i = parts.length - 1;
+    if (/\d/.test(ch)) {
+      if (parts[i].length >= (DATE_ORDER[i] === "year" ? 4 : 2)) { if (i === 2) continue; parts.push(""); i++; }
+      parts[i] += ch;
+      if (parts[i].length === 1 && ((DATE_ORDER[i] === "day" && ch > "3") || (DATE_ORDER[i] === "month" && ch > "1"))) parts[i] = "0" + ch;
+    } else if (parts[i] && i < 2) { // a separator ends this part
+      if (parts[i].length === 1 && DATE_ORDER[i] !== "year") parts[i] = "0" + parts[i];
+      parts.push("");
+    }
+  }
+  return parts.join("/");
+}
+// "14/11", "14/11/26", "14/11/2026", "today", "tomorrow", "fri". No year: the
+// next one to come. Returns YYYY-MM-DD, or "" if it can't tell.
+function parseDate(text) {
+  const s = String(text || "").trim().toLowerCase(), today = new Date(); today.setHours(0, 0, 0, 0);
+  const plus = (n) => { const d = new Date(today); d.setDate(d.getDate() + n); return localIso(d).slice(0, 10); };
+  if (s === "today") return plus(0);
+  if (/^(tomorrow|tmrw?|tom)$/.test(s)) return plus(1);
+  const wd = s.length >= 3 && /^[a-z]+$/.test(s) ? ["sun", "mon", "tue", "wed", "thu", "fri", "sat"].indexOf(s.slice(0, 3)) : -1;
+  if (wd >= 0) return plus((wd - today.getDay() + 7) % 7);
+  const nums = s.split(/\D+/).filter(Boolean);
+  if (nums.length < 2 || nums.length > 3) return "";
+  const v = {};
+  (nums.length === 2 ? DATE_ORDER.filter((k) => k !== "year") : DATE_ORDER).forEach((k, i) => (v[k] = Number(nums[i])));
+  let y = v.year ?? today.getFullYear(); if (y < 100) y += 2000;
+  const d = new Date(y, v.month - 1, v.day);
+  if (d.getMonth() !== v.month - 1 || d.getDate() !== v.day) return ""; // 31/02 and the like
+  if (v.year == null && d < today) d.setFullYear(y + 1);
+  return localIso(d).slice(0, 10);
+}
+// "1:30", "1 30", "130", "1.30", "13:30", "1:30pm", "9pm". Returns "HH:MM" on
+// the day given (YYYY-MM-DD), or "" if it can't tell.
 function parseTime(text, date) {
   const m = String(text || "").trim().toLowerCase().match(/^(\d{1,2})(?:[:.\s]?(\d{2}))?\s*(?:(a|p)\.?\s*m?\.?)?$/);
   if (!m) return "";
@@ -779,32 +830,37 @@ function parseTime(text, date) {
   return `${pad2(h)}:${pad2(min)}`;
 }
 const timeText = (d) => new Date(d).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-// What's chosen, by menu key: { w: "now" | "at" | "session" | "weekly", date, time (as typed), mins: { session, weekly } }.
-// Nothing chosen yet: Start now, with the day and time on today and the next whole hour.
+// What's chosen, by menu key: { w: "now" | "at" | "session" | "weekly", date and time (as typed), mins: { session, weekly } }.
+// Nothing chosen yet: Start now, with the day and time on the next whole hour.
 const whenSel = new Map();
 function whenOf(key) {
   if (whenSel.has(key)) return whenSel.get(key);
   const next = new Date(); next.setHours(next.getHours() + 1, 0, 0, 0);
-  return { w: "now", date: localIso(next).slice(0, 10), time: timeText(next), mins: {} };
+  return { w: "now", date: dayText(next), time: fmtTime(timeText(next)), mins: {} };
 }
 const minsOf = (sel, k) => sel.mins[k] ?? beforeMins(k);
-const atMs = (sel) => { const t = parseTime(sel.time, sel.date); return t ? Date.parse(`${sel.date}T${t}`) : NaN; };
+const atMs = (sel) => { const day = parseDate(sel.date), t = day && parseTime(sel.time, day); return t ? Date.parse(`${day}T${t}`) : NaN; };
 // What the black button will do: "now", { at }, { before, mins }, or a string
 // saying why it can't (the button is greyed out, with that as its tooltip).
 function whenBody(sel) {
   if (sel.w === "now") return "now";
-  if (sel.w !== "at") return resetKnown(sel.w) ? { before: sel.w, mins: minsOf(sel, sel.w) } : `When your ${LIMIT_NAME[sel.w]} limit resets isn't known yet.`;
+  if (sel.w !== "at") {
+    if (!resetKnown(sel.w)) return `When your ${LIMIT_NAME[sel.w]} limit resets isn't known yet.`;
+    const n = minsOf(sel, sel.w);
+    return n < minsLeft(sel.w) ? { before: sel.w, mins: n } : `Your ${LIMIT_NAME[sel.w]} limit resets in ${minsLeft(sel.w)} min, so ${n} min before it has already passed.`;
+  }
+  if (!parseDate(sel.date)) return `Type a day, like ${dayText(new Date(Date.now() + 864e5)).slice(0, 5)} or tomorrow.`;
   const ms = atMs(sel);
-  if (!ms) return "Type a day and a time.";
+  if (!ms) return "Type a time, like 4:30 pm.";
   if (ms <= Date.now()) return "That time has already passed.";
   return { at: new Date(ms).toISOString() }; // with its zone, so a server elsewhere gets the time you meant
 }
 // The black button's words for the choice: when it will start, whichever way it was chosen.
 function whenLabel(sel) {
   if (sel.w === "now") return "Start agent now";
-  if (sel.w !== "at") return resetKnown(sel.w) ? `Schedule · ${beforeAt(sel.w, minsOf(sel, sel.w))}` : "Schedule";
-  const ms = atMs(sel);
-  return ms ? `Schedule · ${resetTime(ms)}` : "Schedule";
+  const v = whenBody(sel);
+  if (typeof v === "string") return "Schedule";
+  return `Schedule · ${v.at ? resetTime(v.at) : beforeAt(sel.w, v.mins)}`;
 }
 // Its tooltip: what pressing it does, or why it can't be pressed.
 function whenTitle(sel) {
@@ -816,15 +872,19 @@ const INFO = `<svg class="info" viewBox="0 0 24 24" aria-hidden="true"><circle c
 function startMenuHtml(sel) {
   // The words sit in .lbl, which keeps room for their bold version, so choosing one doesn't widen the menu.
   const item = (k, text, small = "", off = false) => `<button data-w="${k}" class="${sel.w === k ? "on" : ""}" aria-pressed="${sel.w === k}" ${off ? "disabled" : ""}>${sel.w === k ? TICK : `<span class="tick"></span>`}<span class="lbl" data-text="${text}">${text}</span>${small}</button>`;
+  // Unknown reset times are said once, under the option (or under the last one when both are unknown).
+  const note = (text) => `<div class="unknown" title="Cannu doesn't have this from your Claude usage yet, so it can't work out when to start. It checks about once a minute.">${INFO}${text}</div>`;
   const limit = (k, name) => resetKnown(k)
     ? item(k, `Before the ${name} limit resets`, `<small>${beforeAt(k, minsOf(sel, k))}</small>`)
-      + (sel.w === k ? `<div class="pick"><input type="number" data-in="mins" min="0" max="1440" step="5" value="${minsOf(sel, k)}" aria-label="Minutes before the ${name} limit resets"><span>min before</span></div>` : "")
-    : item(k, `Before the ${name} limit resets`, `<small title="Cannu doesn't have this limit's reset time from your usage yet, so it can't work out when to start.">${INFO}reset time unknown</small>`, true);
+      + (sel.w === k ? `<div class="pick"><input type="number" data-in="mins" min="0" max="${minsLeft(k) - 1}" step="5" value="${minsOf(sel, k)}" aria-label="Minutes before the ${name} limit resets"><span>min before</span></div>` : "")
+    : item(k, `Before the ${name} limit resets`, "", true)
+      + (k === "weekly" ? note(resetKnown("session") ? "Reset time unknown" : "Reset times unknown") : resetKnown("weekly") ? note("Reset time unknown") : "");
+  const fmt = DATE_ORDER.map((k) => ({ day: "dd", month: "mm", year: "yyyy" })[k]).join("/");
   return `<div class="repomenu startmenu">
     ${item("now", "Start now")}
     <hr>
     ${item("at", "At a time")}
-    ${sel.w === "at" ? `<div class="pick"><input type="date" data-in="date" aria-label="Day" value="${sel.date}" min="${localIso(new Date()).slice(0, 10)}"><input type="text" data-in="time" aria-label="Time" value="${esc(sel.time)}" placeholder="${H12 ? "1:30 pm" : "13:30"}" autocomplete="off"></div>` : ""}
+    ${sel.w === "at" ? `<div class="pick"><input type="text" data-in="date" aria-label="Day" value="${esc(sel.date)}" placeholder="${fmt}" autocomplete="off"><input type="text" data-in="time" aria-label="Time" value="${esc(sel.time)}" placeholder="${H12 ? "1:30 pm" : "13:30"}" autocomplete="off"></div>` : ""}
     ${limit("session", "5-hour")}
     ${limit("weekly", "weekly")}</div>`;
 }
@@ -844,18 +904,24 @@ function menuPick(b, key, redraw) {
   whenSel.set(key, { ...whenOf(key), w: b.dataset.w });
   redraw();
 }
-// Typing in a box updates the choice, the time shown beside a limit, and the black button.
+// Typing in a box: the separators go in (while typing at the end, so an edit
+// in the middle keeps its cursor), then the choice, the time beside a limit,
+// and the black button follow.
 document.addEventListener("input", (e) => {
   const inp = e.target.closest(".startmenu [data-in]"); if (!inp) return;
   const split = inp.closest(".startsplit"), key = split.dataset.when;
   if (!whenSel.has(key)) whenSel.set(key, whenOf(key));
-  const sel = whenSel.get(key);
-  if (inp.dataset.in === "mins") {
+  const sel = whenSel.get(key), kind = inp.dataset.in;
+  if (kind === "mins") {
     const n = Math.round(Number(inp.value));
     if (!(n >= 0)) return;
     sel.mins = { ...sel.mins, [sel.w]: n }; saveBeforeMins(sel.w, n);
     split.querySelector(`[data-w="${sel.w}"] small`).textContent = beforeAt(sel.w, n);
-  } else sel[inp.dataset.in] = inp.value;
+  } else {
+    const typing = e.inputType?.startsWith("insert") && inp.selectionStart === inp.value.length;
+    if (typing) { const v = (kind === "date" ? fmtDate : fmtTime)(inp.value); if (v !== inp.value) inp.value = v; }
+    sel[kind] = inp.value;
+  }
   const main = split.querySelector(":scope > .primary");
   main.firstChild.textContent = whenLabel(sel);
   main.title = whenTitle(sel);
