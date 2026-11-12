@@ -55,7 +55,7 @@
   textarea { min-height: 70px; resize: vertical; }
   .hint { color: var(--mute); font-size:12px; }
   .msg { margin-top:8px; font-size:13px; white-space:pre-wrap; }
-  .msg.bad { color: var(--bad); } .msg.good { color: var(--idle); }
+  .msg.bad { color: var(--bad); } .msg.good { color: var(--idle); } .msg.warn { color: var(--you); }
   /* The pull request line on a card: number, checks, review. */
   .prline { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-top:6px; font-size:12.5px; color:var(--mute); }
   .prline a { color:inherit; }
@@ -181,6 +181,11 @@
   button.bell svg.i { width:15px; height:15px; }
   button.bell.off { opacity:.35; cursor:default; } button.bell.off:hover { border-color:var(--line); }
   button.bell.off.on { opacity:.45; }
+  /* No repos yet: just the logo and one button. */
+  #welcome { text-align:center; padding:40px 0; }
+  #welcome img { width:min(320px, 70vw); display:block; margin:0 auto 24px; }
+  #welcome p { color:var(--mute); margin:0 0 20px; }
+  body.norepo main > :not(#top, #welcome), body.norepo #top > :not(.grow, #repoPick), body.norepo #repoPick { display:none; }
   .brand { display:flex; align-items:center; gap:14px; }
   .brand img { width:48px; height:48px; }
   @media (prefers-color-scheme: dark) { .brand img { filter:invert(1); } }
@@ -513,6 +518,11 @@
   <div class="msg bad" id="boardMsg" hidden style="margin-bottom:10px"></div>
   <div id="board"></div>
   <div id="list"></div>
+  <div id="welcome" hidden>
+    <img src="/docs/images/logo-silk.png" alt="">
+    <p>No repos yet. Add one and Cannu starts an agent board for it.</p>
+    <button class="primary" id="welcomeAdd">Add your first repo</button>
+  </div>
 </main>
 <div id="mention" hidden></div>
 
@@ -2181,7 +2191,7 @@ async function attach(ta, files) {
   }
 }
 // An open Start ▾ menu holds the board still.
-async function refresh() { if (menuOpen) return; try { const [fs, ls] = await Promise.all([api("/api/features"), api("/api/labels")]); LABELS = ls; render(fs); markShortErrors(); renderUsage(); } catch {} }
+async function refresh() { if (menuOpen || !CUR) return; try { const [fs, ls] = await Promise.all([api("/api/features"), api("/api/labels")]); LABELS = ls; render(fs); markShortErrors(); renderUsage(); } catch {} }
 
 for (const host of [$("#list"), $("#popDlg")]) {
 host.addEventListener("input", (e) => {
@@ -2693,6 +2703,8 @@ document.addEventListener("mousedown", () => { mouseDown = true; });
 document.addEventListener("mouseup", () => { mouseDown = false; });
 // Switching repo clears what was on screen and loads the other repo's board.
 function pickRepo(name) {
+  document.body.classList.toggle("norepo", !REPOS.length); $("#welcome").hidden = !!REPOS.length;
+  if (!REPOS.length) { CUR = ""; $("#repoName").textContent = "Repo"; all = []; return; }
   if (!REPOS.some((r) => r.name === name)) name = REPOS[0]?.name || "";
   CUR = name; store.set("repo", name);
   history.replaceState(null, "", "#" + encodeURIComponent(name));
@@ -2711,6 +2723,7 @@ function repoMenu(open) {
     + `<hr><button data-addrepo><span class="tick">+</span>Add repo</button>`;
   $("#repoMenu button")?.focus();
 }
+$("#welcomeAdd").onclick = openAddRepo;
 $("#repoBtn").onclick = () => repoMenu($("#repoMenu").hidden);
 $("#repoMenu").addEventListener("click", (e) => {
   const b = e.target.closest("button"); if (!b) return;
@@ -2756,7 +2769,7 @@ async function inspectDir() {
   const r = await fetch("/api/repos/inspect?dir=" + encodeURIComponent(dir)).then((x) => x.json()).catch(() => ({ ok: false }));
   if ($("#repoDir").value.trim() !== dir) return; // typed on since
   if (!r.ok) { $("#repoSet").hidden = true; loaded = null; dlgMsg("#repoMsg", r.msg || "", "bad"); return; }
-  dlgMsg("#repoMsg", r.listed ? "That repo is already listed." : "");
+  dlgMsg("#repoMsg", r.listed ? "That repo is already listed." : r.warn || "", r.warn && !r.listed ? "warn" : "");
   if (!nameTouched) $("#repoNameIn").value = r.name;
   fillForm(r.config); loaded = { has: r.hasConfig, values: formValues() };
   $("#repoSetHint").innerHTML = r.hasConfig ? "From the repo's <code>cannu.json</code>. Anything you change is saved back to it and committed."

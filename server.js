@@ -6,6 +6,7 @@
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import { spawn, execFileSync } from "node:child_process";
 import { META, CONFIG, all, repos, repoEntry,watchUsage, planUsage } from "./lib.js";
 watchUsage();
@@ -47,10 +48,12 @@ function proxy(req, res, r, rest) {
 const isRepo = (dir) => { try { return fs.existsSync(path.join(dir, ".git")); } catch { return false; } };
 const same = (a, b) => path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase();
 // Repos the page can offer in Add repo: git folders next to the ones already
-// listed (their parent folders, one level down), that aren't listed yet.
+// listed (their parent folders, one level down), that aren't listed yet. With
+// none listed, the ones in CANNU_REPOS, else the home folder.
 function found() {
   const out = new Map();
-  for (const parent of new Set(repos.map((r) => path.dirname(r.dir)))) {
+  const parents = repos.length ? new Set(repos.map((r) => path.dirname(r.dir))) : [process.env.CANNU_REPOS || os.homedir()];
+  for (const parent of parents) {
     let names = []; try { names = fs.readdirSync(parent); } catch {}
     for (const n of names) {
       const dir = path.join(parent, n);
@@ -73,7 +76,9 @@ function inspect(dir) {
   if (!isRepo(dir)) return { ok: false, msg: "Not a git repo (no .git folder in it)." };
   const has = (f) => fs.existsSync(path.join(dir, f));
   const own = readJson(path.join(dir, "cannu.json"));
-  const base = { name: plainName(path.basename(dir)) || "repo", dir, listed: repos.some((r) => same(r.dir, dir)), hasConfig: !!own };
+  // Cannu commits on its main branch and puts worktrees next to it, which a live container built from this folder wouldn't want.
+  const warn = ["compose.yml", "compose.yaml", "docker-compose.yml", "docker-compose.yaml", "Dockerfile"].some(has) ? "This folder has a compose file or Dockerfile, so a live container may build from it. Cannu creates worktrees next to it and commits on its main branch." : "";
+  const base = { warn, name: plainName(path.basename(dir)) || "repo", dir, listed: repos.some((r) => same(r.dir, dir)), hasConfig: !!own };
   if (own) return { ok: true, ...base, config: own };
   const pm = has("pnpm-lock.yaml") ? "pnpm" : has("yarn.lock") ? "yarn" : has("bun.lockb") ? "bun" : "npm";
   const runner = has("mise.toml") ? "mise exec -- " : "";
@@ -125,7 +130,7 @@ function addRepo(dir, wanted, settings) {
   let name = base;
   for (let n = 2; repos.some((r) => r.name === name); n++) name = `${base}-${n}`;
   const note = settings ? writeRepoConfig(dir, settings) : "";
-  const raw = readJson(CONFIG);
+  const raw = readJson(CONFIG) || {};
   raw.repos ||= raw.repo ? [{ repo: raw.repo }] : [];
   delete raw.repo;
   // Ports clear of every running repo, and the feature ports kept in config
@@ -146,7 +151,6 @@ function addRepo(dir, wanted, settings) {
 async function removeRepo(name) {
   const r = repos.find((x) => x.name === name);
   if (!r) return { ok: false, msg: "No repo by that name." };
-  if (repos.length === 1) return { ok: false, msg: "It's the only repo. Add another before removing this one." };
   if (kids.has(name)) {
     const list = await fetch(`http://127.0.0.1:${r.port}/api/features`).then((x) => x.json()).catch(() => []);
     const busy = list.filter((f) => f.settingUp || ["working", "needs-you", "stuck"].includes(f.live?.state));
@@ -157,7 +161,7 @@ async function removeRepo(name) {
     kids.delete(name); // first, so its exit isn't taken as a crash to restart
     k.proc.kill();
   }
-  const raw = readJson(CONFIG);
+  const raw = readJson(CONFIG) || {};
   raw.repos = (raw.repos || []).filter((x) => !same(path.resolve(path.dirname(CONFIG), x.repo), r.dir));
   fs.writeFileSync(CONFIG, JSON.stringify(raw, null, 2) + "\n");
   repos.splice(repos.indexOf(r), 1);
@@ -175,6 +179,10 @@ const handler = async (req, res) => {
   if (url.pathname === "/logo.png") {
     res.writeHead(200, { "content-type": "image/png", "cache-control": "max-age=3600" });
     return res.end(fs.readFileSync(path.join(META, "logo.png")));
+  }
+  if (url.pathname === "/docs/images/logo-silk.png") {
+    res.writeHead(200, { "content-type": "image/png", "cache-control": "max-age=3600" });
+    return res.end(fs.readFileSync(path.join(META, "docs/images/logo-silk.png")));
   }
   // Claude plan usage for the rings: one account for every repo, so served here.
   if (url.pathname === "/api/usage") return json(res, planUsage());
