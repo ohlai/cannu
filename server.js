@@ -6,7 +6,6 @@
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
-import os from "node:os";
 import { spawn, execFileSync } from "node:child_process";
 import { META, CONFIG, all, repos, repoEntry,watchUsage, planUsage } from "./lib.js";
 watchUsage();
@@ -49,11 +48,10 @@ const isRepo = (dir) => { try { return fs.existsSync(path.join(dir, ".git")); } 
 const same = (a, b) => path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase();
 // Repos the page can offer in Add repo: git folders next to the ones already
 // listed (their parent folders, one level down), that aren't listed yet. With
-// none listed, the ones in CANNU_REPOS, else the home folder.
+// none listed there's nothing to offer: Cannu doesn't go looking around.
 function found() {
   const out = new Map();
-  const parents = repos.length ? new Set(repos.map((r) => path.dirname(r.dir))) : [process.env.CANNU_REPOS || os.homedir()];
-  for (const parent of parents) {
+  for (const parent of new Set(repos.map((r) => path.dirname(r.dir)))) {
     let names = []; try { names = fs.readdirSync(parent); } catch {}
     for (const n of names) {
       const dir = path.join(parent, n);
