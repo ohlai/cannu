@@ -858,6 +858,21 @@ function durGhost(t) {
   if (!w) return (sp ? "" : " ") + word;
   return word?.startsWith(w.toLowerCase()) ? word.slice(w.length) : "";
 }
+// A date, or date and time, pasted in a standard form: "2026-11-12",
+// "2026-11-12T14:30:00Z", "2026-11-12 14:30", "12 Nov 2026 2:30 pm". Returns
+// { date, time } as the boxes show them (time only if one was given, in this
+// browser's zone, so a Z time is turned into local time), or null for anything
+// else, which then goes through the usual typing rules.
+function pastedWhen(text) {
+  const s = String(text || "").trim(), iso = s.match(/^(\d{4})-(\d{2})-(\d{2})$/), hasTime = /\d{1,2}:\d{2}/.test(s);
+  // The browser reads nearly anything as a date ("hello 2026" is 1 January), so only
+  // these shapes go to it: ISO with a time, or a month name with a day and a four-digit year.
+  const isoTime = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test(s);
+  const named = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b/i.test(s) && /\b\d{1,2}(st|nd|rd|th)?\b/i.test(s.replace(/\d{1,2}:\d{2}/g, "")) && /\b\d{4}\b/.test(s);
+  const d = iso ? new Date(+iso[1], iso[2] - 1, +iso[3]) : isoTime || named ? new Date(s.replace(/(\d)(st|nd|rd|th)\b/i, "$1")) : null;
+  if (!d || isNaN(d)) return null;
+  return { date: dayText(d), time: hasTime ? fmtTime(timeText(d)) : null };
+}
 // A day box on leaving it: a day it can read becomes that date ("tmr" is
 // 13/11/2026); anything else is tidied ("14/1" is 14/01).
 const tidyDate = (t) => { const iso = parseDate(t); return iso ? dayText(new Date(iso + "T00:00")) : fmtDate(t + "/").replace(/\/$/, ""); };
@@ -1024,6 +1039,17 @@ document.addEventListener("beforeinput", (e) => {
   const v = inp.value, cand = v.slice(0, inp.selectionStart) + (e.data ?? e.dataTransfer?.getData("text") ?? "") + v.slice(inp.selectionEnd);
   const kind = inp.dataset.in;
   if (!(kind === "time" ? timeOk(cand) : kind === "date" ? dateOk(cand) : minsOk(cand, boxSel(inp).w))) e.preventDefault();
+});
+// Pasting a standard date (and time) into either box fills the day box, and the time box too if it had a time.
+document.addEventListener("paste", (e) => {
+  const inp = e.target.closest?.('.startmenu [data-in="date"], .startmenu [data-in="time"]'); if (!inp) return;
+  const p = pastedWhen(e.clipboardData?.getData("text")); if (!p) return;
+  e.preventDefault();
+  const pick = inp.closest(".pick"), sel = boxSel(inp);
+  for (const [kind, v] of [["date", p.date], ["time", p.time]]) {
+    const box = v != null && pick.querySelector(`[data-in="${kind}"]`);
+    if (box) { box.value = v; boxToSel(box, sel); }
+  }
 });
 // Typing: separators go in (while typing at the end, so an edit in the middle keeps its cursor), then the rest follows.
 document.addEventListener("input", (e) => {
