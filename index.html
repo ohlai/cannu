@@ -710,22 +710,23 @@ const resetAt = (iso) => `${resetTime(iso)} (in ${until(iso)})`;
 // it's known and `missed` if Cannu wasn't running when it was due.
 const schedOf = (f) => (f.status === "planned" && f.schedule) || null;
 const schedWhat = (s) => (s.at ? "" : `${s.mins} min before your ${LIMIT_NAME[s.before]} limit resets`);
-// One line for the tile and the card: when it starts, or that it didn't.
+// One line for the tile and the card, the same whether the start is still to
+// come or was missed: "Scheduled for 2:00 PM (in 13m)", or "(5m ago)".
 function schedText(f) {
   const s = schedOf(f); if (!s) return "";
-  const what = schedWhat(s);
-  if (s.missed) return `Didn't start: it was due ${resetTime(s.missed)}`;
-  if (!s.due) return `Starts ${what}. Waiting on a usage reading to know when that is.`;
-  return Date.parse(s.due) <= Date.now() ? "Starting now" : `Starts ${resetAt(s.due)}${what ? `, ${what}` : ""}`;
+  const what = schedWhat(s), t = s.missed || s.due;
+  if (!t) return `Scheduled for ${what}. Waiting on a usage reading to know when that is.`;
+  const ms = Date.parse(t) - Date.now();
+  return `Scheduled for ${resetTime(t)} (${Math.abs(ms) < 60e3 ? "now" : ms > 0 ? "in " + until(t) : ago(t)})${what ? `, ${what}` : ""}`;
 }
-// A missed start: just the words. The card's own Start agent now ▾ starts it or schedules it again, which replaces this.
-function schedBanner(f) {
-  const s = schedOf(f); if (!s?.missed) return "";
-  const what = schedWhat(s);
-  return `<div class="banner">Was meant to start at ${resetTime(s.missed)}${what ? ` (${what})` : ""}, but ${s.why ? "couldn't: " + esc(s.why) : "Cannu wasn't running then: the computer was off or asleep"}. It hasn't started, and won't by itself.</div>`;
+// The bottom of a scheduled card, just above its buttons: a missed start's
+// warning, then when it was scheduled for. Nothing else goes below it, so
+// messages never push it about. The card's own Start agent now ▾ replaces a missed start.
+function schedFoot(f) {
+  const s = schedOf(f); if (!s) return "";
+  const missed = s.missed ? `<div class="banner">This task was meant to start at ${resetTime(s.missed)}, but ${s.why ? "couldn't: " + esc(s.why) : "Cannu wasn't running then"}. Please reschedule or start the task now.</div>` : "";
+  return `${missed}<div class="meta sched">${esc(schedText(f))}</div>`;
 }
-// When a scheduled card starts, just above its buttons.
-const schedLine = (f) => schedOf(f) && !schedOf(f).missed ? `<div class="meta sched">${esc(schedText(f))}</div>` : "";
 
 // Start agent's ▾ picks WHEN the black button starts the agent: now, at a
 // time, or some minutes before a limit resets. Picking only selects (ticked);
@@ -929,6 +930,8 @@ async function loadUsage() {
   if (FAKE) USAGE.session = { percent: 100, resets: at(72 * 60e3) };
   // ?fakeweek: the week nearly used up, resetting a couple of days out.
   if (FAKE_WEEK) USAGE.weekly = { percent: 92, resets: at(53 * 36e5) };
+  // ?nousage: no reading at all, as with no Claude login, so neither reset time is known.
+  if (Q.has("nousage")) USAGE = null;
   renderUsage();
 }
 loadUsage(); setInterval(loadUsage, 30e3);
@@ -1084,14 +1087,13 @@ function simpleCard(f, inPop) {
       </div>
       ${head(f, cls, label, "")}
     </div>
-    ${schedBanner(f)}
     ${planned && !edit && f.prompt ? `<div class="plan md">${md(f.prompt)}</div>` : ""}
     ${edit ? `<div style="margin-top:10px; display:grid; gap:8px">
       <input type="text" data-field="etitle" value="${esc(s.etitle ?? f.title)}">
       <textarea data-field="eprompt" data-mention data-self="${f.slug}" placeholder="What you want and why. This is what the agent starts on.">${esc(s.eprompt ?? f.prompt ?? "")}</textarea>
       ${mentionHint(s.eprompt ?? f.prompt, f.slug)}${linkedFrom(f, "hint")}
     </div>` : ""}
-    ${schedLine(f)}
+    ${inPop ? "" : schedFoot(f)}
     ${actions(planned
       ? `${inPop ? "" : `<button data-act="edit">${s.edit ? "Cancel edit" : "Edit"}</button>`}<button data-act="drop" title="Keep it on record as dropped">Drop</button>`
       : `<button data-act="reopen">${s.reopen ? "Cancel reopen" : "Reopen"}</button>`,
@@ -1109,6 +1111,7 @@ function simpleCard(f, inPop) {
       <div class="row"><button class="second" data-act="reopen-plan" title="Records it on main without a branch or agent. Start it later from its card.">Save as planned</button><button class="primary" data-act="reopen-go" title="${MAC ? "⌘" : "Ctrl"}+Enter starts it">Start agent${keysHint(true)}</button></div>
     </div>` : ""}
     ${msgBlock(s)}
+    ${inPop ? schedFoot(f) : ""}
   </div>`;
 }
 
