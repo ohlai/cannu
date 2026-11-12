@@ -390,7 +390,7 @@
   .gbox .ghost { position:absolute; inset:0; pointer-events:none; overflow:hidden; color:var(--mute); }
   .gbox .ghost i { font-style:normal; visibility:hidden; }
   .gbox .ghost b { font-weight:400; }
-  .gbox input[data-in=date] { width:8.5em; } .gbox input[data-in=time] { width:7em; } .gbox input[data-in=mins] { width:7em; }
+  .gbox input[data-in=date] { width:8.5em; } .gbox input[data-in=time] { width:7em; } .gbox input[data-in=mins] { width:12em; }
   /* Right, over the button that cancels it. */
   .meta.sched { margin-top:10px; text-align:right; }
   /* Add repo: how to work on the picked repo, i.e. its cannu.json. */
@@ -825,21 +825,35 @@ function dateOk(raw) {
   }
   return !(v.day && v.month && v.day > new Date(2028, v.month, 0).getDate()); // 2028: a leap year, so 29/02 is fine
 }
-// Minutes before a reset: a whole number, and less than the minutes left until it.
-// How long before a reset, typed with shortcuts: "30", "90m", "1h", "1h30",
-// "1.5h", "1d", "1d 2h". A bare number is minutes. Returns minutes, or NaN.
+// How long before a reset, typed short or long: "30", "90m", "1h", "1h30",
+// "1.5h", "1d", "1d 2h", "1 hour 30 minutes", "2 hrs". A bare number is
+// minutes. Returns minutes, or NaN.
 function parseDur(text) {
-  const s = String(text ?? "").toLowerCase().replace(/\s+/g, "");
-  if (!/^(\d+(\.\d+)?[dhm]?)+$/.test(s)) return NaN;
-  let total = 0;
-  for (const [, n, u] of s.matchAll(/(\d+(?:\.\d+)?)([dhm]?)/g)) total += Number(n) * { d: 1440, h: 60, m: 1, "": 1 }[u];
-  return Math.round(total);
+  const s = String(text ?? "").toLowerCase().trim(), re = /(\d+(?:\.\d+)?)\s*(days?|d|hours?|hrs?|h|minutes?|mins?|m)?\s*/y;
+  let total = 0, m;
+  re.lastIndex = 0;
+  while (re.lastIndex < s.length && (m = re.exec(s))) total += Number(m[1]) * { d: 1440, h: 60, m: 1 }[(m[2] || "m")[0]];
+  return s && re.lastIndex === s.length ? Math.round(total) : NaN;
 }
-// Minutes back as the box and the card show them: 90 is "1h 30m", 1440 is "1d".
-const durText = (n) => [[Math.floor(n / 1440), "d"], [Math.floor((n % 1440) / 60), "h"], [n % 60, "m"]].filter(([x]) => x).map(([x, u]) => x + u).join(" ") || "0m";
-// Minutes before a reset: something parseDur reads (or its start, like "1." or "1h "),
+// Minutes back in words, as the box (on leaving it) and the card show them: 90 is "1 hour 30 minutes".
+const durText = (n) => [[Math.floor(n / 1440), "day"], [Math.floor((n % 1440) / 60), "hour"], [n % 60, "minute"]].filter(([x]) => x).map(([x, u]) => `${x} ${u}${x === 1 ? "" : "s"}`).join(" ") || "0 minutes";
+const UNIT_WORDS = ["day", "days", "hour", "hours", "hr", "hrs", "minute", "minutes", "min", "mins"];
+// Minutes before a reset: something parseDur reads, or its start ("1.", "1 ho"),
 // and less than the time left until the reset.
-const minsOk = (raw, k) => { const s = raw.trim().replace(/\.$/, ""); return s === "" || parseDur(s) < minsLeft(k); };
+function minsOk(raw, k) {
+  const s = raw.trim().replace(/\.$/, "").replace(/[a-z]+$/i, (w) => (UNIT_WORDS.some((u) => u.startsWith(w.toLowerCase())) ? w[0] : "?"));
+  return s === "" || parseDur(s) < minsLeft(k);
+}
+// The faded rest of a unit: "90" gets " minutes", "1 h" gets "our", "2 h" gets "ours".
+function durGhost(t) {
+  const m = t.match(/(\d+(?:\.\d+)?)(\s*)([a-z]*)$/i); if (!m) return "";
+  const [, n, sp, w] = m, word = (w ? { d: "day", h: "hour", m: "minute" }[w[0].toLowerCase()] : "minute") + (Number(n) === 1 ? "" : "s");
+  if (!w) return (sp ? "" : " ") + word;
+  return word?.startsWith(w.toLowerCase()) ? word.slice(w.length) : "";
+}
+// A day box on leaving it: a day it can read becomes that date ("tmr" is
+// 13/11/2026); anything else is tidied ("14/1" is 14/01).
+const tidyDate = (t) => { const iso = parseDate(t); return iso ? dayText(new Date(iso + "T00:00")) : fmtDate(t + "/").replace(/\/$/, ""); };
 
 // What's faded after the typed text: the rest of the time ("4:30" gets " pm",
 // "4" gets ":00 pm"), or of the day ("14" gets "/11/2026", the next 14th to come).
@@ -983,7 +997,7 @@ function menuPick(b, key, redraw) {
 
 // The boxes at work. Each knows its menu (data-when on the wrapper) and the choice it feeds.
 const boxSel = (inp) => { const key = inp.closest(".startsplit").dataset.when; if (!whenSel.has(key)) whenSel.set(key, whenOf(key)); return whenSel.get(key); };
-const ghostOf = (inp, sel) => !inp.value ? "" : inp.dataset.in === "time" ? timeGhost(inp.value, parseDate(sel.date) || localIso(new Date()).slice(0, 10)) : inp.dataset.in === "date" ? dateGhost(inp.value) : /\d$/.test(inp.value) ? "m" : ""; // a bare number is minutes
+const ghostOf = (inp, sel) => !inp.value ? "" : inp.dataset.in === "time" ? timeGhost(inp.value, parseDate(sel.date) || localIso(new Date()).slice(0, 10)) : inp.dataset.in === "date" ? dateGhost(inp.value) : durGhost(inp.value);
 // The choice takes what's typed plus its faded rest, so the black button already
 // says "Schedule · 4:30 PM" while the box shows "4:30". Nothing typed: the old value.
 function boxToSel(inp, sel) {
@@ -1025,7 +1039,7 @@ document.addEventListener("focusout", (e) => {
   const inp = e.target.closest?.(".startmenu [data-in]"); if (!inp || inp.dataset.was == null) return;
   const sel = boxSel(inp), kind = inp.dataset.in, full = inp.value + ghostOf(inp, sel);
   const keep = kind === "mins" ? parseDur(full) < minsLeft(sel.w) : !!inp.value;
-  inp.value = !keep ? inp.dataset.was : kind === "date" ? fmtDate(full + "/").replace(/\/$/, "") : kind === "time" ? fmtTime(full) : durText(parseDur(full)); // "90" is 1h 30m
+  inp.value = !keep ? inp.dataset.was : kind === "date" ? tidyDate(full) : kind === "time" ? fmtTime(full) : durText(parseDur(full)); // "90" is 1 hour 30 minutes
   delete inp.dataset.was; inp.placeholder = inp.dataset.ph;
   boxToSel(inp, sel);
 });
