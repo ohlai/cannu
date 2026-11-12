@@ -5,6 +5,8 @@
 Cannu runs Claude Code agents in parallel, one per task, on any git repo,
 and shows them all on one board. Node built-ins only, nothing to install.
 
+![Cannu dashboard](docs/images/dashboard.jpg)
+
 **What it does**
 
 - Each task gets its own git branch, worktree, app port, data folder and
