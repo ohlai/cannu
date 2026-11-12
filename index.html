@@ -711,7 +711,7 @@ function schedText(f) {
   if (!s.due) return `Starts ${what}. Waiting on a usage reading to know when that is.`;
   return Date.parse(s.due) <= Date.now() ? "Starting now" : `Starts ${resetAt(s.due)}${what ? `, ${what}` : ""}`;
 }
-// A missed start: just the words. The card's own button cancels it, and then ▾ starts it or picks a new time.
+// A missed start: just the words. The card's own Start agent now ▾ starts it or schedules it again, which replaces this.
 function schedBanner(f) {
   const s = schedOf(f); if (!s?.missed) return "";
   const what = schedWhat(s);
@@ -790,6 +790,10 @@ function startMenuHtml(sel) {
 // The black button, saying what it will do, with a ▾ beside it. open is its
 // opening tag and after what follows its words (a key hint) before </button>.
 const startSplit = (open, after, key, sel) => `<span class="startsplit" data-when="${key}">${open}${esc(whenLabel(sel))}${after}</button><button class="primary startchev" data-chev="${key}" aria-label="When to start" aria-expanded="${menuOpen === key}" title="Choose when the agent starts: now, at a time, or just before a usage limit resets">${CHEV}</button>${menuOpen === key ? startMenuHtml(sel) : ""}</span>`;
+// The ▾ turning as its menu opens or shuts. Clicking ▾ redraws the button, so
+// the CSS transition has nothing to turn from: play the turn on the new one.
+// (Shut by a click elsewhere, Escape or Enter, the button stays and CSS turns it.)
+const turnChev = (key, open) => { for (const s of document.querySelectorAll(`[data-chev="${key}"] svg`)) s.animate([{ transform: `rotate(${open ? 0 : 180}deg)` }, { transform: `rotate(${open ? 180 : 0}deg)` }], { duration: 150, easing: "ease" }); };
 const closeMenu = () => { menuOpen = null; for (const m of document.querySelectorAll(".startmenu")) { m.closest(".startsplit")?.querySelector(".startchev")?.setAttribute("aria-expanded", "false"); m.remove(); } };
 // Picks a menu item: it's ticked, and only its own boxes show. The menu stays
 // open until you click away, press Escape, or Enter in a box. redraw draws it again.
@@ -1047,8 +1051,9 @@ function simpleCard(f, inPop) {
     ${actions(planned
       ? `${inPop ? "" : `<button data-act="edit">${s.edit ? "Cancel edit" : "Edit"}</button>`}<button data-act="drop" title="Keep it on record as dropped">Drop</button>`
       : `<button data-act="reopen">${s.reopen ? "Cancel reopen" : "Reopen"}</button>`,
-      planned ? `${s.edit && !inPop ? `<button class="second" data-act="edit-save" title="Save the name and description on main">Save</button>` : ""}${schedOf(f)
-        // Scheduled (or missed): the black button cancels that, and then ▾ is back to choose again.
+      planned ? `${s.edit && !inPop ? `<button class="second" data-act="edit-save" title="Save the name and description on main">Save</button>` : ""}${schedOf(f) && !schedOf(f).missed
+        // Scheduled: the black button cancels that, and then ▾ is back to choose again.
+        // Missed: the usual button, and whatever it does replaces the missed start.
         ? `<button class="primary" data-act="unschedule" title="Stop it starting by itself. It stays planned.">Cancel schedule</button>`
         : startSplit(`<button class="primary" data-act="start" title="Starts or schedules it, as chosen with ▾. ${MAC ? "⌘" : "Ctrl"}+Enter in its boxes does the same.">`, s.edit || inPop ? keysHint(true) : "", f.slug, whenOf(f.slug))}`
       : leftover ? `<button class="primary" data-act="remove" title="Delete its folder. The unmerged branch is kept, so the work is still in git.">Remove worktree</button>` : "")}
@@ -1972,7 +1977,7 @@ async function onClick(e) {
     return true;
   };
   if (act === "unschedule") { whenSel.delete(slug); const r = await api(`${base}/schedule`, { schedule: null }); return say(r.ok ? "Not scheduled any more. Start it or schedule it again with ▾." : r.msg, r.ok ? "" : "bad"); }
-  if (act === "chev") { menuOpen = menuOpen === slug ? null : slug; return render(all); }
+  if (act === "chev") { menuOpen = menuOpen === slug ? null : slug; render(all); return turnChev(slug, !!menuOpen); }
   if (act === "menu") return menuPick(b, slug, () => render(all));
   // The black button does what ▾ has chosen.
   const v = act === "start" ? whenBody(whenOf(slug)) : null;
@@ -2165,7 +2170,7 @@ drawNewStart();
 $("#newStart").addEventListener("click", (e) => {
   const b = e.target.closest("#add, [data-chev], .startmenu [data-w]"); if (!b) return;
   if (b.id === "add") return addFeature(false);
-  if (b.dataset.chev) { menuOpen = menuOpen === "new" ? null : "new"; return drawNewStart(); }
+  if (b.dataset.chev) { menuOpen = menuOpen === "new" ? null : "new"; drawNewStart(); return turnChev("new", !!menuOpen); }
   menuPick(b, "new", drawNewStart);
 });
 $("#addPlan").onclick = () => addFeature(true);
