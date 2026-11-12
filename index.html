@@ -1281,12 +1281,26 @@ function follow() {
     if (!over.matches("[data-newcol]")) {
       const tiles = [...over.querySelectorAll(".tile")].filter((t) => t !== el);
       const f = all.find((x) => x.slug === el.dataset.open);
-      // manual: above the first card whose middle is below the pointer; otherwise where the sort puts it
-      // Like the columns: the card's middle, as if it followed the pointer fully, swaps once it's a
-      // fifth into the next card. Coming from another column there's no next, so it's halfway.
-      const mid = py - held.gy + el.offsetHeight / 2, mine = [...over.querySelectorAll(".tile")], me = mine.indexOf(el);
-      const before = sortBy === "manual" ? tiles.find((t) => { const L = lay(t), i = mine.indexOf(t); return mid < L.y + L.h * (me < 0 ? 0.5 : i > me ? 0.2 : 0.8); })
-        : over === el.closest(".col") ? el.nextElementSibling : tiles.find((t) => bySort(f, all.find((x) => x.slug === t.dataset.open)) < 0);
+      // vt: the card's top if it followed the pointer fully. h: its height.
+      const h = el.offsetHeight, vt = py - held.gy;
+      let before = el.nextElementSibling; // stays put unless something below says otherwise
+      if (el.closest(".col") !== over) {
+        // just arrived from another column: manual goes by middles, otherwise where the sort puts it
+        held.lock = null;
+        before = sortBy === "manual" ? tiles.find((t) => { const L = lay(t); return vt + h / 2 < L.y + L.h / 2; })
+          : tiles.find((t) => bySort(f, all.find((x) => x.slug === t.dataset.open)) < 0);
+      } else if (sortBy === "manual") {
+        // It passes the card next to it once it has moved d from its own slot, whatever either card's
+        // height: the gap plus a fifth of that card plus half its own, capped so tall cards switch
+        // as soon as short ones. Undoing the last swap only needs going back 12px past where it
+        // happened (lock): the slot jumped a whole card, so measuring from it would swap straight back.
+        const S = lay(el).y, gap = parseFloat(getComputedStyle(el).marginBottom) || 0, lock = held.lock;
+        const d = (t) => gap + Math.min(t.offsetHeight * 0.2 + h / 2, 40);
+        const next = el.nextElementSibling?.matches(".tile") ? el.nextElementSibling : null;
+        const prev = el.previousElementSibling?.matches(".tile") ? el.previousElementSibling : null;
+        if (next && (lock?.t === next ? vt > lock.at + 12 : vt > S + d(next))) { before = next.nextElementSibling; held.lock = { t: next, at: vt }; }
+        else if (prev && (lock?.t === prev ? vt < lock.at - 12 : vt < S - d(prev))) { before = prev; held.lock = { t: prev, at: vt }; }
+      }
       shift(el, over, before || null);
     }
   }
