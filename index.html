@@ -108,7 +108,7 @@
   #searchClear:hover { color:var(--fg); }
   #search:placeholder-shown + #searchClear { display:none; }
   #chips { flex:none; }
-  .planned .dot { background:var(--work); opacity:.5; } .dropped .dot { background:var(--mute); }
+  .planned .dot { background:var(--work); opacity:.5; } .scheduled .dot { background:var(--work); } .dropped .dot { background:var(--mute); }
   .dropped { opacity:.75; }
   .plan { margin-top:8px; padding:2px 12px; border-left:3px solid var(--line); font-size:13px; }
   .chat { margin-top:10px; border:1px solid var(--line); border-radius:8px; }
@@ -131,7 +131,6 @@
   .compose.multi { padding-bottom:44px; transition-delay:0s; }
   .compose.multi textarea { width:100%; transition-delay:.08s, 0s; }
   .chat .hint { padding:6px 10px 10px; }
-  .chat .hint.ctx { padding:6px 12px 0; font-size:11px; }
   .chat { position:relative; }
   .atts { display:flex; flex-wrap:wrap; gap:6px; }
   /* Files waiting to send float over the bottom of the thread, so the
@@ -652,7 +651,8 @@ const ICON = {
   bell: svg(bell),
 };
 const dur = (ms) => { const m = Math.round(ms / 60000); return m < 1 ? "<1m" : m < 60 ? m + "m" : Math.floor(m / 60) + "h " + String(m % 60).padStart(2, "0") + "m"; };
-const spent = (u) => (u && (u.ms || u.cost) ? `${dur(u.ms)} agent time · ≈$${u.cost.toFixed(2)}` : "");
+const spent = (u) => (u && (u.ms || u.cost) ? `${dur(u.ms)} agent time · ≈$${u.cost.toFixed(2)}${u.last?.ctx ? ` · ${Math.round(100 * u.last.ctx / (u.last.ctx > 2e5 ? 1e6 : 2e5))}% context used` : ""}` : "");
+// ponytail: the context window isn't in the transcript; assumes 200k, 1M once a turn has passed that.
 
 // Per-browser settings: notification mode and which features have their bell on.
 const store = { get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} } };
@@ -676,9 +676,9 @@ const ui = {};
 const u = (slug) => (ui[slug] ??= { fb: false, draft: "", msg: "", cls: "", full: false, notes: false, reopen: false, rtitle: "", rprompt: "", edit: false, etitle: null, eprompt: null });
 // Every feature has one status, and there's one filter per status, in order
 // of how much it needs looking at: waiting on you first, dropped last.
-const KINDS = ["waiting", "working", "planned", "merged", "dropped"]; // by urgency: sorts the cards
-const CHIPS = ["planned", "working", "waiting", "merged", "dropped"]; // by timeline: orders the filter chips
-const KIND_TIPS = { all: "Every task", waiting: "An agent has stopped and it's your turn: it finished, needs you, or was cut off", working: "An agent is working on it", planned: "No branch or agent yet", merged: "In main, finished", dropped: "Kept on record, not doing it" };
+const KINDS = ["waiting", "working", "scheduled", "planned", "merged", "dropped"]; // by urgency: sorts the cards
+const CHIPS = ["planned", "scheduled", "working", "waiting", "merged", "dropped"]; // by timeline: orders the filter chips
+const KIND_TIPS = { all: "Every task", waiting: "An agent has stopped and it's your turn: it finished, needs you, or was cut off", working: "An agent is working on it", planned: "No branch or agent yet", scheduled: "Planned, and starts by itself at a set time", merged: "In main, finished", dropped: "Kept on record, not doing it" };
 const cap = (s) => s[0].toUpperCase() + s.slice(1);
 let filter = store.get("filter", "all");
 if (filter !== "all" && !KINDS.includes(filter)) filter = "all";
@@ -701,7 +701,7 @@ function errBlock(s, key, text) {
 
 // [status, detail]. The detail (needs you, background…) shows after it.
 function kind(f) {
-  if (!f.worktree) return f.status === "building" ? ["waiting", ""] : [f.status, schedOf(f)?.missed ? "missed its start" : "", schedOf(f) && !schedOf(f).missed ? "scheduled" : f.status];
+  if (!f.worktree) return f.status === "building" ? ["waiting", ""] : [schedOf(f) && !schedOf(f).missed ? "scheduled" : f.status, schedOf(f)?.missed ? "missed its start" : ""];
   const [cls, label] = status(f);
   if (cls === "merged") return ["merged", ""];
   if (cls === "working") return ["working", f.settingUp ? label : f.live?.background ? "background" : ""];
@@ -1228,7 +1228,6 @@ function showAtts(slug) { for (const el of document.querySelectorAll(`[data-slug
 
 function chatBox(f, s, cls) {
   return `<div class="chat">
-      <div class="hint ctx" data-ctx hidden></div>
       <div class="thread" data-chat></div>
       <div class="compose ${s.multi ? "multi" : ""}">
         <div class="atts">${attsHtml(s)}</div>
@@ -1530,8 +1529,6 @@ async function loadChat(slug) {
   el.innerHTML = r.messages?.length ? r.messages.map((m) => bubble(m.who, m.who === "dashboard" ? m.text.replace(/^\[Added by the dashboard, not my words\]\s*/, "") : m.text,
       `${{ me: "You", agent: "Agent", dashboard: "Sent by the dashboard" }[m.who]}${m.queued ? " · waiting to send" : m.sending ? " · sending…" : m.at ? " · " + new Date(m.at).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : ""}`)).join("") : `<div class="hint">${r.saved === false ? "This session has no saved conversation yet." : "No messages yet."}</div>`;
   el.dataset.loaded = "1";
-  const cx = el.parentElement.querySelector("[data-ctx]");
-  if (cx) { cx.hidden = !r.ctx; if (r.ctx) cx.textContent = `Context used: ${Math.round(r.ctx.tokens / 1000)}k of ${r.ctx.max / 1000}k tokens (${Math.round(100 * r.ctx.tokens / r.ctx.max)}%)`; }
   // Still sending: no state change marks it landing, so reload on every refresh until it has.
   el.dataset.at = r.messages?.some((m) => m.sending) ? "" : String(f?.st?.at) + (f?.st?.queue?.length || 0);
   const saved = chatSpot[slug];
@@ -1687,7 +1684,7 @@ function renderBoard(features) {
   const q = $("#search").value.trim().toLowerCase(), hide = hideDone;
   const shown = features.filter((f) => (!q || (f.title + " " + (f.prompt || "") + " " + (f.label || "")).toLowerCase().includes(q)) && !(hide && ["merged", "dropped"].includes(kind(f)[0]))).sort(bySort);
   const cols = view === "status"
-    ? CHIPS.filter((k) => !(hide && ["merged", "dropped"].includes(k))).map((k) => ({ key: k, head: `<span class="pill ${k}"><span class="dot"></span></span>${cap(k)}`, items: shown.filter((f) => kind(f)[0] === k) }))
+    ? CHIPS.filter((k) => !(hide && ["merged", "dropped"].includes(k)) && shown.some((f) => kind(f)[0] === k)).map((k) => ({ key: k, head: `<span class="pill ${k}"><span class="dot"></span></span>${cap(k)}`, items: shown.filter((f) => kind(f)[0] === k) }))
     : [...labels(), ""].map((l) => ({ key: l, head: l ? `<span class="editcol" data-editcol tabindex="0" title="Click to rename, describe or recolour">${tagHtml(l)}</span>` : "Unlabelled", menu: l ? colMenu(l) : "", desc: LABELS[l]?.description || "", items: shown.filter((f) => (f.label || "") === l) }));
   const empty = view === "label" ? "Drag a card here to label it" : "Nothing here";
   const add = view === "label" ? `<div class="col newcol" data-newcol tabindex="0" title="Click to make an empty label, or drop a task here to give it a new one"><div class="colhead">+ New label</div><div class="none">Click to name it, or drag a task here.</div></div>` : "";
