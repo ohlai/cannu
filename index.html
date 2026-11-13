@@ -123,7 +123,9 @@
      Colour is currentColor. Size: set --s (box), --d (dot), --g (dot spacing) on the element.
      Every segment eases in and out, and holds are short, so nothing lurches or stalls. */
   .dots { --s:64px; --d:10px; --g:15px; --n:0;
-    position:relative; display:inline-block; width:var(--s); height:var(--s); color:var(--work); zoom:.4; }
+    position:relative; display:inline-block; width:var(--s); height:var(--s); color:var(--work); }
+  .dotbox { position:relative; flex:none; width:26px; height:26px; }
+  .dwrap { position:absolute; left:0; top:0; width:64px; height:64px; zoom:.4; transition:opacity .35s; } .dwrap.out { opacity:0; }
   .dots i { position:absolute; left:calc(50% - var(--d)/2 + var(--n)*var(--g)); top:calc(50% - var(--d)/2);
     width:var(--d); height:var(--d); border-radius:50%; background:currentColor; }
   .dots i:nth-child(1) { --n:-1 } .dots i:nth-child(2) { --n:0 } .dots i:nth-child(3) { --n:1 }
@@ -1582,6 +1584,22 @@ function dotsFor(activity) {
   let h = 0; for (const c of String(activity || "thinking").split(" ")[0]) h = (h * 31 + c.charCodeAt(0)) >>> 0;
   return h % 6 + 1;
 }
+// The working indicator at the end of the thread. When the tool changes, the old dots fade out as the new ones fade in.
+function setTyping(el, t, f) {
+  if (!f || status(f)[0] !== "working") return t?.remove();
+  if (!t) { t = document.createElement("div"); t.className = "typing"; t.title = "Agent is working"; t.innerHTML = '<span class="dotbox"></span><span class="activity"></span>'; }
+  el.append(t);
+  t.querySelector(".activity").textContent = f.st?.activity || "";
+  const box = t.querySelector(".dotbox"), cur = box.querySelector(".dwrap:not(.out)"), n = dotsFor(f.st?.activity);
+  if (cur?.dataset.n == n) return;
+  const w = document.createElement("span"); w.className = "dwrap"; w.dataset.n = n;
+  w.innerHTML = `<span class="dots d${n}"><i></i><i></i><i></i></span>`;
+  box.append(w);
+  if (!cur) return;
+  w.style.opacity = 0; cur.classList.add("out");
+  requestAnimationFrame(() => requestAnimationFrame(() => { w.style.opacity = 1; }));
+  setTimeout(() => cur.remove(), 400);
+}
 async function loadChat(slug) {
   const r = await api(`/api/features/${slug}/chat`);
   const el = $(`[data-slug="${slug}"] [data-chat]`); if (!el) return;
@@ -1592,9 +1610,13 @@ async function loadChat(slug) {
   const first = !el.dataset.loaded;
   const following = first || atNewest(el);
   const count = el.children.length, y = el.scrollTop;
-  el.innerHTML = r.messages?.length ? r.messages.filter((m) => m.who !== "tool").map((m) => m.who === "think" ? `<div class="step think">${esc(m.text)}</div>` : bubble(m.who, m.who === "dashboard" ? m.text.replace(/^\[Added by the dashboard, not my words\]\s*/, "") : m.text,
+  const html = r.messages?.length ? r.messages.filter((m) => m.who !== "tool").map((m) => m.who === "think" ? `<div class="step think">${esc(m.text)}</div>` : bubble(m.who, m.who === "dashboard" ? m.text.replace(/^\[Added by the dashboard, not my words\]\s*/, "") : m.text,
       `${{ me: "You", agent: "Agent", dashboard: "Sent by the dashboard" }[m.who]}${m.queued ? " · waiting to send" : m.sending ? " · sending…" : m.at ? " · " + new Date(m.at).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : ""}`)).join("") : `<div class="hint">${r.saved === false ? "This session has no saved conversation yet." : "No messages yet."}</div>`;
-  if (f && status(f)[0] === "working") el.insertAdjacentHTML("beforeend", `<div class="typing" title="Agent is working"><span class="dots d${dotsFor(f.st?.activity)}"><i></i><i></i><i></i></span>${f.st?.activity ? `<span class="activity">${esc(f.st.activity)}</span>` : ""}</div>`);
+  // Swap the messages but leave the working dots in the DOM: moving them would restart their animation.
+  const typing = el.querySelector(".typing");
+  for (const c of [...el.children]) if (c !== typing) c.remove();
+  el.insertAdjacentHTML("afterbegin", html);
+  setTyping(el, typing, f);
   el.dataset.loaded = "1";
   // Still sending: no state change marks it landing, so reload on every refresh until it has.
   el.dataset.at = r.messages?.some((m) => m.sending) ? "" : String(f?.st?.at) + (f?.st?.queue?.length || 0);
@@ -1602,6 +1624,8 @@ async function loadChat(slug) {
   if (first && typeof saved === "number") el.scrollTop = saved;
   else if (following && (first || el.children.length !== count)) toNewest(el);
   else el.scrollTop = y; // same messages: stay exactly where you are
+  // The dots appeared (or moved down): bring them into view, unless you've scrolled away.
+  if (following && el.querySelector(".typing") && !(first && typeof saved === "number")) el.scrollTop = el.scrollHeight;
 }
 // At the newest message: its start is at or above the top of the box.
 function atNewest(el) {
