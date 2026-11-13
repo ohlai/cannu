@@ -588,7 +588,7 @@ function readTranscript(file) {
     if (t) prev = t;
     // A reply is saved as several lines with the same id. The last has the totals.
     if (e.type === "assistant" && e.message?.id && e.message.usage) msgs.set(e.message.id, e.message);
-    if (e.type === "assistant" && e.message?.model?.startsWith("claude")) last = { model: e.message.model, at: t };
+    if (e.type === "assistant" && e.message?.model?.startsWith("claude")) { const u = e.message.usage || {}; if (!e.isSidechain) last = { model: e.message.model, at: t, ctx: (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0) }; }
   }
   let cost = 0; for (const m of msgs.values()) cost += price(m.model, m.usage);
   return { ms, cost, last };

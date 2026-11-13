@@ -108,11 +108,14 @@
   #searchClear:hover { color:var(--fg); }
   #search:placeholder-shown + #searchClear { display:none; }
   #chips { flex:none; }
-  .planned .dot { background:var(--work); opacity:.5; } .dropped .dot { background:var(--mute); }
+  /* One colour per status: planned a hollow grey ring (nothing started), scheduled teal, working pulsing blue, waiting amber (your turn), merged purple, dropped faint grey. */
+  .pill.planned .dot { background:transparent; box-shadow:inset 0 0 0 1.5px var(--mute); }
+  .pill.scheduled .dot { background:#0891b2; box-shadow:none; }
+  .pill.dropped .dot { background:var(--mute); opacity:.4; }
   .dropped { opacity:.75; }
   .plan { margin-top:8px; padding:2px 12px; border-left:3px solid var(--line); font-size:13px; }
   .chat { margin-top:10px; border:1px solid var(--line); border-radius:8px; }
-  .thread { max-height:440px; overflow:auto; padding:8px 12px; display:flex; flex-direction:column; gap:10px; }
+  .thread { max-height:486px; overflow:auto; padding:8px 12px 70px; display:flex; flex-direction:column; gap:10px; }
   .bubble { max-width:85%; padding:6px 12px; border-radius:10px; font-size:13px; background:var(--bg); }
   .bubble.me { align-self:flex-end; background:var(--fg); color:var(--bg); }
   .bubble.me code, .bubble.me pre { background:transparent; }
@@ -184,7 +187,9 @@
   .bubble .who { font-size:11px; opacity:.65; margin-top:4px; }
   /* Message box: its own rounded box with Send on its right. Once the text
      wraps, the box widens into Send's place and Send drops below it. */
-  .compose { position:relative; margin:4px 10px 0; transition:padding-bottom .28s cubic-bezier(.16,1,.3,1) .08s; }
+  .compose::before { content:""; position:absolute; z-index:-1; left:-10px; right:-10px; top:0; bottom:-300px; background:linear-gradient(transparent, var(--card) 25px); pointer-events:none; }
+  .chat { overflow:hidden; } .chat .hint { position:relative; z-index:2; }
+  .compose { position:relative; z-index:1; margin:-42px 10px 0; transition:padding-bottom .28s cubic-bezier(.16,1,.3,1) .08s; }
   .compose textarea { display:block; min-height:0; resize:none; line-height:20px; padding:7px 12px; border-radius:10px; width:calc(100% - 118px); max-height:262px; overflow-y:auto;
     transition:width .28s cubic-bezier(.16,1,.3,1), height .18s ease; }
   .compose .send { position:absolute; right:0; bottom:0; width:108px; height:36px; padding:0; display:flex; align-items:center; justify-content:center; gap:8px; }
@@ -424,7 +429,7 @@
   .pop .thread { flex:1; min-height:0; max-height:none; }
   .pop .compose, .pop .compose.multi { flex:none; padding-bottom:0; }
   .pop .compose textarea, .pop .compose.multi textarea { width:calc(100% - 118px); }
-  .pop .compose { margin:4px 10px 0; }
+  .pop .compose { margin:-42px 10px 0; }
   .pop .chev, .pop [data-act="fb"], .pop .title .tag { display:none; }
   .pop footer .actions { margin:0; }
   /* The repo dropdown, right of New feature. */
@@ -446,7 +451,7 @@
   .repomenu .ritem > button:first-child { flex:1; min-width:0; }
   .repomenu button.trash { width:30px; height:30px; flex:none; padding:0; justify-content:center; color:var(--mute); }
   .repomenu button.trash:hover, .repomenu button.trash:focus-visible { color:var(--bad); }
-  .repomenu button.trash svg { width:15px; height:15px; fill:none; stroke:currentColor; stroke-width:2; }
+  .repomenu button.trash svg { width:15px; height:15px; fill:currentColor; }
   /* Start agent ▾: the black button and a narrow ▾ joined into one. Its menu
      is a .repomenu (the sort and repo menus' look) that opens upward, since
      these buttons sit at the bottom of a card or popup. After .repomenu, so these win. */
@@ -594,8 +599,8 @@
   <div class="panel">
     <header><h2>Add a repo</h2><div class="hint">Cannu runs agents on it from a board of its own. A <code>cannu.json</code> in the repo says how to set it up, run and check it; without one it uses the defaults.</div></header>
     <div class="body">
-      <div class="field" id="foundField"><label>Found next to your repos</label><div class="found" id="found"><div class="hint">Looking…</div></div></div>
       <div class="field"><label for="repoDir">Folder</label><input type="text" id="repoDir" placeholder="C:\Users\you\github\my-project"></div>
+      <div class="field" id="foundField"><label>Suggested</label><div class="found" id="found"><div class="hint">Looking…</div></div></div>
       <div class="reposet" id="repoSet" hidden>
         <div class="field"><label for="repoNameIn">Name</label><input type="text" id="repoNameIn" placeholder="From the folder's name"><div class="hint">Shown in the dropdown and in the board's address.</div></div>
         <h3>How to work on it</h3>
@@ -714,7 +719,8 @@ const ICON = {
   bell: svg(bell),
 };
 const dur = (ms) => { const m = Math.round(ms / 60000); return m < 1 ? "<1m" : m < 60 ? m + "m" : Math.floor(m / 60) + "h " + String(m % 60).padStart(2, "0") + "m"; };
-const spent = (u) => (u && (u.ms || u.cost) ? `${dur(u.ms)} agent time · ≈$${u.cost.toFixed(2)}` : "");
+const spent = (u) => (u && (u.ms || u.cost) ? `${dur(u.ms)} agent time · ≈$${u.cost.toFixed(2)}${u.last?.ctx ? ` · ${Math.round(u.last.ctx / 1000)}k of ${u.last.ctx > 2e5 ? "1M" : "200k"} context (${Math.round(100 * u.last.ctx / (u.last.ctx > 2e5 ? 1e6 : 2e5))}%)` : ""}` : "");
+// ponytail: the context window isn't in the transcript; assumes 200k, 1M once a turn has passed that.
 
 // Per-browser settings: notification mode and which features have their bell on.
 const store = { get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} } };
@@ -738,9 +744,9 @@ const ui = {};
 const u = (slug) => (ui[slug] ??= { fb: false, draft: "", msg: "", cls: "", full: false, notes: false, reopen: false, rtitle: "", rprompt: "", edit: false, etitle: null, eprompt: null });
 // Every feature has one status, and there's one filter per status, in order
 // of how much it needs looking at: waiting on you first, dropped last.
-const KINDS = ["waiting", "working", "planned", "merged", "dropped"]; // by urgency: sorts the cards
-const CHIPS = ["planned", "working", "waiting", "merged", "dropped"]; // by timeline: orders the filter chips
-const KIND_TIPS = { all: "Every task", waiting: "An agent has stopped and it's your turn: it finished, needs you, or was cut off", working: "An agent is working on it", planned: "No branch or agent yet", merged: "In main, finished", dropped: "Kept on record, not doing it" };
+const KINDS = ["waiting", "working", "scheduled", "planned", "merged", "dropped"]; // by urgency: sorts the cards
+const CHIPS = ["planned", "scheduled", "working", "waiting", "merged", "dropped"]; // by timeline: orders the filter chips
+const KIND_TIPS = { all: "Every task", waiting: "An agent has stopped and it's your turn: it finished, needs you, or was cut off", working: "An agent is working on it", planned: "No branch or agent yet", scheduled: "Planned, and starts by itself at a set time", merged: "In main, finished", dropped: "Kept on record, not doing it" };
 const cap = (s) => s[0].toUpperCase() + s.slice(1);
 let filter = store.get("filter", "all");
 if (filter !== "all" && !KINDS.includes(filter)) filter = "all";
@@ -763,7 +769,7 @@ function errBlock(s, key, text) {
 
 // [status, detail]. The detail (needs you, background…) shows after it.
 function kind(f) {
-  if (!f.worktree) return f.status === "building" ? ["waiting", ""] : [f.status, schedOf(f) ? (schedOf(f).missed ? "missed its start" : "scheduled") : ""];
+  if (!f.worktree) return f.status === "building" ? ["waiting", ""] : [schedOf(f) && !schedOf(f).missed ? "scheduled" : f.status, schedOf(f)?.missed ? "missed its start" : ""];
   const [cls, label] = status(f);
   if (cls === "merged") return ["merged", ""];
   if (cls === "working") return ["working", f.settingUp ? label : f.live?.background ? "background" : ""];
@@ -1262,8 +1268,8 @@ const port = (slug) => all.find((x) => x.slug === slug).port;
 // laptop and the server's name when Cannu runs on one.
 const appUrl = (p) => `${location.protocol}//${location.hostname}:${p}`;
 // Time, status, then the bell, in that order on every card.
-const head = (f, cls, label, when) => { const [k, detail] = kind(f); return `<span class="meta">${when}</span>
-      <span class="pill ${k} ${cls}"><span class="dot"></span>${k}${detail ? `<span class="detail">· ${esc(detail)}</span>` : ""}</span>`; };
+const head = (f, cls, label, when) => { const [k, detail, name = k] = kind(f); return `<span class="meta">${when}</span>
+      <span class="pill ${k} ${cls}"><span class="dot"></span>${name}${detail ? `<span class="detail">· ${esc(detail)}</span>` : ""}</span>`; };
 // The bell sits before the name: it's a setting on the feature, not an
 // action like the buttons at the bottom. It's on every card and always says
 // whether you'll hear about this feature: struck through (no) or ringing
@@ -1610,7 +1616,10 @@ async function loadChat(slug) {
   const first = !el.dataset.loaded;
   // stick: you just sent a message, so follow down to the dots whatever the scroll says.
   const following = first || atNewest(el) || !!el.dataset.stick;
-  const count = el.children.length, y = el.scrollTop;
+  // Only 80 messages come back, so once a chat is that long the count stops
+  // changing: the oldest one shown changes instead. Either means a new message.
+  const sig = `${Math.min(r.messages?.length || 0, 80)}|${r.messages?.[0]?.at || ""}`, newMsg = sig !== el.dataset.sig, y = el.scrollTop;
+  el.dataset.sig = sig;
   const html = r.messages?.length ? r.messages.filter((m) => m.who !== "tool").map((m) => m.who === "think" ? `<div class="step think">${esc(m.text)}</div>` : bubble(m.who, m.who === "dashboard" ? m.text.replace(/^\[Added by the dashboard, not my words\]\s*/, "") : m.text,
       `${{ me: "You", agent: "Agent", dashboard: "Sent by the dashboard" }[m.who]}${m.queued ? " · waiting to send" : m.sending ? " · sending…" : m.at ? " · " + new Date(m.at).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : ""}`)).join("") : `<div class="hint">${r.saved === false ? "This session has no saved conversation yet." : "No messages yet."}</div>`;
   // Swap the messages but leave the working dots in the DOM: moving them would restart their animation.
@@ -1623,7 +1632,7 @@ async function loadChat(slug) {
   el.dataset.at = r.messages?.some((m) => m.sending) ? "" : String(f?.st?.at) + (f?.st?.queue?.length || 0);
   const saved = chatSpot[slug];
   if (first && typeof saved === "number") el.scrollTop = saved;
-  else if (following && (first || el.children.length !== count)) toNewest(el);
+  else if (following && (first || newMsg)) toNewest(el);
   else el.scrollTop = y; // same messages: stay exactly where you are
   // The dots appeared (or moved down): bring them into view, unless you've scrolled away.
   // Again after layout settles: the popup redraw and the message box can change the thread's height after this.
@@ -1635,7 +1644,8 @@ async function loadChat(slug) {
 // At the newest message: its start is at or above the top of the box.
 function atNewest(el) {
   const b = el.lastElementChild; if (!b) return true;
-  return el.scrollTop >= b.offsetTop - el.offsetTop - 40;
+  // Or at the very bottom: with a short last message and a tall box, that's as far as it scrolls.
+  return el.scrollTop >= b.offsetTop - el.offsetTop - 40 || el.scrollTop + el.clientHeight >= el.scrollHeight - 4;
 }
 // The top of the newest message, a little above it so the one before shows its end.
 function toNewest(el) {
@@ -1757,8 +1767,8 @@ $("#sortPick").addEventListener("keydown", (e) => {
 });
 
 function tile(f) {
-  const [k, detail] = kind(f), cls = status(f)[0], st = f.st || {};
-  const pill = `<span class="pill ${k} ${cls}"><span class="dot"></span>${k}${detail ? `<span class="detail">· ${esc(detail)}</span>` : ""}</span>`;
+  const [k, detail, name = k] = kind(f), cls = status(f)[0], st = f.st || {};
+  const pill = `<span class="pill ${k} ${cls}"><span class="dot"></span>${name}${detail ? `<span class="detail">· ${esc(detail)}</span>` : ""}</span>`;
   const when = ago(st.at) || day(f.merged || f.dropped || f.created);
   return `<div class="tile" data-open="${f.slug}" tabindex="0">
     <div class="t">${esc(f.title)}</div>
@@ -1779,7 +1789,7 @@ function renderBoard(features) {
   const q = $("#search").value.trim().toLowerCase(), hide = hideDone;
   const shown = features.filter((f) => (!q || (f.title + " " + (f.prompt || "") + " " + (f.label || "")).toLowerCase().includes(q)) && !(hide && ["merged", "dropped"].includes(kind(f)[0]))).sort(bySort);
   const cols = view === "status"
-    ? CHIPS.filter((k) => !(hide && ["merged", "dropped"].includes(k))).map((k) => ({ key: k, head: `<span class="pill ${k}"><span class="dot"></span></span>${cap(k)}`, items: shown.filter((f) => kind(f)[0] === k) }))
+    ? CHIPS.filter((k) => !(hide && ["merged", "dropped"].includes(k)) && shown.some((f) => kind(f)[0] === k)).map((k) => ({ key: k, head: `<span class="pill ${k}"><span class="dot"></span></span>${cap(k)}`, items: shown.filter((f) => kind(f)[0] === k) }))
     : [...labels(), ""].map((l) => ({ key: l, head: l ? `<span class="editcol" data-editcol tabindex="0" title="Click to rename, describe or recolour">${tagHtml(l)}</span>` : "Unlabelled", menu: l ? colMenu(l) : "", desc: LABELS[l]?.description || "", items: shown.filter((f) => (f.label || "") === l) }));
   const empty = view === "label" ? "Drag a card here to label it" : "Nothing here";
   const add = view === "label" ? `<div class="col newcol" data-newcol tabindex="0" title="Click to make an empty label, or drop a task here to give it a new one"><div class="colhead">+ New label</div><div class="none">Click to name it, or drag a task here.</div></div>` : "";
@@ -2436,6 +2446,9 @@ async function onClick(e) {
       const n = chat.children.length;
       chat.insertAdjacentHTML("beforeend", bubble("me", text, "You · sending…"));
       sent = [...chat.children].slice(n); if (dots) chat.append(dots); chat.scrollTop = chat.scrollHeight; chat.dataset.stick = "1";
+      // So the reload that swaps in the real bubble isn't a "new message". Counted from the last sig, not the DOM: the dots and hidden tool steps would throw a DOM count off.
+      const [cnt, oldest = ""] = (chat.dataset.sig || "0|").split("|");
+      chat.dataset.sig = `${Math.min(+cnt + 1, 80)}|${oldest}`;
     }
     if (box) { box.value = ""; fitCompose(box); }
     const r = await api(`${base}/feedback`, { text });
@@ -2814,7 +2827,7 @@ function pickRepo(name) {
   loadRepo(); loadDefaults().catch(() => {}); refresh();
 }
 // The dropdown: every repo (a tick on the shown one), then Add repo.
-const BIN = `<svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>`;
+const BIN = `<svg viewBox="0 0 24 24"><path d="M9 3h6l1 2h4v2H4V5h4zM5 9h14l-1 11a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1z"/></svg>`;
 const TICK = `<svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12l5 5 9-10"/></svg>`;
 function repoMenu(open) {
   $("#repoMenu").hidden = !open; $("#repoBtn").setAttribute("aria-expanded", open);
