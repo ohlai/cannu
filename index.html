@@ -119,7 +119,8 @@
   .bubble.dashboard { align-self:flex-end; background:none; border:1px dashed var(--line); color:var(--mute); }
   .step { align-self:flex-start; max-width:92%; font:12px ui-monospace, monospace; color:var(--mute); white-space:pre-wrap; overflow-wrap:anywhere; }
   .step.think { font-style:italic; border-left:2px solid var(--line); padding-left:8px; }
-  .typing { align-self:flex-start; display:flex; gap:4px; padding:4px 2px; } .typing i { width:6px; height:6px; border-radius:50%; background:var(--work); animation:pulse 1.2s infinite; } .typing i:nth-child(2) { animation-delay:.2s } .typing i:nth-child(3) { animation-delay:.4s }
+  .typing { align-self:flex-start; display:flex; align-items:center; gap:4px; max-width:100%; padding:4px 2px; } .typing i { width:6px; height:6px; border-radius:50%; background:var(--work); animation:pulse 1.2s infinite; } .typing i:nth-child(2) { animation-delay:.2s } .typing i:nth-child(3) { animation-delay:.4s } .typing .activity { margin-left:6px; }
+  .stopbtn { position:absolute; right:116px; bottom:0; width:36px; height:36px; padding:0; display:flex; align-items:center; justify-content:center; border-radius:10px; } .stopbtn::before { content:""; width:12px; height:12px; border-radius:3px; background:var(--bad); }
   .bubble .who { font-size:11px; opacity:.65; margin-top:4px; }
   /* Message box: its own rounded box with Send on its right. Once the text
      wraps, the box widens into Send's place and Send drops below it. */
@@ -1233,7 +1234,7 @@ function chatBox(f, s, cls) {
       <div class="compose ${s.multi ? "multi" : ""}">
         <div class="atts">${attsHtml(s)}</div>
         <textarea data-field="draft" data-mention rows="1" placeholder="Message the agent">${esc(s.draft)}</textarea>
-        ${cls === "working" ? `<button data-act="forcestop" title="Kill the agent's running turn now" style="position:absolute; right:116px; bottom:0; height:36px">Force stop</button>` : ""}
+        ${cls === "working" ? `<button class="stopbtn" data-act="forcestop" title="Force stop" aria-label="Force stop"></button>` : ""}
         <button class="primary send" data-act="send" title="${MAC ? "⌘+Enter" : "Ctrl+Enter"} sends">Send${keysHint(true)}</button>
       </div>
       <div class="hint" data-tags>${tagsHtml(s.draft)}</div>
@@ -1270,7 +1271,7 @@ function card(f, inPop) {
         ${prev ? `<div class="meta">Continues “${esc(prev.title)}”</div>` : ""}
         ${linksHtml(f)}
         ${prLine(f)}`;
-  const body = `${st.activity && cls === "working" ? `<div class="activity" style="margin-top:6px">${esc(st.activity)}</div>` : ""}
+  const body = `${st.activity && cls === "working" && !(s.fb || inPop) ? `<div class="activity" style="margin-top:6px">${esc(st.activity)}</div>` : ""}
     ${banner}
     ${st.lastReply && !(s.fb || inPop) ? `<div class="reply md ${s.full ? "full" : ""}" data-act="expand" title="Click to show all of it">${md(st.lastReply)}</div>` : ""}
     ${st.denied?.length ? errBlock(s, "denied", "Blocked in the background run (open the session to allow):\n" + st.denied.join("\n")) : ""}`;
@@ -1528,9 +1529,9 @@ async function loadChat(slug) {
   const first = !el.dataset.loaded;
   const following = first || atNewest(el);
   const count = el.children.length, y = el.scrollTop;
-  el.innerHTML = r.messages?.length ? r.messages.map((m) => m.who === "tool" || m.who === "think" ? `<div class="step ${m.who}">${m.who === "tool" ? "⚙ " : "💭 "}${esc(m.text)}</div>` : bubble(m.who, m.who === "dashboard" ? m.text.replace(/^\[Added by the dashboard, not my words\]\s*/, "") : m.text,
+  el.innerHTML = r.messages?.length ? r.messages.filter((m) => m.who !== "tool").map((m) => m.who === "think" ? `<div class="step think">${esc(m.text)}</div>` : bubble(m.who, m.who === "dashboard" ? m.text.replace(/^\[Added by the dashboard, not my words\]\s*/, "") : m.text,
       `${{ me: "You", agent: "Agent", dashboard: "Sent by the dashboard" }[m.who]}${m.queued ? " · waiting to send" : m.sending ? " · sending…" : m.at ? " · " + new Date(m.at).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : ""}`)).join("") : `<div class="hint">${r.saved === false ? "This session has no saved conversation yet." : "No messages yet."}</div>`;
-  if (f && status(f)[0] === "working") el.insertAdjacentHTML("beforeend", `<div class="typing" title="Agent is working"><i></i><i></i><i></i></div>`);
+  if (f && status(f)[0] === "working") el.insertAdjacentHTML("beforeend", `<div class="typing" title="Agent is working"><i></i><i></i><i></i>${f.st?.activity ? `<span class="activity">${esc(f.st.activity)}</span>` : ""}</div>`);
   el.dataset.loaded = "1";
   // Still sending: no state change marks it landing, so reload on every refresh until it has.
   el.dataset.at = r.messages?.some((m) => m.sending) ? "" : String(f?.st?.at) + (f?.st?.queue?.length || 0);
@@ -2319,7 +2320,7 @@ async function onClick(e) {
   }
   if (act === "retry") { await api(`${base}/retry`, {}); return say("Retrying setup."); }
   if (act === "unstick" || act === "stopturn") { const r = await api(`${base}/${act}`, { pid: b.dataset.pid }); return say(r.msg, r.ok ? "good" : "bad"); }
-  if (act === "forcestop") { if (!confirm("Force stop this agent? Its running turn and any step under it are killed.")) return; const r = await api(`${base}/forcestop`, {}); return say(r.msg, r.ok ? "good" : "bad"); }
+  if (act === "forcestop") { if (!(await ask(`Force stop “${all.find((x) => x.slug === slug).title}”?`, "Its running turn and any step under it are killed. The conversation is kept, so you can carry on later.", "Force stop"))) return; const r = await api(`${base}/forcestop`, {}); return say(r.msg, r.ok ? "good" : "bad"); }
   if (act === "continue") { const r = await api(`${base}/continue`, {}); return say(r.msg, r.ok ? "good" : "bad"); }
   if (act === "resume-bg" || act === "resume-term") { const r = await api(`${base}/resume`, { where: act === "resume-bg" ? "background" : "terminal" }); return say(r.msg, r.ok ? "good" : "bad"); }
   if (act === "unattach") { s.files.splice(+b.dataset.i, 1); return showAtts(slug); }
