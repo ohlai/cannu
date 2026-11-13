@@ -652,7 +652,7 @@ const ICON = {
   bell: svg(bell),
 };
 const dur = (ms) => { const m = Math.round(ms / 60000); return m < 1 ? "<1m" : m < 60 ? m + "m" : Math.floor(m / 60) + "h " + String(m % 60).padStart(2, "0") + "m"; };
-const spent = (u) => (u && (u.ms || u.cost) ? `${dur(u.ms)} agent time · ≈$${u.cost.toFixed(2)}${u.last?.ctx ? ` · ${Math.round(100 * u.last.ctx / (u.last.ctx > 2e5 ? 1e6 : 2e5))}% context used` : ""}` : "");
+const spent = (u) => (u && (u.ms || u.cost) ? `${dur(u.ms)} agent time · ≈$${u.cost.toFixed(2)}${u.last?.ctx ? ` · ${Math.round(u.last.ctx / 1000)}k of ${u.last.ctx > 2e5 ? "1M" : "200k"} context (${Math.round(100 * u.last.ctx / (u.last.ctx > 2e5 ? 1e6 : 2e5))}%)` : ""}` : "");
 // ponytail: the context window isn't in the transcript; assumes 200k, 1M once a turn has passed that.
 
 // Per-browser settings: notification mode and which features have their bell on.
