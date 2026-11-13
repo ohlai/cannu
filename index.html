@@ -2322,7 +2322,7 @@ async function onClick(e) {
   }
   if (act === "retry") { await api(`${base}/retry`, {}); return say("Retrying setup."); }
   if (act === "unstick" || act === "stopturn") { const r = await api(`${base}/${act}`, { pid: b.dataset.pid }); return say(r.msg, r.ok ? "good" : "bad"); }
-  if (act === "forcestop") { if (!(await ask(`Force stop “${all.find((x) => x.slug === slug).title}”?`, "Its running turn and any step under it are killed. The conversation is kept, so you can carry on later.", "Force stop"))) return; const r = await api(`${base}/forcestop`, {}); return say(r.msg, r.ok ? "good" : "bad"); }
+  if (act === "forcestop") {const r = await api(`${base}/forcestop`, {}); return say(r.msg, r.ok ? "good" : "bad"); }
   if (act === "continue") { const r = await api(`${base}/continue`, {}); return say(r.msg, r.ok ? "good" : "bad"); }
   if (act === "resume-bg" || act === "resume-term") { const r = await api(`${base}/resume`, { where: act === "resume-bg" ? "background" : "terminal" }); return say(r.msg, r.ok ? "good" : "bad"); }
   if (act === "unattach") { s.files.splice(+b.dataset.i, 1); return showAtts(slug); }
