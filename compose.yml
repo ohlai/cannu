@@ -18,6 +18,9 @@ services:
     restart: unless-stopped
     environment:
       HOME: /home/node
+      # Addresses to listen on, comma separated. Keep 127.0.0.1: agents reach
+      # Cannu there. Example: "127.0.0.1,100.64.0.1" (plus a Tailscale IP).
+      CANNU_BIND_ADDRESS: ${CANNU_BIND_ADDRESS:-127.0.0.1,::1}
     volumes:
       # Same paths inside and out: worktrees record absolute paths, and
       # Claude Code names each transcript folder after the working directory.

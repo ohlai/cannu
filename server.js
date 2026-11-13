@@ -207,6 +207,6 @@ const handler = async (req, res) => {
 // as localhost plus a Tailscale address. By default it listens on IPv6
 // localhost too: browsers try "localhost" as ::1 first, and on Windows a
 // refused ::1 cost every new connection about 200ms before falling back.
-const hosts = all.host ? [all.host].flat() : ["127.0.0.1", "::1"];
+const hosts = process.env.CANNU_BIND_ADDRESS ? process.env.CANNU_BIND_ADDRESS.split(",").map((s) => s.trim()) : all.host ? [all.host].flat() : ["127.0.0.1", "::1"];
 for (const h of hosts) http.createServer(handler).on("error", (e) => console.log(`Couldn't listen on ${h}: ${e.code}`)).listen(PORT, h);
 console.log(`Cannu on http://localhost:${PORT} for ${repos.map((r) => r.name).join(", ")}`);
