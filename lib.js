@@ -21,9 +21,10 @@ export const META = path.dirname(fileURLToPath(import.meta.url));
 // hands it CANNU_REPO (which one) and CANNU_PORT (its own internal port).
 // Run by hand with neither set, the first repo is used.
 export const CONFIG = path.resolve(process.env.CANNU_CONFIG || path.join(META, "config.json"));
-if (!fs.existsSync(CONFIG)) { console.error(`No config at ${CONFIG}. Copy config.example.json to config.json and list your repos.`); process.exit(1); }
 const abs = (p) => (p ? path.resolve(path.dirname(CONFIG), p) : "");
-export const all = JSON.parse(fs.readFileSync(CONFIG, "utf8"));
+// No config yet is fine: Cannu starts with no repos and writes the file when
+// the first one is added from the page.
+export const all = fs.existsSync(CONFIG) ? JSON.parse(fs.readFileSync(CONFIG, "utf8")) : {};
 // Every repo, with its name and its own ports. Feature ports go up in blocks
 // of 100 per repo so two repos never hand out the same one. server.js uses
 // repoEntry for a repo added from the page.
@@ -36,8 +37,9 @@ export const repoEntry = (r, i) => ({
   port: (all.internalPort || (all.port || 4000) + 1) + i,
   firstFeaturePort: r.firstFeaturePort || (all.firstFeaturePort || 8100) + i * 100,
 });
-export const repos = (all.repos || [{ repo: all.repo }]).map(repoEntry);
-const me = repos.find((r) => r.name === process.env.CANNU_REPO) || repos[0];
+export const repos = (all.repos || (all.repo ? [{ repo: all.repo }] : [])).map(repoEntry);
+// With no repos only server.js runs, and it needs none of what follows.
+const me = repos.find((r) => r.name === process.env.CANNU_REPO) || repos[0] || { name: "", dir: META, worktrees: META, port: 0, firstFeaturePort: 0 };
 export const config = { host: "127.0.0.1", ...all, name: me.name, firstFeaturePort: me.firstFeaturePort, port: Number(process.env.CANNU_PORT) || me.port };
 export const APP = me.dir;
 export const WORKTREES = me.worktrees;
@@ -48,7 +50,7 @@ export const STATE = path.join(HOME, "state");
 export const FEEDBACK = path.join(HOME, "feedback");
 export const ATTACH = path.join(HOME, "attachments"); // files pasted or dropped into a chat
 const RUNTIME = path.join(HOME, "features.json");
-fs.mkdirSync(STATE, { recursive: true });
+if (me.name) fs.mkdirSync(STATE, { recursive: true });
 
 // ---------- cannu.json ----------
 

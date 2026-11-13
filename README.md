@@ -52,9 +52,11 @@ You need Node 24 or later, git, and Claude Code logged in. You also need `gh`
 logged in if you want pull requests.
 
 ```
-cp config.example.json config.json   # list your repos in it
 node server.js                       # then open http://localhost:4000
 ```
+
+With no repos, the page shows one **Add your first repo** button. Cannu writes
+`config.json` the first time you add one, so there's nothing to set up first.
 
 You install Cannu once. One Cannu runs every repo listed in `config.json`, on
 one port. The dropdown right of **+ New task** switches between them. Its
@@ -80,17 +82,23 @@ at login. Restart after changing `config.json` or any `.js` file.
 
 ### In Docker, on a server
 
+```
+docker compose up -d --build         # then open http://localhost:4000 and add a repo
+```
+
 `compose.yml` runs Cannu on a Linux server, using the host's Claude Code and
-`gh` logins. Read the comment at the top of it first. Two rules matter:
+`gh` logins (log in on the host first). It mounts your home folder by default,
+so Add repo can see your repos. Two rules matter:
 
 - Mounts use the same paths inside and outside the container. Git worktrees
   record absolute paths, and Claude Code names each transcript folder after
   the working directory. A session opened from an SSH terminal on the host
   and one started in the container are only the same session if the paths
   match.
-- Give Cannu its own clone of each repo, all under one folder
-  (`CANNU_REPOS` in `compose.yml`). Agents commit to it and Cannu merges into
-  its main, so it shouldn't be a folder a live container builds from.
+- Prefer Cannu's own clone of each repo, all under one folder
+  (`CANNU_REPOS`). Agents commit to it and Cannu merges into its main, so it
+  shouldn't be a folder a live container builds from. Add repo warns when a
+  folder has a compose file or a Dockerfile.
 
 Cannu has no login and can start agents that run commands, so it listens on
 `127.0.0.1` only. To reach it from other machines, set `"host"` in

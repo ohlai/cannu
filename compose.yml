@@ -1,10 +1,9 @@
-# Cannu on a Linux server. Before the first `docker compose up -d --build`:
-#   1. Clone each repo Cannu should run into one folder, kept for Cannu (not
-#      a folder a live container builds from).
-#   2. cp config.example.json config.json and list those clones under "repos".
-#   3. Set CANNU_REPOS below to that folder, and HOME_DIR to your home folder.
-#   4. Log in to Claude Code and gh as yourself on the host once. The
-#      container uses those logins.
+# Cannu on a Linux server. Log in to Claude Code and gh on the host once, then
+# `docker compose up -d --build`, open the page and add a repo. No config file
+# or .env needed. Your home folder is mounted (same path inside), so your
+# logins work and any repo under it can be added. To expose less, set
+# CANNU_REPOS to a folder of clones kept for Cannu (not a folder a live
+# container builds from).
 services:
   cannu:
     build: .
@@ -23,7 +22,7 @@ services:
       # Same paths inside and out: worktrees record absolute paths, and
       # Claude Code names each transcript folder after the working directory.
       - ${PWD}:${PWD}
-      - ${CANNU_REPOS:-/home/you/cannu-repos}:${CANNU_REPOS:-/home/you/cannu-repos}
-      - ${HOME_DIR:-/home/you}/.claude:/home/node/.claude
-      - ${HOME_DIR:-/home/you}/.claude.json:/home/node/.claude.json
-      - ${HOME_DIR:-/home/you}/.config/gh:/home/node/.config/gh
+      - ${CANNU_REPOS:-${HOME}}:${CANNU_REPOS:-${HOME}}
+      - ${HOME}/.claude:/home/node/.claude
+      - ${HOME}/.claude.json:/home/node/.claude.json
+      - ${HOME}/.config/gh:/home/node/.config/gh
