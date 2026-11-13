@@ -117,6 +117,9 @@
   .bubble.me { align-self:flex-end; background:var(--fg); color:var(--bg); }
   .bubble.me code, .bubble.me pre { background:transparent; }
   .bubble.dashboard { align-self:flex-end; background:none; border:1px dashed var(--line); color:var(--mute); }
+  .step { align-self:flex-start; max-width:92%; font:12px ui-monospace, monospace; color:var(--mute); white-space:pre-wrap; overflow-wrap:anywhere; }
+  .step.think { font-style:italic; border-left:2px solid var(--line); padding-left:8px; }
+  .typing { align-self:flex-start; display:flex; gap:4px; padding:4px 2px; } .typing i { width:6px; height:6px; border-radius:50%; background:var(--work); animation:pulse 1.2s infinite; } .typing i:nth-child(2) { animation-delay:.2s } .typing i:nth-child(3) { animation-delay:.4s }
   .bubble .who { font-size:11px; opacity:.65; margin-top:4px; }
   /* Message box: its own rounded box with Send on its right. Once the text
      wraps, the box widens into Send's place and Send drops below it. */
@@ -1230,6 +1233,7 @@ function chatBox(f, s, cls) {
       <div class="compose ${s.multi ? "multi" : ""}">
         <div class="atts">${attsHtml(s)}</div>
         <textarea data-field="draft" data-mention rows="1" placeholder="Message the agent">${esc(s.draft)}</textarea>
+        ${cls === "working" ? `<button data-act="forcestop" title="Kill the agent's running turn now" style="position:absolute; right:116px; bottom:0; height:36px">Force stop</button>` : ""}
         <button class="primary send" data-act="send" title="${MAC ? "⌘+Enter" : "Ctrl+Enter"} sends">Send${keysHint(true)}</button>
       </div>
       <div class="hint" data-tags>${tagsHtml(s.draft)}</div>
@@ -1524,8 +1528,9 @@ async function loadChat(slug) {
   const first = !el.dataset.loaded;
   const following = first || atNewest(el);
   const count = el.children.length, y = el.scrollTop;
-  el.innerHTML = r.messages?.length ? r.messages.map((m) => bubble(m.who, m.who === "dashboard" ? m.text.replace(/^\[Added by the dashboard, not my words\]\s*/, "") : m.text,
+  el.innerHTML = r.messages?.length ? r.messages.map((m) => m.who === "tool" || m.who === "think" ? `<div class="step ${m.who}">${m.who === "tool" ? "⚙ " : "💭 "}${esc(m.text)}</div>` : bubble(m.who, m.who === "dashboard" ? m.text.replace(/^\[Added by the dashboard, not my words\]\s*/, "") : m.text,
       `${{ me: "You", agent: "Agent", dashboard: "Sent by the dashboard" }[m.who]}${m.queued ? " · waiting to send" : m.sending ? " · sending…" : m.at ? " · " + new Date(m.at).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : ""}`)).join("") : `<div class="hint">${r.saved === false ? "This session has no saved conversation yet." : "No messages yet."}</div>`;
+  if (f && status(f)[0] === "working") el.insertAdjacentHTML("beforeend", `<div class="typing" title="Agent is working"><i></i><i></i><i></i></div>`);
   el.dataset.loaded = "1";
   // Still sending: no state change marks it landing, so reload on every refresh until it has.
   el.dataset.at = r.messages?.some((m) => m.sending) ? "" : String(f?.st?.at) + (f?.st?.queue?.length || 0);
@@ -2314,6 +2319,7 @@ async function onClick(e) {
   }
   if (act === "retry") { await api(`${base}/retry`, {}); return say("Retrying setup."); }
   if (act === "unstick" || act === "stopturn") { const r = await api(`${base}/${act}`, { pid: b.dataset.pid }); return say(r.msg, r.ok ? "good" : "bad"); }
+  if (act === "forcestop") { if (!confirm("Force stop this agent? Its running turn and any step under it are killed.")) return; const r = await api(`${base}/forcestop`, {}); return say(r.msg, r.ok ? "good" : "bad"); }
   if (act === "continue") { const r = await api(`${base}/continue`, {}); return say(r.msg, r.ok ? "good" : "bad"); }
   if (act === "resume-bg" || act === "resume-term") { const r = await api(`${base}/resume`, { where: act === "resume-bg" ? "background" : "terminal" }); return say(r.msg, r.ok ? "good" : "bad"); }
   if (act === "unattach") { s.files.splice(+b.dataset.i, 1); return showAtts(slug); }

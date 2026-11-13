@@ -466,7 +466,8 @@ function chat(f) {
 }
 function readChat(file) {
   const out = []; let reply = null;
-  const flush = () => { if (reply) out.push(reply); reply = null; };
+  let steps = []; // tool use and thinking of the turn in progress; only the latest turn keeps them
+  const flush = (last) => { if (last) out.push(...steps); steps = []; if (reply) out.push(reply); reply = null; };
   let lines = [];
   try { lines = fs.readFileSync(file, "utf8").split("\n"); } catch {}
   for (const line of lines) {
@@ -481,9 +482,13 @@ function readChat(file) {
     } else if (e.type === "assistant" && Array.isArray(c)) {
       const text = c.filter((x) => x.type === "text").map((x) => x.text).join("\n").trim();
       if (text) reply = { who: "agent", text, at: e.timestamp };
+      for (const x of c) {
+        if (x.type === "tool_use") { const i = x.input || {}; steps.push({ who: "tool", text: x.name + ": " + String(i.command || i.file_path || i.pattern || i.path || i.description || i.url || "").split("\n")[0].slice(0, 160) }); }
+        else if (x.type === "thinking" && x.thinking?.trim()) steps.push({ who: "think", text: x.thinking.trim().slice(0, 600) });
+      }
     }
   }
-  flush();
+  flush(true);
   return { messages: out.slice(-80), saved: lines.length > 1 };
 }
 
@@ -1000,6 +1005,18 @@ function stopTurn(f) {
   return { ok: true, msg: "Stopped the turn. Carry on picks it back up." };
 }
 
+// Force stop: end the agent's turn whatever it is running in (background turn,
+// open terminal, or a step under either). The conversation is saved, so it can carry on later.
+function forceStop(f) {
+  const st = readState(f.slug);
+  const pids = [st.headlessPid, st.pid].filter(Boolean);
+  if (!pids.length) return { ok: false, msg: "Nothing is running." };
+  for (const p of pids) killTree(p);
+  childCache.clear();
+  writeState(f.slug, { pid: null, headlessPid: null, state: "interrupted", activity: "" }); // ponytail: queued messages still go out next, via pump
+  return { ok: true, msg: "Force stopped. Send a message or Carry on to continue." };
+}
+
 function notes(f) {
   // A removed feature's folder is gone, but its notes were merged into main.
   // A dropped feature that was built still has its notes in its folder.
@@ -1162,6 +1179,7 @@ const server = http.createServer(async (req, res) => {
     if (action === "continue") return send(res, 200, continueHeld(f));
     if (action === "retry") { startSetup(f); return send(res, 200, { ok: true }); }
     if (action === "unstick") return send(res, 200, unstick(f, b.pid));
+    if (action === "forcestop") return send(res, 200, forceStop(f));
     if (action === "stopturn") return send(res, 200, stopTurn(f));
     if (action === "merge") return send(res, 200, await merge(f));
     if (action === "pr") return send(res, 200, await openPR(f));
