@@ -462,10 +462,12 @@ function chat(f) {
   const landed = s && c.messages.some((m) => m.who !== "agent" && Date.parse(m.at) >= Date.parse(s.at));
   const sending = s && !landed ? [{ who: s.text.startsWith(AUTO) ? "dashboard" : "me", text: s.text, sending: true }] : [];
   const queued = (st.queue || []).map((q) => ({ who: "me", text: q, queued: true }));
-  return { messages: [...c.messages, ...sending, ...queued].slice(-80), saved: c.saved };
+  return { messages: [...c.messages, ...sending, ...queued].slice(-80), saved: c.saved,
+    // ponytail: the window isn't in the transcript; assume 200k, 1M once a turn has passed that.
+    ctx: c.ctx ? { tokens: c.ctx, max: c.ctx > 2e5 ? 1e6 : 2e5 } : null };
 }
 function readChat(file) {
-  const out = []; let reply = null;
+  const out = []; let reply = null, ctx = 0;
   const flush = () => { if (reply) out.push(reply); reply = null; };
   let lines = [];
   try { lines = fs.readFileSync(file, "utf8").split("\n"); } catch {}
@@ -479,12 +481,13 @@ function readChat(file) {
       flush();
       out.push({ who: text.startsWith(AUTO) ? "dashboard" : "me", text, at: e.timestamp });
     } else if (e.type === "assistant" && Array.isArray(c)) {
+      const u = e.message.usage; if (u && !e.isSidechain) ctx = (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0);
       const text = c.filter((x) => x.type === "text").map((x) => x.text).join("\n").trim();
       if (text) reply = { who: "agent", text, at: e.timestamp };
     }
   }
   flush();
-  return { messages: out.slice(-80), saved: lines.length > 1 };
+  return { messages: out.slice(-80), saved: lines.length > 1, ctx };
 }
 
 // Runs the turn a usage limit held back.
