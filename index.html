@@ -112,7 +112,7 @@
   .dropped { opacity:.75; }
   .plan { margin-top:8px; padding:2px 12px; border-left:3px solid var(--line); font-size:13px; }
   .chat { margin-top:10px; border:1px solid var(--line); border-radius:8px; }
-  .thread { max-height:486px; overflow:auto; padding:8px 12px 50px; display:flex; flex-direction:column; gap:10px; }
+  .thread { max-height:486px; overflow:auto; padding:8px 12px 70px; display:flex; flex-direction:column; gap:10px; }
   .bubble { max-width:85%; padding:6px 12px; border-radius:10px; font-size:13px; background:var(--bg); }
   .bubble.me { align-self:flex-end; background:var(--fg); color:var(--bg); }
   .bubble.me code, .bubble.me pre { background:transparent; }
@@ -120,7 +120,8 @@
   .bubble .who { font-size:11px; opacity:.65; margin-top:4px; }
   /* Message box: its own rounded box with Send on its right. Once the text
      wraps, the box widens into Send's place and Send drops below it. */
-  .compose::before { content:""; position:absolute; z-index:-1; left:-10px; right:-10px; top:0; bottom:0; background:linear-gradient(transparent, var(--card) 42px); pointer-events:none; }
+  .compose::before { content:""; position:absolute; z-index:-1; left:-10px; right:-10px; top:-28px; bottom:-300px; background:linear-gradient(transparent, var(--card) 62px); pointer-events:none; }
+  .chat { overflow:hidden; } .chat .hint { position:relative; z-index:2; }
   .compose { position:relative; z-index:1; margin:-42px 10px 0; transition:padding-bottom .28s cubic-bezier(.16,1,.3,1) .08s; }
   .compose textarea { display:block; min-height:0; resize:none; line-height:20px; padding:7px 12px; border-radius:10px; width:calc(100% - 118px); max-height:262px; overflow-y:auto;
     transition:width .28s cubic-bezier(.16,1,.3,1), height .18s ease; }
