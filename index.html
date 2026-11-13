@@ -1236,7 +1236,7 @@ function chatBox(f, s, cls) {
       <div class="compose ${s.multi ? "multi" : ""}">
         <div class="atts">${attsHtml(s)}</div>
         <textarea data-field="draft" data-mention rows="1" placeholder="Message the agent">${esc(s.draft)}</textarea>
-        ${cls === "working" ? `<button class="stopbtn" data-act="forcestop" title="Force stop" aria-label="Force stop"></button>` : ""}
+        ${cls === "working" ? `<button class="stopbtn" data-act="forcestop" title="Stop" aria-label="Stop"></button>` : ""}
         <button class="primary send" data-act="send" title="${MAC ? "⌘+Enter" : "Ctrl+Enter"} sends">Send${keysHint(true)}</button>
       </div>
       <div class="hint" data-tags>${tagsHtml(s.draft)}</div>
