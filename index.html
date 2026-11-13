@@ -120,7 +120,8 @@
   .bubble .who { font-size:11px; opacity:.65; margin-top:4px; }
   /* Message box: its own rounded box with Send on its right. Once the text
      wraps, the box widens into Send's place and Send drops below it. */
-  .compose { position:relative; margin:-42px 10px 0; transition:padding-bottom .28s cubic-bezier(.16,1,.3,1) .08s; }
+  .compose::before { content:""; position:absolute; z-index:-1; left:-10px; right:-10px; top:0; bottom:0; background:linear-gradient(transparent, var(--card) 42px); pointer-events:none; }
+  .compose { position:relative; z-index:1; margin:-42px 10px 0; transition:padding-bottom .28s cubic-bezier(.16,1,.3,1) .08s; }
   .compose textarea { display:block; min-height:0; resize:none; line-height:20px; padding:7px 12px; border-radius:10px; width:calc(100% - 118px); max-height:262px; overflow-y:auto;
     transition:width .28s cubic-bezier(.16,1,.3,1), height .18s ease; }
   .compose .send { position:absolute; right:0; bottom:0; width:108px; height:36px; padding:0; display:flex; align-items:center; justify-content:center; gap:8px; }
