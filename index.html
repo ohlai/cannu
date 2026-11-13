@@ -1608,7 +1608,8 @@ async function loadChat(slug) {
   // "following" if you're at the newest message (anywhere in it); then a new
   // message shows its start. Scrolled further up, nothing moves.
   const first = !el.dataset.loaded;
-  const following = first || atNewest(el);
+  // stick: you just sent a message, so follow down to the dots whatever the scroll says.
+  const following = first || atNewest(el) || !!el.dataset.stick;
   const count = el.children.length, y = el.scrollTop;
   const html = r.messages?.length ? r.messages.filter((m) => m.who !== "tool").map((m) => m.who === "think" ? `<div class="step think">${esc(m.text)}</div>` : bubble(m.who, m.who === "dashboard" ? m.text.replace(/^\[Added by the dashboard, not my words\]\s*/, "") : m.text,
       `${{ me: "You", agent: "Agent", dashboard: "Sent by the dashboard" }[m.who]}${m.queued ? " · waiting to send" : m.sending ? " · sending…" : m.at ? " · " + new Date(m.at).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : ""}`)).join("") : `<div class="hint">${r.saved === false ? "This session has no saved conversation yet." : "No messages yet."}</div>`;
@@ -1625,7 +1626,11 @@ async function loadChat(slug) {
   else if (following && (first || el.children.length !== count)) toNewest(el);
   else el.scrollTop = y; // same messages: stay exactly where you are
   // The dots appeared (or moved down): bring them into view, unless you've scrolled away.
-  if (following && el.querySelector(".typing") && !(first && typeof saved === "number")) el.scrollTop = el.scrollHeight;
+  // Again after layout settles: the popup redraw and the message box can change the thread's height after this.
+  if (following && el.querySelector(".typing") && !(first && typeof saved === "number")) {
+    el.scrollTop = el.scrollHeight; requestAnimationFrame(() => (el.scrollTop = el.scrollHeight));
+    delete el.dataset.stick;
+  }
 }
 // At the newest message: its start is at or above the top of the box.
 function atNewest(el) {
@@ -2427,9 +2432,10 @@ async function onClick(e) {
     let sent = [];
     if (chat) {
       chat.querySelector(".hint")?.remove();
+      const dots = chat.querySelector(".typing"); dots?.remove(); // the dots stay last, under your message
       const n = chat.children.length;
       chat.insertAdjacentHTML("beforeend", bubble("me", text, "You · sending…"));
-      sent = [...chat.children].slice(n); chat.scrollTop = chat.scrollHeight;
+      sent = [...chat.children].slice(n); if (dots) chat.append(dots); chat.scrollTop = chat.scrollHeight; chat.dataset.stick = "1";
     }
     if (box) { box.value = ""; fitCompose(box); }
     const r = await api(`${base}/feedback`, { text });
