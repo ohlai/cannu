@@ -252,12 +252,18 @@
   button.bell.off.on { opacity:.45; }
   /* No repos yet: the usual header and filters, with the stone logo and one button where the board goes.
      Things that need a repo stay visible but dimmed and unclickable. */
-  #welcome { text-align:center; padding:40px 0; }
+  /* Stone on the left, words and the button on the right; stacked on narrow screens. */
+  #welcome:not([hidden]) { display:flex; align-items:center; justify-content:center; gap:48px; padding:48px 0; }
   /* The image is square with empty space above and below the stone; cover crops it. */
-  #welcome img { width:min(380px, 75vw); aspect-ratio:1.45; object-fit:cover; display:block; margin:0 auto 24px; }
-  #welcome p { color:var(--mute); margin:0 0 20px; }
+  #welcome img { width:min(400px, 80vw); aspect-ratio:1.45; object-fit:cover; flex:none; }
+  #welcome .copy { max-width:380px; }
+  #welcome h2 { margin:0 0 10px; font-size:26px; line-height:1.15; letter-spacing:-.02em; }
+  #welcome p { color:var(--mute); margin:0 0 14px; line-height:1.5; }
+  #welcome ol { color:var(--mute); margin:0 0 22px; padding-left:20px; line-height:1.7; }
+  #welcome ol b { color:var(--fg); font-weight:600; }
+  @media (max-width:760px) { #welcome:not([hidden]) { flex-direction:column; text-align:center; gap:20px; } #welcome ol { text-align:left; } }
   body.norepo #board, body.norepo #list, body.norepo #boardMsg { display:none; }
-  body.norepo .filters, body.norepo #newOpen { opacity:.4; pointer-events:none; }
+  body.norepo .filters, body.norepo #newOpen, body.norepo #notify { opacity:.4; pointer-events:none; }
   .brand { display:flex; align-items:center; gap:14px; }
   .brand img { width:48px; height:48px; }
   @media (prefers-color-scheme: dark) { .brand img { filter:invert(1); } }
@@ -592,8 +598,16 @@
   <div id="list"></div>
   <div id="welcome" hidden>
     <img src="/docs/images/logo-stone.png" alt="">
-    <p>No repos yet. Add one and Cannu starts an agent board for it.</p>
-    <button class="primary" id="welcomeAdd">Add your first repo</button>
+    <div class="copy">
+      <h2>Point Cannu at a repo</h2>
+      <p>Each repo gets its own board. Every task on it runs as its own Claude agent, on its own branch and folder, so several can work at once without stepping on each other.</p>
+      <ol>
+        <li><b>Add a repo</b> from a folder on this machine</li>
+        <li><b>Describe a task</b> and an agent starts on it</li>
+        <li><b>Check and merge</b> when it's done, or open a pull request</li>
+      </ol>
+      <button class="primary" id="welcomeAdd">Add your first repo</button>
+    </div>
   </div>
 </main>
 <div id="mention" hidden></div>
