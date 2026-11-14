@@ -263,7 +263,10 @@
   #welcome ol b { color:var(--fg); font-weight:600; }
   @media (max-width:760px) { #welcome:not([hidden]) { flex-direction:column; text-align:center; gap:20px; } #welcome ol { text-align:left; } }
   body.norepo #board, body.norepo #list, body.norepo #boardMsg { display:none; }
-  body.norepo .filters, body.norepo #newOpen, body.norepo #notify { opacity:.4; pointer-events:none; }
+  body.norepo .filters, body.norepo #newOpen, body.norepo #notify, body.norepo #defaultsOpen, body.norepo #rings { opacity:.4; pointer-events:none; }
+  /* The welcome fills the space under the header, so the stone and words sit mid-screen. */
+  body.norepo main { min-height:100vh; box-sizing:border-box; display:flex; flex-direction:column; }
+  body.norepo #welcome { flex:1; }
   .brand { display:flex; align-items:center; gap:14px; }
   .brand img { width:48px; height:48px; }
   @media (prefers-color-scheme: dark) { .brand img { filter:invert(1); } }
