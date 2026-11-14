@@ -120,6 +120,70 @@
   .bubble.me { align-self:flex-end; background:var(--fg); color:var(--bg); }
   .bubble.me code, .bubble.me pre { background:transparent; }
   .bubble.dashboard { align-self:flex-end; background:none; border:1px dashed var(--line); color:var(--mute); }
+  .step { align-self:flex-start; max-width:92%; font:12px ui-monospace, monospace; color:var(--mute); white-space:pre-wrap; overflow-wrap:anywhere; }
+  .step.think { font-style:italic; border-left:2px solid var(--line); padding-left:8px; }
+  /* Six dot loaders. Markup: <span class="dots d1"><i></i><i></i><i></i></span>  (d1..d6, always 3 <i>).
+     Colour is currentColor. Size: set --s (box), --d (dot), --g (dot spacing) on the element.
+     Every segment eases in and out, and holds are short, so nothing lurches or stalls. */
+  .dots { --s:64px; --d:10px; --g:15px; --n:0;
+    position:relative; display:inline-block; width:var(--s); height:var(--s); color:var(--work); }
+  .dotbox { position:relative; flex:none; width:26px; height:26px; }
+  .dwrap { position:absolute; left:0; top:0; width:64px; height:64px; zoom:.4; transition:opacity .35s; } .dwrap.out { opacity:0; }
+  .dots i { position:absolute; left:calc(50% - var(--d)/2 + var(--n)*var(--g)); top:calc(50% - var(--d)/2);
+    width:var(--d); height:var(--d); border-radius:50%; background:currentColor; }
+  .dots i:nth-child(1) { --n:-1 } .dots i:nth-child(2) { --n:0 } .dots i:nth-child(3) { --n:1 }
+  .dots, .dots i { animation-timing-function:ease-in-out; animation-iteration-count:infinite }
+  @media (prefers-reduced-motion:reduce) { .dots, .dots i { animation:none !important } }
+  
+  /* 1  Wave: dots bob up and down, left leading */
+  .d1 i { animation-name:d1; animation-duration:1s }
+  .d1 i:nth-child(2) { animation-delay:-.15s } .d1 i:nth-child(3) { animation-delay:-.3s }
+  @keyframes d1 { 0%,100% { transform:translateY(4px) } 50% { transform:translateY(-4px) } }
+  
+  /* 2  Fade chase: brightness ripples right to left */
+  .d2 i { animation-name:d2; animation-duration:1s }
+  .d2 i:nth-child(3) { animation-delay:0s } .d2 i:nth-child(2) { animation-delay:-.15s } .d2 i:nth-child(1) { animation-delay:-.3s }
+  @keyframes d2 { 0%,100% { opacity:.12 } 50% { opacity:1 } }
+  
+  /* 3  Hop: the left dot arcs over the others to the right end while they shuffle left one slot */
+  .d3 i { animation-name:d3x; animation-duration:.8s }
+  .d3 i:nth-child(1) { animation-name:d3x1, d3y }
+  @keyframes d3x  { 0%,15% { translate:0 } 85%,100% { translate:calc(var(--g)*-1) } }
+  @keyframes d3x1 { 0%,15% { translate:0 } 85%,100% { translate:calc(var(--g)*2) } }
+  @keyframes d3y  { 0%,100% { transform:none } 50% { transform:translateY(-15px) } }
+  .d3 i { animation-timing-function:cubic-bezier(.45,0,.2,1) }
+  .d3 i:nth-child(1) { animation-timing-function:cubic-bezier(.45,0,.2,1), ease-in-out }
+  
+  /* 4  Swell: dots grow and shrink in a travelling wave */
+  .d4 i { animation-name:d4; animation-duration:1s }
+  .d4 i:nth-child(2) { animation-delay:-.15s } .d4 i:nth-child(3) { animation-delay:-.3s }
+  @keyframes d4 { 0%,100% { transform:scale(.85) } 50% { transform:scale(1.7) } }
+  
+  /* 5  Triangle shuffle: bright, mid and dim dots squeeze through the middle and rotate 120deg anticlockwise each step */
+  .d5, .d5 i, .d6 i { animation-timing-function:cubic-bezier(.45,0,.2,1) }
+  .d5 { rotate:180deg; animation-name:d5r; animation-duration:2.6s }
+  .d5 i { --n:0; animation-name:d5; animation-duration:2.6s }
+  .d5 i:nth-child(1) { --n:0; --a:0deg;   opacity:.7 }
+  .d5 i:nth-child(2) { --n:0; --a:120deg; opacity:.35 }
+  .d5 i:nth-child(3) { --n:0; --a:240deg; opacity:1 }
+  @keyframes d5  { 0%,4%,33.33%,37.33%,66.67%,70.67%,100% { transform:rotate(var(--a)) translateY(-11.5px) rotate(calc(var(--a)*-1)) }
+                   18.67%,52%,85.33% { transform:rotate(var(--a)) translateY(-3px) rotate(calc(var(--a)*-1)) } }
+  @keyframes d5r { 0%,4% { rotate:180deg } 33.33%,37.33% { rotate:60deg } 66.67%,70.67% { rotate:-60deg } 100% { rotate:-180deg } }
+  
+  /* 6  Cross: each step the left dot slides straight to the right end while the others shift left one slot.
+        The middle slot is small; each dot keeps its own brightness (bright, dim, mid). */
+  .d6 i { animation-duration:2s }
+  .d6 i:nth-child(1) { opacity:1;   animation-name:d6x }
+  .d6 i:nth-child(2) { opacity:.35; animation-name:d6y }
+  .d6 i:nth-child(3) { opacity:.7;  animation-name:d6z }
+  @keyframes d6x { 0%,4% { translate:0; scale:1 } 33.33%,37.33% { translate:calc(var(--g)*2); scale:1 } 66.67%,70.67% { translate:var(--g); scale:.5 } 100% { translate:0; scale:1 } }
+  @keyframes d6y { 0%,4% { translate:0; scale:.5 } 33.33%,37.33% { translate:calc(var(--g)*-1); scale:1 } 66.67%,70.67% { translate:var(--g); scale:1 } 100% { translate:0; scale:.5 } }
+  @keyframes d6z { 0%,4% { translate:0; scale:1 } 33.33%,37.33% { translate:calc(var(--g)*-1); scale:.5 } 66.67%,70.67% { translate:calc(var(--g)*-2); scale:1 } 100% { translate:0; scale:1 } }
+  
+  .typing { align-self:flex-start; display:flex; align-items:center; gap:4px; max-width:100%; padding:4px 2px; } .typing .activity { margin-left:6px; }
+  .stopbtn { position:absolute; right:124px; bottom:4px; width:28px; height:28px; padding:0; display:flex; align-items:center; justify-content:center; border:0; border-radius:8px; background:transparent; } .stopbtn:hover { background:var(--line); }
+  .stopbtn::before { content:""; width:11px; height:11px; border-radius:3px; background:var(--fg); }
+  .compose.multi .stopbtn { right:116px; bottom:4px; } .compose:has(.stopbtn):not(.multi) textarea { padding-right:40px; }
   .bubble .who { font-size:11px; opacity:.65; margin-top:4px; }
   /* Message box: its own rounded box with Send on its right. Once the text
      wraps, the box widens into Send's place and Send drops below it. */
@@ -1236,6 +1300,7 @@ function chatBox(f, s, cls) {
       <div class="compose ${s.multi ? "multi" : ""}">
         <div class="atts">${attsHtml(s)}</div>
         <textarea data-field="draft" data-mention rows="1" placeholder="Message the agent">${esc(s.draft)}</textarea>
+        ${cls === "working" ? `<button class="stopbtn" data-act="forcestop" title="Stop" aria-label="Stop"></button>` : ""}
         <button class="primary send" data-act="send" title="${MAC ? "⌘+Enter" : "Ctrl+Enter"} sends">Send${keysHint(true)}</button>
       </div>
       <div class="hint" data-tags>${tagsHtml(s.draft)}</div>
@@ -1272,7 +1337,7 @@ function card(f, inPop) {
         ${prev ? `<div class="meta">Continues “${esc(prev.title)}”</div>` : ""}
         ${linksHtml(f)}
         ${prLine(f)}`;
-  const body = `${st.activity && cls === "working" ? `<div class="activity" style="margin-top:6px">${esc(st.activity)}</div>` : ""}
+  const body = `${st.activity && cls === "working" && !(s.fb || inPop) ? `<div class="activity" style="margin-top:6px">${esc(st.activity)}</div>` : ""}
     ${banner}
     ${st.lastReply && !(s.fb || inPop) ? `<div class="reply md ${s.full ? "full" : ""}" data-act="expand" title="Click to show all of it">${md(st.lastReply)}</div>` : ""}
     ${st.denied?.length ? errBlock(s, "denied", "Blocked in the background run (open the session to allow):\n" + st.denied.join("\n")) : ""}`;
@@ -1520,6 +1585,27 @@ function msgBody(text) {
 
 // The conversation, newest at the bottom. Reloaded when the agent's state
 // changes; stays scrolled to the bottom unless you've scrolled up.
+// The dots' animation (1-6) follows the tool being used: the same tool name always gives the same one.
+function dotsFor(activity) {
+  let h = 0; for (const c of String(activity || "thinking").split(" ")[0]) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return h % 6 + 1;
+}
+// The working indicator at the end of the thread. When the tool changes, the old dots fade out as the new ones fade in.
+function setTyping(el, t, f) {
+  if (!f || status(f)[0] !== "working") return t?.remove();
+  if (!t) { t = document.createElement("div"); t.className = "typing"; t.title = "Agent is working"; t.innerHTML = '<span class="dotbox"></span><span class="activity"></span>'; }
+  el.append(t);
+  t.querySelector(".activity").textContent = f.st?.activity || "";
+  const box = t.querySelector(".dotbox"), cur = box.querySelector(".dwrap:not(.out)"), n = dotsFor(f.st?.activity);
+  if (cur?.dataset.n == n) return;
+  const w = document.createElement("span"); w.className = "dwrap"; w.dataset.n = n;
+  w.innerHTML = `<span class="dots d${n}"><i></i><i></i><i></i></span>`;
+  box.append(w);
+  if (!cur) return;
+  w.style.opacity = 0; cur.classList.add("out");
+  requestAnimationFrame(() => requestAnimationFrame(() => { w.style.opacity = 1; }));
+  setTimeout(() => cur.remove(), 400);
+}
 async function loadChat(slug) {
   const r = await api(`/api/features/${slug}/chat`);
   const el = $(`[data-slug="${slug}"] [data-chat]`); if (!el) return;
@@ -1528,13 +1614,19 @@ async function loadChat(slug) {
   // "following" if you're at the newest message (anywhere in it); then a new
   // message shows its start. Scrolled further up, nothing moves.
   const first = !el.dataset.loaded;
-  const following = first || atNewest(el);
+  // stick: you just sent a message, so follow down to the dots whatever the scroll says.
+  const following = first || atNewest(el) || !!el.dataset.stick;
   // Only 80 messages come back, so once a chat is that long the count stops
   // changing: the oldest one shown changes instead. Either means a new message.
   const sig = `${Math.min(r.messages?.length || 0, 80)}|${r.messages?.[0]?.at || ""}`, newMsg = sig !== el.dataset.sig, y = el.scrollTop;
   el.dataset.sig = sig;
-  el.innerHTML = r.messages?.length ? r.messages.map((m) => bubble(m.who, m.who === "dashboard" ? m.text.replace(/^\[Added by the dashboard, not my words\]\s*/, "") : m.text,
+  const html = r.messages?.length ? r.messages.filter((m) => m.who !== "tool").map((m) => m.who === "think" ? `<div class="step think">${esc(m.text)}</div>` : bubble(m.who, m.who === "dashboard" ? m.text.replace(/^\[Added by the dashboard, not my words\]\s*/, "") : m.text,
       `${{ me: "You", agent: "Agent", dashboard: "Sent by the dashboard" }[m.who]}${m.queued ? " · waiting to send" : m.sending ? " · sending…" : m.at ? " · " + new Date(m.at).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : ""}`)).join("") : `<div class="hint">${r.saved === false ? "This session has no saved conversation yet." : "No messages yet."}</div>`;
+  // Swap the messages but leave the working dots in the DOM: moving them would restart their animation.
+  const typing = el.querySelector(".typing");
+  for (const c of [...el.children]) if (c !== typing) c.remove();
+  el.insertAdjacentHTML("afterbegin", html);
+  setTyping(el, typing, f);
   el.dataset.loaded = "1";
   // Still sending: no state change marks it landing, so reload on every refresh until it has.
   el.dataset.at = r.messages?.some((m) => m.sending) ? "" : String(f?.st?.at) + (f?.st?.queue?.length || 0);
@@ -1542,6 +1634,12 @@ async function loadChat(slug) {
   if (first && typeof saved === "number") el.scrollTop = saved;
   else if (following && (first || newMsg)) toNewest(el);
   else el.scrollTop = y; // same messages: stay exactly where you are
+  // The dots appeared (or moved down): bring them into view, unless you've scrolled away.
+  // Again after layout settles: the popup redraw and the message box can change the thread's height after this.
+  if (following && el.querySelector(".typing") && !(first && typeof saved === "number")) {
+    el.scrollTop = el.scrollHeight; requestAnimationFrame(() => (el.scrollTop = el.scrollHeight));
+    delete el.dataset.stick;
+  }
 }
 // At the newest message: its start is at or above the top of the box.
 function atNewest(el) {
@@ -2324,6 +2422,7 @@ async function onClick(e) {
   }
   if (act === "retry") { await api(`${base}/retry`, {}); return say("Retrying setup."); }
   if (act === "unstick" || act === "stopturn") { const r = await api(`${base}/${act}`, { pid: b.dataset.pid }); return say(r.msg, r.ok ? "good" : "bad"); }
+  if (act === "forcestop") {const r = await api(`${base}/forcestop`, {}); return say(r.msg, r.ok ? "good" : "bad"); }
   if (act === "continue") { const r = await api(`${base}/continue`, {}); return say(r.msg, r.ok ? "good" : "bad"); }
   if (act === "resume-bg" || act === "resume-term") { const r = await api(`${base}/resume`, { where: act === "resume-bg" ? "background" : "terminal" }); return say(r.msg, r.ok ? "good" : "bad"); }
   if (act === "unattach") { s.files.splice(+b.dataset.i, 1); return showAtts(slug); }
@@ -2343,10 +2442,13 @@ async function onClick(e) {
     let sent = [];
     if (chat) {
       chat.querySelector(".hint")?.remove();
+      const dots = chat.querySelector(".typing"); dots?.remove(); // the dots stay last, under your message
       const n = chat.children.length;
       chat.insertAdjacentHTML("beforeend", bubble("me", text, "You · sending…"));
-      sent = [...chat.children].slice(n); chat.scrollTop = chat.scrollHeight;
-      chat.dataset.sig = `${Math.min(chat.children.length, 80)}|${(chat.dataset.sig || "").split("|")[1] || ""}`; // so the reload that swaps in the real bubble isn't a "new message"
+      sent = [...chat.children].slice(n); if (dots) chat.append(dots); chat.scrollTop = chat.scrollHeight; chat.dataset.stick = "1";
+      // So the reload that swaps in the real bubble isn't a "new message". Counted from the last sig, not the DOM: the dots and hidden tool steps would throw a DOM count off.
+      const [cnt, oldest = ""] = (chat.dataset.sig || "0|").split("|");
+      chat.dataset.sig = `${Math.min(+cnt + 1, 80)}|${oldest}`;
     }
     if (box) { box.value = ""; fitCompose(box); }
     const r = await api(`${base}/feedback`, { text });
