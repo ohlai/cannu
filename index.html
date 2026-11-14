@@ -256,12 +256,13 @@
   #welcome:not([hidden]) { display:flex; align-items:center; justify-content:center; gap:48px; padding:48px 0; }
   /* The image is square with empty space above and below the stone; cover crops it. */
   #welcome img { width:min(400px, 80vw); aspect-ratio:1.45; object-fit:cover; flex:none; }
-  #welcome .copy { max-width:380px; }
-  #welcome h2 { margin:0 0 10px; font-size:26px; line-height:1.15; letter-spacing:-.02em; }
+  /* The heading stays on one line and the text below wraps to its width. */
+  #welcome .copy { width:min-content; }
+  #welcome h2 { margin:0 0 10px; font-size:26px; line-height:1.15; letter-spacing:-.02em; white-space:nowrap; }
   #welcome p { color:var(--mute); margin:0 0 14px; line-height:1.5; }
   #welcome ol { color:var(--mute); margin:0 0 22px; padding-left:20px; line-height:1.7; }
   #welcome ol b { color:var(--fg); font-weight:600; }
-  @media (max-width:760px) { #welcome:not([hidden]) { flex-direction:column; text-align:center; gap:20px; } #welcome ol { text-align:left; } }
+  @media (max-width:760px) { #welcome:not([hidden]) { flex-direction:column; text-align:center; gap:20px; } #welcome ol { text-align:left; } #welcome .copy { width:auto; } #welcome h2 { white-space:normal; } }
   body.norepo #board, body.norepo #list, body.norepo #boardMsg { display:none; }
   body.norepo .filters, body.norepo #newOpen, body.norepo #notify, body.norepo #defaultsOpen, body.norepo #rings { opacity:.4; pointer-events:none; }
   /* The welcome fills the space under the header, so the stone and words sit mid-screen. */
