@@ -2927,7 +2927,7 @@ $("#repoAdd").onclick = async () => {
   if (r.msg.includes("cannu.json")) setTimeout(() => ask(`Added ${r.name}`, r.msg, "OK"), 250);
 };
 addEventListener("hashchange", () => { const n = decodeURIComponent(location.hash.slice(1)); if (n && n !== CUR) pickRepo(n); });
-fetch("/api/repos").then((r) => r.json()).then((list) => { REPOS = list; pickRepo(CUR); });
+fetch("/api/repos").then((r) => r.json()).then((list) => { REPOS = /[?&]norepo\b/.test(location.search) ? [] : list; pickRepo(CUR); }); // ?norepo previews the empty screen
 setInterval(refresh, 2000);
 </script>
 </body>
