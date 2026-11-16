@@ -20,7 +20,6 @@
   .grow { flex:1; min-width: 200px; }
   .title { font-weight:600; font-size:15px; }
   .meta { color:var(--mute); font-size:12.5px; }
-  .pill .detail { font-weight:400; color:var(--mute); }
   .pill { display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600; padding:3px 9px; border-radius:99px; border:1px solid var(--line); white-space:nowrap; }
   .dot { width:8px; height:8px; border-radius:50%; background:var(--mute); }
   .working .dot { background:var(--work); animation: pulse 1.2s infinite; }
@@ -121,6 +120,8 @@
   .bubble.me code, .bubble.me pre { background:transparent; }
   .bubble.dashboard { align-self:flex-end; background:none; border:1px dashed var(--line); color:var(--mute); }
   .step { align-self:flex-start; max-width:92%; font:12px ui-monospace, monospace; color:var(--mute); white-space:pre-wrap; overflow-wrap:anywhere; }
+  .stopped { align-self:center; display:flex; align-items:center; gap:6px; padding:6px 0; font-size:12px; color:var(--fg); }
+  .stopped::before { content:""; width:9px; height:9px; border-radius:2px; background:var(--fg); }
   .step.think { font-style:italic; border-left:2px solid var(--line); padding-left:8px; }
   /* Six dot loaders. Markup: <span class="dots d1"><i></i><i></i><i></i></span>  (d1..d6, always 3 <i>).
      Colour is currentColor. Size: set --s (box), --d (dot), --g (dot spacing) on the element.
@@ -788,7 +789,7 @@ function errBlock(s, key, text) {
   return `<div class="err ${s.errFull?.[key] ? "full" : ""}" data-act="errexpand" data-key="${key}" title="Click to show more"><pre>${esc(text)}</pre><button data-act="copy" title="Copy the error"><svg viewBox="0 0 24 12" aria-hidden="true"><path d="M8 1H6a5 5 0 0 0 0 10h2M16 1h2a5 5 0 0 1 0 10h-2M8 6h8"/></svg><span>Copy</span></button></div>`;
 }
 
-// [status, detail]. The detail (needs you, background…) shows after it.
+// [status, detail]. The pill shows one word; the detail (needs you, background…) is its tooltip.
 function kind(f) {
   if (!f.worktree) return f.status === "building" ? ["waiting", ""] : [schedOf(f) && !schedOf(f).missed ? "scheduled" : f.status, schedOf(f)?.missed ? "missed its start" : ""];
   const [cls, label] = status(f);
@@ -1290,7 +1291,7 @@ const port = (slug) => all.find((x) => x.slug === slug).port;
 const appUrl = (p) => `${location.protocol}//${location.hostname}:${p}`;
 // Time, status, then the bell, in that order on every card.
 const head = (f, cls, label, when) => { const [k, detail, name = k] = kind(f); return `<span class="meta">${when}</span>
-      <span class="pill ${k} ${cls}"><span class="dot"></span>${name}${detail ? `<span class="detail">· ${esc(detail)}</span>` : ""}</span>`; };
+      <span class="pill ${k} ${cls}"${detail ? ` title="${esc(detail)}"` : ""}><span class="dot"></span>${name}</span>`; };
 // The bell sits before the name: it's a setting on the feature, not an
 // action like the buttons at the bottom. It's on every card and always says
 // whether you'll hear about this feature: struck through (no) or ringing
@@ -1336,7 +1337,7 @@ function card(f, inPop) {
   const prev = f.continues && all.find((x) => x.slug === f.continues);
   let banner = "";
   if (setupStuck) banner = `<div class="banner">${f.setup.startsWith("failed") ? esc(f.setup) : "Setup was cut off (the dashboard or PC restarted)."} Retry picks up from the step it stopped at. <button data-act="retry">Retry setup</button></div>`;
-  else if (cls === "interrupted" || cls === "error") banner = `<div class="banner">${cls === "error" ? "The last background run failed or was stopped. Its output is below." : "This agent stopped mid-turn: the dashboard, the PC or its terminal closed before it finished."} Anything it changed is still there, but may not be committed.${limitFull() ? ` Your Claude usage limit is full until ${resetAt(limitFull().resets)}: Carry on in the background waits for that${DEF?.autoContinue !== false ? ", then runs by itself" : ""}.` : ""}<div class="row" style="margin-top:8px"><button class="primary" data-act="resume-bg">Carry on in the background</button><button data-act="resume-term">Carry on in a terminal</button></div></div>`;
+  else if (cls === "interrupted" || cls === "error") banner = `<div class="banner">${cls === "error" ? "The last background run failed or was stopped. Its output is below." : "This agent stopped mid-turn: the dashboard, the PC or its terminal closed before it finished."} Anything it changed is still there, but may not be committed.${limitFull() ? ` Your Claude usage limit is full until ${resetAt(limitFull().resets)}: Continue waits for that${DEF?.autoContinue !== false ? ", then runs by itself" : ""}.` : ""}<div class="row" style="margin-top:8px"><button class="primary" data-act="resume-bg">Continue</button></div></div>`;
   else if (cls === "stuck") {
     const w = f.stuck.waitingOn, quiet = ago(f.stuck.since).replace(" ago", "");
     banner = `<div class="banner">No activity from this agent for ${quiet}${f.stuck.on ? `. Last thing it did: ${esc(f.stuck.on)}` : ""}.
@@ -1641,7 +1642,7 @@ async function loadChat(slug) {
   // changing: the oldest one shown changes instead. Either means a new message.
   const sig = `${Math.min(r.messages?.length || 0, 80)}|${r.messages?.[0]?.at || ""}`, newMsg = sig !== el.dataset.sig, y = el.scrollTop;
   el.dataset.sig = sig;
-  const html = r.messages?.length ? r.messages.filter((m) => m.who !== "tool").map((m) => m.who === "think" ? `<div class="step think">${esc(m.text)}</div>` : bubble(m.who, m.who === "dashboard" ? m.text.replace(/^\[Added by the dashboard, not my words\]\s*/, "") : m.text,
+  const html = r.messages?.length ? r.messages.filter((m) => m.who !== "tool").map((m) => m.who === "think" ? `<div class="step think">${esc(m.text)}</div>` : m.who === "stopped" ? `<div class="stopped">${esc(m.text)} · ${new Date(m.at).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</div>` : bubble(m.who, m.who === "dashboard" ? m.text.replace(/^\[Added by the dashboard, not my words\]\s*/, "") : m.text,
       `${{ me: "You", agent: "Agent", dashboard: "Sent by the dashboard" }[m.who]}${m.queued ? " · waiting to send" : m.sending ? " · sending…" : m.at ? " · " + new Date(m.at).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : ""}`)).join("") : `<div class="hint">${r.saved === false ? "This session has no saved conversation yet." : "No messages yet."}</div>`;
   // Swap the messages but leave the working dots in the DOM: moving them would restart their animation.
   const typing = el.querySelector(".typing");
@@ -1789,7 +1790,7 @@ $("#sortPick").addEventListener("keydown", (e) => {
 
 function tile(f) {
   const [k, detail, name = k] = kind(f), cls = status(f)[0], st = f.st || {};
-  const pill = `<span class="pill ${k} ${cls}"><span class="dot"></span>${name}${detail ? `<span class="detail">· ${esc(detail)}</span>` : ""}</span>`;
+  const pill = `<span class="pill ${k} ${cls}"${detail ? ` title="${esc(detail)}"` : ""}><span class="dot"></span>${name}</span>`;
   const when = ago(st.at) || day(f.merged || f.dropped || f.created);
   return `<div class="tile" data-open="${f.slug}" tabindex="0">
     <div class="t">${esc(f.title)}</div>
@@ -2443,7 +2444,7 @@ async function onClick(e) {
   }
   if (act === "retry") { await api(`${base}/retry`, {}); return say("Retrying setup."); }
   if (act === "unstick" || act === "stopturn") { const r = await api(`${base}/${act}`, { pid: b.dataset.pid }); return say(r.msg, r.ok ? "good" : "bad"); }
-  if (act === "forcestop") {const r = await api(`${base}/forcestop`, {}); return say(r.msg, r.ok ? "good" : "bad"); }
+  if (act === "forcestop") { const r = await api(`${base}/forcestop`, {}); if (!r.ok) say(r.msg, "bad"); return refresh(); }
   if (act === "continue") { const r = await api(`${base}/continue`, {}); return say(r.msg, r.ok ? "good" : "bad"); }
   if (act === "resume-bg" || act === "resume-term") { const r = await api(`${base}/resume`, { where: act === "resume-bg" ? "background" : "terminal" }); return say(r.msg, r.ok ? "good" : "bad"); }
   if (act === "unattach") { s.files.splice(+b.dataset.i, 1); return showAtts(slug); }

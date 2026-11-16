@@ -34,10 +34,13 @@ function run(h) {
   const base = { session_id: h.session_id, headless };
   switch (h.hook_event_name) {
     case "SessionStart":
-      writeState(f.slug, { ...base, state: "idle", activity: "", started: true });
+      // A background turn is already "working" (set by the dashboard) and its
+      // prompt lands next: marking it idle here made the dots blink off.
+      writeState(f.slug, headless ? { ...base, started: true } : { ...base, state: "idle", activity: "", started: true });
       break;
     case "UserPromptSubmit": {
-      writeState(f.slug, { ...base, state: "working", activity: "thinking", lastPrompt: h.prompt });
+      // A new turn: any earlier Stop no longer explains this one. (headless() has already told the agent.)
+      writeState(f.slug, { ...base, state: "working", activity: "thinking", lastPrompt: h.prompt, stopped: null });
       const dir = notesDir(f);
       fs.mkdirSync(dir, { recursive: true });
       const file = path.join(dir, "prompts.md");
