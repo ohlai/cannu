@@ -222,7 +222,9 @@ export function liveStatus(st, running = false) {
   // not from the dashboard) fall back to "a hook fired in the last 90s".
   const recent = !st.pid && !st.headlessPid && st.at && Date.now() - new Date(st.at) < 90e3;
   let state = st.state || "";
-  if ((state === "working" || state === "needs-you") && !term && !bg && !recent) state = "interrupted";
+  // Stopped by you (Stop button): a hook from the dying turn can still land
+  // after the stop and say "working". That's not an interruption, it's idle.
+  if ((state === "working" || state === "needs-you") && !term && !bg && !recent) state = st.stopped ? "idle" : "interrupted";
   if (state === "starting" && !term && !recent) state = st.started ? "interrupted" : "not-started";
   if (state === "idle" && !term && !bg) state = "closed";
   return { state, open: term, background: bg };
