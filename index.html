@@ -2653,6 +2653,12 @@ async function openNew(label) {
   $("#newModel").innerHTML = modelOptions(keep, true);
 }
 $("#newOpen").onclick = () => openNew();
+// "n" opens New task, unless you're typing, a popup is open, or there's no repo yet.
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "n" || e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return;
+  if (e.target.closest?.("input, textarea, select, [contenteditable]") || document.querySelector("dialog[open]") || !REPOS.length) return;
+  e.preventDefault(); openNew();
+});
 // Closes at once; the server's work happens behind it. If it says no, it reopens with what you'd typed and why.
 async function addFeature(plan) {
   const typed = $("#newLabels [data-newpick]")?.value.replace(/\s+/g, " ").trim(); // typed in the + box but Enter never pressed: still meant
