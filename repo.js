@@ -1025,7 +1025,7 @@ function forceStop(f) {
   childCache.clear();
   const at = new Date().toISOString();
   // stops: shown in the chat; stopped: told to the agent with its next message.
-  writeState(f.slug, { pid: null, headlessPid: null, state: "interrupted", activity: "", lastReply: "Stopped by you.", stopped: at, stops: [...(st.stops || []), at].slice(-50) }); // ponytail: queued messages still go out next, via pump
+  writeState(f.slug, { pid: null, headlessPid: null, state: "idle", activity: "", lastReply: "Stopped by you.", stopped: at, stops: [...(st.stops || []), at].slice(-50) }); // ponytail: queued messages still go out next, via pump
   return { ok: true, msg: "Force stopped. Send a message or Carry on to continue." };
 }
 
