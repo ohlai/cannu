@@ -362,7 +362,7 @@ function headless(f, text, label, first = false) {
   const st = readState(f.slug);
   // Stopped last turn: tell the agent, or it carries on as if nothing happened.
   if (st.stopped) text += `\n\n---\n${AUTO}\nI stopped your previous turn before it finished.`;
-  writeState(f.slug, { state: "working", activity: label, denied: [], held: null, stopped: null });
+  writeState(f.slug, { state: "working", activity: "starting up", denied: [], held: null, stopped: null }); // label: kept for a held turn, not shown
   const session = first ? ["--session-id", f.sessionId] : ["--resume", st.session_id || f.sessionId];
   const d = defaults();
   const args = ["-p", ...session, "-n", f.slug, ...claudeBaseArgs(f),
