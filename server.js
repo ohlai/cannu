@@ -67,14 +67,15 @@ const plainName = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9._-]+/g,
 // Native folder dialog of the OS the server runs on (it's your own machine). "" = cancelled or none available.
 // Windows: the modern Explorer-style dialog (IFileOpenDialog, pick-folders mode), not the old tree FolderBrowserDialog.
 const WIN_PICK = `
-Add-Type -TypeDefinition @'
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -ReferencedAssemblies System.Windows.Forms -TypeDefinition @'
 using System; using System.Runtime.InteropServices;
 [ComImport, Guid("DC1C5A9C-E88A-4dde-A5A1-60F82A20AEF7")] class FOD {}
 [ComImport, Guid("43826D1E-E718-42EE-BC55-A1E261C37BFE"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
 interface IItem { void B(); void P(); void N(uint s, [MarshalAs(UnmanagedType.LPWStr)] out string n); }
 [ComImport, Guid("42f85136-db7e-439c-85f1-e4075d135fc8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
 interface IFD { [PreserveSig] int Show(IntPtr h); void a(); void b(); void c(); void d(); void e(); void SetOptions(uint o); void f(); void g(); void h(); void i(); void j(); void k(); void l(); void SetTitle([MarshalAs(UnmanagedType.LPWStr)] string t); void m(); void n(); void GetResult(out IItem r); }
-public static class Pick { public static string Run() { var d = (IFD)new FOD(); d.SetOptions(0x20 | 0x40); d.SetTitle("Choose a folder"); if (d.Show(IntPtr.Zero) != 0) return ""; IItem r; d.GetResult(out r); string p; r.N(0x80058000, out p); return p; } }
+public static class Pick { public static string Run() { var o = new System.Windows.Forms.Form { TopMost = true, ShowInTaskbar = false, Opacity = 0, StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen }; o.Show(); o.Activate(); var d = (IFD)new FOD(); d.SetOptions(0x20 | 0x40); d.SetTitle("Choose a folder"); int rc = d.Show(o.Handle); o.Close(); if (rc != 0) return ""; IItem r; d.GetResult(out r); string p; r.N(0x80058000, out p); return p; } }
 '@
 [Pick]::Run()`;
 function browseDir() {
