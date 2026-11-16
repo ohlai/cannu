@@ -64,6 +64,14 @@ function found() {
 const cleanDir = (dir) => path.resolve(String(dir || "").trim().replace(/^["']|["']$/g, ""));
 // The name is in addresses and folder names, so keep it plain.
 const plainName = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "");
+// Native folder dialog of the OS the server runs on (it's your own machine). "" = cancelled or none available.
+function browseDir() {
+  const [cmd, ...args] = process.platform === "win32"
+    ? ["powershell", "-NoProfile", "-STA", "-Command", "Add-Type -AssemblyName System.Windows.Forms; $f=New-Object System.Windows.Forms.FolderBrowserDialog; $o=New-Object System.Windows.Forms.Form -Property @{TopMost=$true}; if($f.ShowDialog($o) -eq 'OK'){$f.SelectedPath}"]
+    : process.platform === "darwin" ? ["osascript", "-e", "POSIX path of (choose folder)"]
+    : ["zenity", "--file-selection", "--directory"];
+  try { return execFileSync(cmd, args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true, timeout: 300000 }).trim().replace(/(.)\/$/, "$1"); } catch { return ""; }
+}
 const gitIn = (dir, ...args) => { try { return execFileSync("git", args, { cwd: dir, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true }).trim(); } catch { return ""; } };
 const readJson = (f) => { try { return JSON.parse(fs.readFileSync(f, "utf8")); } catch { return null; } };
 
@@ -184,6 +192,7 @@ const handler = async (req, res) => {
   }
   // Claude plan usage for the rings: one account for every repo, so served here.
   if (url.pathname === "/api/usage") return json(res, planUsage());
+  if (url.pathname === "/api/repos/browse" && req.method === "POST") return json(res, { dir: browseDir() });
   if (url.pathname === "/api/repos/found") return json(res, found());
   if (url.pathname === "/api/repos/inspect") return json(res, inspect(url.searchParams.get("dir")));
   if (url.pathname === "/api/repos/remove" && req.method === "POST") return json(res, await removeRepo((await readBody(req)).name));

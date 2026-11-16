@@ -615,7 +615,7 @@
   <div class="panel">
     <header><h2>Add a repo</h2><div class="hint">Cannu runs agents on it from a board of its own. A <code>cannu.json</code> in the repo says how to set it up, run and check it; without one it uses the defaults.</div></header>
     <div class="body">
-      <div class="field"><label for="repoDir">Folder</label><input type="text" id="repoDir" placeholder="C:\Users\you\github\my-project"></div>
+      <div class="field"><label for="repoDir">Folder</label><div class="row" style="gap:8px"><input type="text" id="repoDir" class="grow" placeholder="C:\Users\you\github\my-project"><button type="button" id="repoBrowse" title="Choose a folder in your file explorer">Browse…</button></div></div>
       <div class="field" id="foundField"><label>Suggested</label><div class="found" id="found"><div class="hint">Looking…</div></div></div>
       <div class="reposet" id="repoSet" hidden>
         <div class="field"><label for="repoNameIn">Name</label><input type="text" id="repoNameIn" placeholder="From the folder's name"><div class="hint">Shown in the dropdown and in the board's address.</div></div>
@@ -2917,6 +2917,12 @@ async function openAddRepo() {
 $("#found").addEventListener("click", (e) => {
   const b = e.target.closest("[data-dir]"); if (!b) return;
   $("#repoDir").value = b.dataset.dir; inspectDir();
+});
+$("#repoBrowse").addEventListener("click", async (e) => {
+  const b = e.currentTarget; b.disabled = true;
+  const r = await fetch("/api/repos/browse", { method: "POST" }).then((x) => x.json()).catch(() => ({}));
+  b.disabled = false;
+  if (r.dir) { $("#repoDir").value = r.dir; inspectDir(); }
 });
 $("#repoDir").addEventListener("input", () => { clearTimeout(inspectTimer); inspectTimer = setTimeout(inspectDir, 350); });
 $("#repoNameIn").addEventListener("input", () => { nameTouched = $("#repoNameIn").value.trim() !== ""; });
