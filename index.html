@@ -121,6 +121,7 @@
   .bubble.me code, .bubble.me pre { background:transparent; }
   .bubble.dashboard { align-self:flex-end; background:none; border:1px dashed var(--line); color:var(--mute); }
   .step { align-self:flex-start; max-width:92%; font:12px ui-monospace, monospace; color:var(--mute); white-space:pre-wrap; overflow-wrap:anywhere; }
+  .stopped { align-self:center; font-size:12px; color:var(--you); }
   .step.think { font-style:italic; border-left:2px solid var(--line); padding-left:8px; }
   /* Six dot loaders. Markup: <span class="dots d1"><i></i><i></i><i></i></span>  (d1..d6, always 3 <i>).
      Colour is currentColor. Size: set --s (box), --d (dot), --g (dot spacing) on the element.
@@ -1641,7 +1642,7 @@ async function loadChat(slug) {
   // changing: the oldest one shown changes instead. Either means a new message.
   const sig = `${Math.min(r.messages?.length || 0, 80)}|${r.messages?.[0]?.at || ""}`, newMsg = sig !== el.dataset.sig, y = el.scrollTop;
   el.dataset.sig = sig;
-  const html = r.messages?.length ? r.messages.filter((m) => m.who !== "tool").map((m) => m.who === "think" ? `<div class="step think">${esc(m.text)}</div>` : bubble(m.who, m.who === "dashboard" ? m.text.replace(/^\[Added by the dashboard, not my words\]\s*/, "") : m.text,
+  const html = r.messages?.length ? r.messages.filter((m) => m.who !== "tool").map((m) => m.who === "think" ? `<div class="step think">${esc(m.text)}</div>` : m.who === "stopped" ? `<div class="stopped">■ ${esc(m.text)} · ${new Date(m.at).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</div>` : bubble(m.who, m.who === "dashboard" ? m.text.replace(/^\[Added by the dashboard, not my words\]\s*/, "") : m.text,
       `${{ me: "You", agent: "Agent", dashboard: "Sent by the dashboard" }[m.who]}${m.queued ? " · waiting to send" : m.sending ? " · sending…" : m.at ? " · " + new Date(m.at).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : ""}`)).join("") : `<div class="hint">${r.saved === false ? "This session has no saved conversation yet." : "No messages yet."}</div>`;
   // Swap the messages but leave the working dots in the DOM: moving them would restart their animation.
   const typing = el.querySelector(".typing");

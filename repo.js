@@ -360,7 +360,9 @@ function headless(f, text, label, first = false) {
   if (full) return hold(f, { text, label, first }, full.resets);
   running.add(f.slug);
   const st = readState(f.slug);
-  writeState(f.slug, { state: "working", activity: label, denied: [], held: null });
+  // Stopped last turn: tell the agent, or it carries on as if nothing happened.
+  if (st.stopped) text += `\n\n---\n${AUTO}\nI stopped your previous turn before it finished.`;
+  writeState(f.slug, { state: "working", activity: label, denied: [], held: null, stopped: null });
   const session = first ? ["--session-id", f.sessionId] : ["--resume", st.session_id || f.sessionId];
   const d = defaults();
   const args = ["-p", ...session, "-n", f.slug, ...claudeBaseArgs(f),
@@ -385,6 +387,8 @@ function headless(f, text, label, first = false) {
       refreshUsage().then(() => { if (fullLimit()) writeState(f.slug, { limitResets: fullLimit().resets }); });
       return;
     }
+    // Killed by Stop: that's not an error, and forceStop already set the state.
+    if (readState(f.slug).stopped) { writeState(f.slug, { headlessPid: null }); return pump(f.slug); }
     writeState(f.slug, { state: code === 0 ? "idle" : "error", activity: "", headlessPid: null, lastReply: reply, denied });
     pump(f.slug); // send the next waiting message straight away
   });
@@ -462,7 +466,13 @@ function chat(f) {
   const landed = s && c.messages.some((m) => m.who !== "agent" && Date.parse(m.at) >= Date.parse(s.at));
   const sending = s && !landed ? [{ who: s.text.startsWith(AUTO) ? "dashboard" : "me", text: s.text, sending: true }] : [];
   const queued = (st.queue || []).map((q) => ({ who: "me", text: q, queued: true }));
-  return { messages: [...c.messages, ...sending, ...queued].slice(-80), saved: c.saved };
+  // Each Stop, placed before the first message that came after it.
+  const msgs = [...c.messages];
+  for (const at of st.stops || []) {
+    const i = msgs.findIndex((m) => m.at && Date.parse(m.at) > Date.parse(at));
+    msgs.splice(i < 0 ? msgs.length : i, 0, { who: "stopped", text: "Stopped by you", at });
+  }
+  return { messages: [...msgs, ...sending, ...queued].slice(-80), saved: c.saved };
 }
 function readChat(file) {
   const out = []; let reply = null;
@@ -1013,7 +1023,9 @@ function forceStop(f) {
   if (!pids.length) return { ok: false, msg: "Nothing is running." };
   for (const p of pids) killTree(p);
   childCache.clear();
-  writeState(f.slug, { pid: null, headlessPid: null, state: "interrupted", activity: "" }); // ponytail: queued messages still go out next, via pump
+  const at = new Date().toISOString();
+  // stops: shown in the chat; stopped: told to the agent with its next message.
+  writeState(f.slug, { pid: null, headlessPid: null, state: "interrupted", activity: "", lastReply: "Stopped by you.", stopped: at, stops: [...(st.stops || []), at].slice(-50) }); // ponytail: queued messages still go out next, via pump
   return { ok: true, msg: "Force stopped. Send a message or Carry on to continue." };
 }
 
