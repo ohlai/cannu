@@ -691,77 +691,6 @@ async function merge(f) {
   return { ok: true, msg: `Merged into ${MAIN} and stopped its preview. Not pushed.` };
 }
 
-// ---------- pull requests ----------
-//
-// The other way to ship: Cannu pushes the branch and opens a pull request
-// with the GitHub CLI, the repo's CI runs the checks, and the card shows
-// their result. Merge PR merges it on GitHub and pulls main back down. The
-// agent never pushes; only these do.
-
-const gh = (...args) => run("gh", args, { cwd: APP, timeout: 60000 });
-
-async function openPR(f) {
-  const why = readyToShip(f);
-  if (why) return { ok: false, msg: why };
-  const push = await run("git", ["push", "-u", "origin", f.branch], { cwd: APP, timeout: 120000 });
-  if (push.code !== 0) return { ok: false, msg: "git push failed.", out: tail(push.out) };
-  if (f.pr) { prPoll(f, true); return { ok: true, msg: `Pushed. Pull request #${f.pr} is updated.` }; }
-  const body = `${f.prompt || ""}\n\n---\nOpened by Cannu. The agent's notes are in \`${NOTES}/${f.slug}/\`.`;
-  const c = await gh("pr", "create", "--head", f.branch, "--base", MAIN, "--title", f.title, "--body", body);
-  // Already open (made by hand, or by an earlier Cannu): adopt it.
-  const url = (c.out.match(/https:\/\/\S+\/pull\/\d+/) || [])[0];
-  if (!url) return { ok: false, msg: "gh pr create failed. Is gh logged in (gh auth status) and does the repo have a GitHub remote?", out: tail(c.out) };
-  update(f.slug, { pr: Number(url.split("/").pop()), prUrl: url });
-  prPoll(loadFeatures().find((x) => x.slug === f.slug), true);
-  return { ok: true, msg: `Opened pull request #${url.split("/").pop()}.` };
-}
-
-// What GitHub says about each open PR, refreshed in the background so a
-// slow or offline GitHub never holds up the board.
-const prInfo = new Map();
-async function prPoll(f, force = false) {
-  const old = prInfo.get(f.slug);
-  if (!f.pr || old?.busy || (!force && old && Date.now() - old.at < 30e3)) return;
-  prInfo.set(f.slug, { ...old, busy: true });
-  const r = await gh("pr", "view", String(f.pr), "--json", "state,url,mergeable,reviewDecision,statusCheckRollup");
-  let info = { at: Date.now(), error: "couldn't reach GitHub" };
-  try {
-    const j = JSON.parse(r.out);
-    const runs = j.statusCheckRollup || [];
-    const res = runs.map((c) => (c.conclusion || c.state || c.status || "").toUpperCase());
-    const checks = !runs.length ? "none"
-      : res.some((x) => ["FAILURE", "ERROR", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED"].includes(x)) ? "failing"
-      : res.every((x) => ["SUCCESS", "NEUTRAL", "SKIPPED"].includes(x)) ? "passing" : "running";
-    info = { at: Date.now(), state: j.state, url: j.url, mergeable: j.mergeable, review: j.reviewDecision || "", checks, failed: runs.filter((c) => ["FAILURE", "ERROR", "TIMED_OUT"].includes((c.conclusion || c.state || "").toUpperCase())).map((c) => c.name || c.context) };
-  } catch {}
-  prInfo.set(f.slug, info);
-  // Merged on GitHub (from here or not): record it. A feature only has a pr
-  // while that PR is open, so this also catches a merged feature's second PR.
-  if (info.state === "MERGED") await afterPRMerged(f).catch(() => {});
-}
-setInterval(() => { for (const f of loadFeatures()) if (f.pr) prPoll(f); }, 10e3);
-
-async function mergePR(f) {
-  const m = await gh("pr", "merge", String(f.pr), "--merge");
-  if (m.code !== 0) { prPoll(f, true); return { ok: false, msg: "GitHub refused the merge.", out: tail(m.out) }; }
-  return afterPRMerged(f);
-}
-// main gets the merge from GitHub, then the feature is recorded as merged,
-// and that record is pushed so main on GitHub has it too.
-async function afterPRMerged(f) {
-  if (git(APP, "branch", "--show-current") !== MAIN || tryGit(APP, "status", "--porcelain").out) {
-    return { ok: false, msg: `Merged on GitHub, but the repo folder isn't a clean ${MAIN}, so Cannu didn't pull it. Clean it up and the card catches up within a minute.` };
-  }
-  const pull = await run("git", ["pull", "--no-rebase", "--no-edit", "origin", MAIN], { cwd: APP, timeout: 120000 });
-  if (pull.code !== 0) return { ok: false, msg: `Merged on GitHub, but pulling ${MAIN} failed.`, out: tail(pull.out) };
-  // pr cleared: new commits after this get a new pull request, not this one.
-  update(f.slug, { status: "merged", merged: stamp(), pr: null, prUrl: null }, `Merged: ${f.title} (#${f.pr})`);
-  await stopApp(f);
-  const push = await run("git", ["push", "origin", MAIN], { cwd: APP, timeout: 120000 });
-  prInfo.delete(f.slug);
-  return { ok: true, msg: `Merged #${f.pr} and pulled it into ${MAIN}.` + (push.code !== 0 ? ` Pushing the "Merged" record to ${MAIN} failed, so push it yourself.` : "") };
-}
-
 // A bad idea, planned or part built. A built one's app stops, but its folder
 // and branch stay (Remove worktree deletes the folder; an unmerged branch is
 // kept), so the work isn't lost.
@@ -928,8 +857,7 @@ async function buildOverview() {
     let live = liveStatus(st, running.has(f.slug));
     const stuckInfo = stuck(f, st, live);
     if (stuckInfo) live = { ...live, state: "stuck" };
-    if (f.pr) prPoll(f);
-    return { ...f, st, live, stuck: stuckInfo, settingUp: settingUp.has(f.slug), ahead: ahead || 0, behind: behind || 0, dirty, lastCommit, worktree: true, appUp, usage: usage(f), prInfo: prInfo.get(f.slug) || null };
+    return { ...f, st, live, stuck: stuckInfo, settingUp: settingUp.has(f.slug), ahead: ahead || 0, behind: behind || 0, dirty, lastCommit, worktree: true, appUp, usage: usage(f) };
   }));
 }
 // Every open page polls every 2s. They share one build at a time, and a
@@ -1055,7 +983,7 @@ const server = http.createServer(async (req, res) => {
     // A short list for scripts and other agents (Hermes): what each feature
     // is, where it's at, and the start of its agent's last reply.
     if (req.method === "GET" && url.pathname === "/api/status") {
-      const brief = (await overview()).map((f) => ({ slug: f.slug, title: f.title, status: f.status, label: f.label || "", agent: f.worktree ? f.live?.state || "" : "", activity: f.st?.activity || "", lastReply: String(f.st?.lastReply || "").slice(0, 600), queued: f.st?.queue?.length || 0, ahead: f.ahead || 0, pr: f.prInfo ? { number: f.pr, url: f.prUrl, state: f.prInfo.state, checks: f.prInfo.checks } : null, previewPort: f.worktree ? f.port : null, schedule: f.status === "planned" ? f.schedule || null : null }));
+      const brief = (await overview()).map((f) => ({ slug: f.slug, title: f.title, status: f.status, label: f.label || "", agent: f.worktree ? f.live?.state || "" : "", activity: f.st?.activity || "", lastReply: String(f.st?.lastReply || "").slice(0, 600), queued: f.st?.queue?.length || 0, ahead: f.ahead || 0, previewPort: f.worktree ? f.port : null, schedule: f.status === "planned" ? f.schedule || null : null }));
       return send(res, 200, brief);
     }
     if (req.method === "GET" && url.pathname === "/api/repo") return send(res, 200, { name: config.name, repo: APP, main: MAIN, ...repo(), agent: undefined, hasConfig: fs.existsSync(REPO_FILE), platform: process.platform });
@@ -1182,8 +1110,6 @@ const server = http.createServer(async (req, res) => {
     if (action === "forcestop") return send(res, 200, forceStop(f));
     if (action === "stopturn") return send(res, 200, stopTurn(f));
     if (action === "merge") return send(res, 200, await merge(f));
-    if (action === "pr") return send(res, 200, await openPR(f));
-    if (action === "prmerge") return send(res, 200, f.pr ? await mergePR(f) : { ok: false, msg: "No pull request yet." });
     if (action === "remove") return send(res, 200, await removeFeature(f));
     send(res, 404, {});
   } catch (e) {

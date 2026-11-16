@@ -69,7 +69,7 @@ function packageCheck() {
 // main and notes, which are read once below).
 export function repo() {
   const r = repoRaw();
-  return { main: "main", notes: "notes/features", setup: [], copy: [], app: "", seed: [], merge: "local", agent: {}, ...r, check: r.check ?? packageCheck() };
+  return { main: "main", notes: "notes/features", setup: [], copy: [], app: "", seed: [], agent: {}, ...r, check: r.check ?? packageCheck() };
 }
 export const MAIN = repo().main;
 export const NOTES = repo().notes;
@@ -301,7 +301,7 @@ export function brief(f) {
   const r = repo();
   return [
     `You are a feature agent started by Cannu, a dashboard that runs one agent per feature, each on its own branch and git worktree. Yours is "${f.title}" on branch ${f.branch}.`,
-    `Commit your work on this branch as you go. Never push, switch branches or touch other worktrees: Cannu merges your branch or opens its pull request.`,
+    `Commit your work on this branch as you go. Never push, switch branches or touch other worktrees: Cannu merges your branch.`,
     COMMIT_NOTES
       ? `Keep notes in ${NOTES}/${f.slug}/: log.md for what you did, decisions.md for each decision and why. prompts.md there is written for you; never edit it.`
       : `Keep notes in ${notesDir(f)}: log.md for what you did, decisions.md for each decision and why. That folder is outside git on purpose, so never git add it. prompts.md there is written for you; never edit it.`,
