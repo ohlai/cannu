@@ -15,9 +15,8 @@ and shows them all on one board. Node built-ins only, nothing to install.
   dropped), what each agent is doing, and what it's cost in time and money.
 - Chat with an agent from its card, or open the real session in a terminal.
 - Preview each task's own copy of the app.
-- Ship a task either way, from its card. **Check and merge** runs the
-  repo's check against the branch and merges it locally. **Open PR** pushes
-  it, opens a pull request and shows the CI result on the card.
+- Ship a task from its card. **Check and merge** runs the repo's check
+  against the branch and merges it locally. Pushing is left to you.
 - Every message I send is written word for word into the task's
   `prompts.md` by a hook, next to the agent's `log.md` and `decisions.md`.
 - Notifications when an agent needs me, finishes, fails or gets stuck.
@@ -48,8 +47,7 @@ something bigger.
 
 ## Running it
 
-You need Node 24 or later, git, and Claude Code logged in. You also need `gh`
-logged in if you want pull requests.
+You need Node 24 or later, git, and Claude Code logged in.
 
 ```
 node server.js                       # then open http://localhost:4000
@@ -86,8 +84,8 @@ at login. Restart after changing `config.json` or any `.js` file.
 docker compose up -d --build         # then open http://localhost:4000 and add a repo
 ```
 
-`compose.yml` runs Cannu on a Linux server, using the host's Claude Code and
-`gh` logins (log in on the host first). It mounts your home folder by default,
+`compose.yml` runs Cannu on a Linux server, using the host's Claude Code
+login (log in on the host first). It mounts your home folder by default,
 so Add repo can see your repos. Two rules matter:
 
 - Mounts use the same paths inside and outside the container. Git worktrees
@@ -136,7 +134,6 @@ popups rewrite the file, so comments wouldn't survive anyway.
 | `app` | | The command that runs the app. It must listen on `PORT` within 20 seconds. Used by Preview, by agents restarting it after a change, and by Check and merge (a fresh copy on port + 1000). With no app, Preview is greyed out and says why. Cannu's own is `scripts/preview.js`, which runs the task's copy of Cannu on a demo repo, never your real ones |
 | `seed` | `[]` | Commands run once the app is up (many apps make their tables when they start), such as loading demo data. Each gets 2 minutes. They run again on Retry setup, so they should skip what's already there |
 | `check` | `package.json`'s `check` or `test` script | Has to pass before Check and merge merges, run with `APP_URL` pointing at a fresh copy of the branch's app. Agents are told to run it before they say they're done. `""` means no check |
-| `merge` | `local` | Which ship button is the main (black) one on a card: `local` is Check and merge on this machine, `pr` is Open PR on GitHub with CI shown on the card. Both are always there |
 | `agent` | | Agent defaults, below. The Agent defaults popup writes these, storing only what differs from Cannu's built-in values |
 
 Every command runs in the task's folder through the shell, with these set:
@@ -253,16 +250,10 @@ comes from its name.
   on port + 1000, runs the `check` against it, and runs
   `git merge --no-ff` into main. On a conflict it aborts and fills in a
   message asking the agent to merge main in. It never pushes.
-- **Open PR / Push / Merge PR**: Open PR pushes the branch and opens a pull
-  request with `gh`. The card then shows the PR's CI checks, review and
-  conflicts, refreshed every 30 seconds. **Push** sends new commits to the PR.
-  **Merge PR** merges it on GitHub, pulls main down, records the task as
-  merged and pushes that record. A PR merged directly on GitHub is picked up
-  the same way.
 - **After merging**, the task's agent and folder stay until you remove
   them, so you can keep chatting with it. While it works its card shows
   working, and once it has committed something main doesn't have, it goes back
-  to waiting with Check and merge (or Open PR) to ship that too.
+  to waiting with Check and merge to ship that too.
 - **Remove worktree**: deletes the folder and branch once merged. The task
   stays in the list with its notes, read from main.
 - **Carry on** (on an interrupted card): resumes the session with a message
@@ -292,8 +283,8 @@ comes from its name.
   interrupted, only while the page is open. The options are silent, only
   tasks with their bell on, or all.
 - Every card ends with one row of buttons: everyday ones on the left, and on
-  the right in black the one that moves the task on. Drop, Check and merge,
-  Open PR, Merge PR and Remove worktree ask "are you sure?" first. Once one of
+  the right in black the one that moves the task on. Drop, Check and merge
+  and Remove worktree ask "are you sure?" first. Once one of
   them has done its job in a card's popup, the popup closes.
 
 ## Waiting and working

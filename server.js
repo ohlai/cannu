@@ -90,7 +90,6 @@ function inspect(dir) {
     app: scripts.start ? run("start") : scripts.dev ? run("dev") : has("server.js") ? "node server.js" : "",
     seed: [],
     check: scripts.check ? run("check") : scripts.test ? run("test") : "",
-    merge: "local",
     commitNotes: true,
   } };
 }
@@ -98,7 +97,7 @@ function inspect(dir) {
 // Writes the form's settings into the repo's cannu.json, keeping anything
 // else already there (agent defaults, notes folder), and commits just that
 // file if the repo is on its main branch. Says what it did.
-const FORM = ["main", "setup", "copy", "app", "seed", "check", "merge", "commitNotes"];
+const FORM = ["main", "setup", "copy", "app", "seed", "check", "commitNotes"];
 function writeRepoConfig(dir, settings) {
   const file = path.join(dir, "cannu.json");
   const before = readJson(file) || {};
@@ -106,7 +105,7 @@ function writeRepoConfig(dir, settings) {
   for (const k of FORM) if (k in settings) next[k] = settings[k];
   // Leave out what's only the default, so the file says what's special here.
   // check stays even when empty: "" means no check, not the package's script.
-  const DEF = { main: "main", setup: [], copy: [], app: "", seed: [], merge: "local", commitNotes: true };
+  const DEF = { main: "main", setup: [], copy: [], app: "", seed: [], commitNotes: true };
   for (const [k, v] of Object.entries(DEF)) if (JSON.stringify(next[k]) === JSON.stringify(v)) delete next[k];
   if (JSON.stringify(next) === JSON.stringify(before)) return "";
   fs.writeFileSync(file, JSON.stringify(next, null, 2) + "\n");

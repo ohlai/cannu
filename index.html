@@ -55,11 +55,6 @@
   .hint { color: var(--mute); font-size:12px; }
   .msg { margin-top:8px; font-size:13px; white-space:pre-wrap; }
   .msg.bad { color: var(--bad); } .msg.good { color: var(--idle); } .msg.warn { color: var(--you); }
-  /* The pull request line on a card: number, checks, review. */
-  .prline { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-top:6px; font-size:12.5px; color:var(--mute); }
-  .prline a { color:inherit; }
-  .prline .ck { padding:1px 8px; border-radius:999px; border:1px solid var(--line); }
-  .prline .ck.passing { color:var(--idle); border-color:var(--idle); } .prline .ck.failing { color:var(--bad); border-color:var(--bad); } .prline .ck.running { color:var(--work); border-color:var(--work); }
   /* Errors: a box about 3 lines tall that scrolls for the rest. */
   .err { position:relative; margin-top:8px; border:2px solid color-mix(in srgb, var(--bad) 30%, transparent); border-radius:7px; background:color-mix(in srgb, var(--bad) 5%, var(--card)); }
   .err { cursor:pointer; } .err.short { cursor:auto; } .err.full pre { max-height:calc(6 * 1.45em + 16px); }
@@ -603,7 +598,7 @@
       <ol>
         <li><b>Add a repo</b> from a folder on this machine</li>
         <li><b>Describe a task</b> and an agent starts on it</li>
-        <li><b>Check and merge</b> when it's done, or open a pull request</li>
+        <li><b>Check and merge</b> when it's done</li>
       </ol>
       <button class="primary" id="welcomeAdd">Add your first repo</button>
     </div>
@@ -621,10 +616,7 @@
         <div class="field"><label for="repoNameIn">Name</label><input type="text" id="repoNameIn" placeholder="From the folder's name"><div class="hint">Shown in the dropdown and in the board's address.</div></div>
         <h3>How to work on it</h3>
         <div class="hint" id="repoSetHint"></div>
-        <div class="two">
-          <div class="field"><label for="cMain">Main branch</label><input type="text" id="cMain"><div class="hint">Tasks start from it and merge into it.</div></div>
-          <div class="field"><label for="cMerge">Ship with</label><select id="cMerge"><option value="local">Check and merge, locally</option><option value="pr">A pull request on GitHub</option></select><div class="hint">The main button. Both are always on the card.</div></div>
-        </div>
+        <div class="field"><label for="cMain">Main branch</label><input type="text" id="cMain"><div class="hint">Tasks start from it and merge into it.</div></div>
         <div class="field"><label for="cSetup">Setup</label><textarea id="cSetup" rows="2" placeholder="pnpm install --frozen-lockfile"></textarea><div class="hint">Run once in each new task folder, in order. One command per line.</div></div>
         <div class="field"><label for="cCopy">Copy into each task</label><textarea id="cCopy" rows="2" placeholder=".env&#10;data/app.db"></textarea><div class="hint">Files and folders git doesn't have, copied from the main folder. One per line.</div></div>
         <div class="field"><label for="cApp">App</label><input type="text" id="cApp" placeholder="Empty if there's nothing to preview"><div class="hint">Runs each task's own copy. It must listen on <code>$PORT</code>, and gets <code>$DATA_DIR</code> for its data.</div></div>
@@ -767,9 +759,8 @@ const cap = (s) => s[0].toUpperCase() + s.slice(1);
 let filter = store.get("filter", "all");
 if (filter !== "all" && !KINDS.includes(filter)) filter = "all";
 let all = [];
-// From cannu.json: whether a merge or a pull request is the main way to ship,
-// and whether there's an app to preview.
-let REPO = { merge: "local", app: "", check: "" };
+// From cannu.json: whether there's an app to preview, and the check.
+let REPO = { app: "", check: "" };
 function loadRepo() { return api("/api/repo").then((r) => { REPO = r; document.title = "Cannu · " + r.name; render(all); }).catch(() => {}); }
 
 // One line of feedback under a card. Errors get a short scrolling box with a Copy button.
@@ -1351,8 +1342,7 @@ function card(f, inPop) {
         <div class="meta">${git}</div>
         ${spent(f.usage) ? `<div class="meta">${spent(f.usage)}</div>` : ""}
         ${prev ? `<div class="meta">Continues “${esc(prev.title)}”</div>` : ""}
-        ${linksHtml(f)}
-        ${prLine(f)}`;
+        ${linksHtml(f)}`;
   const body = `${st.activity && cls === "working" && !(s.fb || inPop) ? `<div class="activity" style="margin-top:6px">${esc(st.activity)}</div>` : ""}
     ${banner}
     ${st.lastReply && !(s.fb || inPop) ? `<div class="reply md ${s.full ? "full" : ""}" data-act="expand" title="Click to show all of it">${md(st.lastReply)}</div>` : ""}
@@ -1373,31 +1363,10 @@ function card(f, inPop) {
       <button data-act="open">Open session</button>
       <button data-act="fb">${s.fb ? "Hide chat" : "Chat"}${st.queue?.length ? ` (${st.queue.length} waiting)` : ""}</button>
       ${!f.merged ? `<button data-act="drop" title="A bad idea: stop it and keep it on record as dropped">Drop</button>` : ""}`,
-      !f.merged || f.ahead ? shipButtons(f) : `<button class="primary" data-act="remove">Remove worktree</button>`)}
+      !f.merged || f.ahead ? `<button class="primary" data-act="merge" title="Run the check against this branch and merge it locally. Nothing is pushed.">Check and merge</button>` : `<button class="primary" data-act="remove">Remove worktree</button>`)}
   </div>`;
 }
 
-// The pull request, once there is one: its number, what CI says, and review.
-function prLine(f) {
-  if (!f.pr) return "";
-  const p = f.prInfo || {};
-  const ck = { passing: "checks passing", failing: "checks failing" + (p.failed?.length ? ": " + p.failed.join(", ") : ""), running: "checks running", none: "no checks" }[p.checks];
-  const rv = { APPROVED: "approved", CHANGES_REQUESTED: "changes requested", REVIEW_REQUIRED: "review required" }[p.review];
-  return `<div class="prline"><a href="${esc(f.prUrl || p.url || "#")}" target="_blank" rel="noopener">PR #${f.pr} ↗</a>
-    ${p.error ? `<span class="ck">${esc(p.error)}</span>` : ck ? `<span class="ck ${p.checks}">${esc(ck)}</span>` : `<span class="ck">checking GitHub…</span>`}
-    ${rv ? `<span class="ck">${rv}</span>` : ""}${p.mergeable === "CONFLICTING" ? `<span class="ck failing">conflicts with ${esc(REPO.main || "main")}</span>` : ""}</div>`;
-}
-// Both ways to ship are always there. cannu.json's "merge" picks which one
-// is the black button; the other sits beside it.
-function shipButtons(f) {
-  const local = `<button data-act="merge" title="Run the check against this branch and merge it locally. Nothing is pushed.">Check and merge</button>`;
-  const pr = f.pr
-    ? `<button data-act="pr" title="Push the branch's new commits to its pull request">Push</button><button data-act="prmerge" title="Merge the pull request on GitHub and pull ${esc(REPO.main || "main")} down">Merge PR</button>`
-    : `<button data-act="pr" title="Push the branch and open a pull request. The repo's CI runs the checks, and the result shows here.">Open PR</button>`;
-  // Whichever comes last is the main one.
-  const prFirst = REPO.merge === "pr" || f.pr;
-  return (prFirst ? local + pr : pr + local).replace(/<button data-act="(merge|prmerge|pr)"([^>]*)>([^<]*)<\/button>$/, '<button class="primary" data-act="$1"$2>$3</button>');
-}
 
 // The same name and description boxes in New task, a planned task and Reopen.
 // The name and description boxes: one form for New task, a planned task and
@@ -2420,22 +2389,6 @@ async function onClick(e) {
     if (r.cmd) { try { await navigator.clipboard.writeText(r.cmd); r.msg += "\n(Copied.)"; } catch {} }
     return say(r.msg || "Opened a new terminal tab.", r.ok === false ? "bad" : "");
   }
-  if (act === "pr") {
-    const f = all.find((x) => x.slug === slug);
-    if (!f.pr && !(await ask(`Open a pull request for “${f.title}”?`, `Pushes ${f.branch} to GitHub and opens a pull request into ${REPO.main || "main"}. The repo's CI runs on it and the result shows on this card.`, "Open PR"))) return;
-    say(f.pr ? "Pushing…" : "Pushing and opening the pull request…");
-    const r = await api(`${base}/pr`, {});
-    return say(r.msg + (r.out ? "\n\n" + r.out : ""), r.ok ? "good" : "bad");
-  }
-  if (act === "prmerge") {
-    const f = all.find((x) => x.slug === slug), p = f.prInfo || {};
-    const warn = p.checks === "failing" ? " Its checks are failing." : p.checks === "running" ? " Its checks are still running." : "";
-    if (!(await ask(`Merge pull request #${f.pr}?`, `Merges it on GitHub, then pulls ${REPO.main || "main"} into this folder.${warn}`, "Merge PR"))) return;
-    say("Merging on GitHub…");
-    const r = await api(`${base}/prmerge`, {});
-    if (r.ok && popSlug === slug) closeModal($("#popDlg"));
-    return say(r.msg + (r.out ? "\n\n" + r.out : ""), r.ok ? "good" : "bad");
-  }
   if (act === "retry") { await api(`${base}/retry`, {}); return say("Retrying setup."); }
   if (act === "unstick" || act === "stopturn") { const r = await api(`${base}/${act}`, { pid: b.dataset.pid }); return say(r.msg, r.ok ? "good" : "bad"); }
   if (act === "forcestop") { const r = await api(`${base}/forcestop`, {}); if (!r.ok) say(r.msg, "bad"); return refresh(); }
@@ -2884,10 +2837,10 @@ const plain = (t) => String(t).toLowerCase().replace(/[^a-z0-9._-]+/g, "-").repl
 const lines = (id) => $(id).value.split("\n").map((x) => x.trim()).filter(Boolean);
 let nameTouched = false, loaded = null, inspectTimer = 0;
 function formValues() {
-  return { main: $("#cMain").value.trim() || "main", setup: lines("#cSetup"), copy: lines("#cCopy"), app: $("#cApp").value.trim(), seed: lines("#cSeed"), check: $("#cCheck").value.trim(), merge: $("#cMerge").value, commitNotes: $("#cNotes").checked };
+  return { main: $("#cMain").value.trim() || "main", setup: lines("#cSetup"), copy: lines("#cCopy"), app: $("#cApp").value.trim(), seed: lines("#cSeed"), check: $("#cCheck").value.trim(), commitNotes: $("#cNotes").checked };
 }
 function fillForm(c) {
-  $("#cMain").value = c.main || "main"; $("#cMerge").value = c.merge === "pr" ? "pr" : "local";
+  $("#cMain").value = c.main || "main";
   $("#cSetup").value = (c.setup || []).join("\n"); $("#cCopy").value = (c.copy || []).join("\n"); $("#cSeed").value = (c.seed || []).join("\n");
   $("#cApp").value = c.app || ""; $("#cCheck").value = c.check || ""; $("#cNotes").checked = c.commitNotes !== false;
 }

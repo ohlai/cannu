@@ -1,6 +1,6 @@
 ---
 name: cannu
-description: Start, check on, message and ship task agents in Cannu, the dashboard that runs one Claude Code agent per task on its own branch. Use when the user asks to start a task, asks what the agents are doing, wants to tell a task's agent something, or wants a task merged or a PR opened.
+description: Start, check on, message and ship task agents in Cannu, the dashboard that runs one Claude Code agent per task on its own branch. Use when the user asks to start a task, asks what the agents are doing, wants to tell a task's agent something, or wants a task merged.
 ---
 
 # Cannu
@@ -18,7 +18,7 @@ HTTP with JSON, so use `curl -s`.
   merged or dropped. For a building one, `agent` says what its agent is
   doing: working, idle, closed (finished its turn, your move), needs-you,
   stuck, interrupted or error. `lastReply` is the start of the agent's last
-  message, `pr` the pull request and its checks.
+  message.
 - `GET /api/features/<slug>/chat`: the whole conversation with one agent.
 
 When the user asks what's going on, lead with what needs them: needs-you, stuck,
@@ -37,8 +37,6 @@ All `POST`, with a JSON body.
   it's mid-turn, the message waits for the turn to end.
 - `/api/features/<slug>/resume` `{"where": "background"}` carries on an
   interrupted agent.
-- `/api/features/<slug>/pr` `{}` pushes the branch and opens (or updates)
-  its pull request.
 
 ## Ask the user first
 
@@ -47,7 +45,6 @@ for a yes in the same thread:
 
 - `/api/features/<slug>/merge`: runs the repo's check and merges into main
   locally.
-- `/api/features/<slug>/prmerge`: merges the pull request on GitHub.
 - `/api/features/<slug>/drop`, `/api/features/<slug>/remove`.
 
 Actions answer with `ok` and `msg` (creating a task answers with the task). Pass `msg` on as it is; on a failure, `out`

@@ -1,4 +1,4 @@
-# Cannu on a Linux server. Log in to Claude Code and gh on the host once, then
+# Cannu on a Linux server. Log in to Claude Code on the host once, then
 # `docker compose up -d --build`, open the page and add a repo. No config file
 # or .env needed. Your home folder is mounted (same path inside), so your
 # logins work and any repo under it can be added. To expose less, set
@@ -14,7 +14,7 @@ services:
     network_mode: host
     pid: host
     working_dir: ${PWD}
-    command: sh -c "gh auth setup-git 2>/dev/null; exec node server.js"
+    command: node server.js
     restart: unless-stopped
     environment:
       HOME: /home/node
@@ -28,4 +28,3 @@ services:
       - ${CANNU_REPOS:-${HOME}}:${CANNU_REPOS:-${HOME}}
       - ${HOME}/.claude:/home/node/.claude
       - ${HOME}/.claude.json:/home/node/.claude.json
-      - ${HOME}/.config/gh:/home/node/.config/gh
