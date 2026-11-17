@@ -722,8 +722,8 @@ function md(src) {
 // Filled bell: stem, body, clapper. Waves for "all", a slash for "silent".
 const bell = '<rect x="11.1" y="1.5" width="1.8" height="3.5" rx=".9"/><path d="M12 4c-3.6 0-6 2.9-6 6.4v3.4l-1.8 2.3c-.5.7-.1 1.4.7 1.4h14.2c.8 0 1.2-.7.7-1.4L18 13.8v-3.4C18 6.9 15.6 4 12 4z"/><path d="M9.3 19h5.4a2.7 2.7 0 0 1-5.4 0z"/>';
 const MAC = /Mac|iPhone|iPad/.test(navigator.platform);
-// The ↵ (or Ctrl + ↵) drawn on a button its key presses.
-const keysHint = (mod) => `<small class="keys" aria-hidden="true">${mod ? (MAC ? "⌘" : "Ctrl +") : ""}<svg viewBox="0 0 12 10"><path d="M10.5 1v3.5a1.5 1.5 0 0 1-1.5 1.5H1.5M4.5 3l-3 3 3 3"/></svg></small>`;
+// The ↵ (or Ctrl + ↵, or Shift + ↵ for "shift") drawn on a button its key presses.
+const keysHint = (mod) => `<small class="keys" aria-hidden="true">${mod === "shift" ? (MAC ? "⇧" : "Shift +") : mod ? (MAC ? "⌘" : "Ctrl +") : ""}<svg viewBox="0 0 12 10"><path d="M10.5 1v3.5a1.5 1.5 0 0 1-1.5 1.5H1.5M4.5 3l-3 3 3 3"/></svg></small>`;
 const svg = (p) => `<svg class="i" viewBox="0 0 24 24">${p}</svg>`;
 const ICON = {
   off: svg(`<mask id="cut"><rect width="24" height="24" fill="#fff"/><path d="M3 2l19 19" stroke="#000" stroke-width="5"/></mask><g mask="url(#cut)">${bell}</g><path class="w" d="M3 2l19 19"/>`),
@@ -1428,7 +1428,7 @@ function simpleCard(f, inPop) {
     ${s.reopen ? `<div style="margin-top:10px; display:grid; gap:8px">
       <div class="hint">A new task that continues this one. Start agent makes a new branch from current main with a new session, and the agent reads this task's notes first. Save as planned records it to start later.</div>
       ${taskForm((k) => `data-field="r${k}"`, { title: s.rtitle || f.title + " (continued)", prompt: s.rprompt, self: f.slug })}
-      <div class="row"><button class="second" data-act="reopen-plan" title="Records it on main without a branch or agent. Start it later from its card.">Save as planned</button><button class="primary" data-act="reopen-go" title="${MAC ? "⌘" : "Ctrl"}+Enter starts it">Start agent${keysHint(true)}</button></div>
+      <div class="row"><button class="second" data-act="reopen-plan" title="Records it on main without a branch or agent. Start it later from its card. Shift+Enter saves.">Save as planned${keysHint("shift")}</button><button class="primary" data-act="reopen-go" title="${MAC ? "⌘" : "Ctrl"}+Enter starts it">Start agent${keysHint(true)}</button></div>
     </div>` : ""}
     ${msgBlock(s)}
     ${inPop ? schedFoot(f) : ""}
@@ -2367,9 +2367,11 @@ host.addEventListener("change", async (e) => {
   refresh();
 });
 // Ctrl+Enter (or Cmd+Enter) does the main thing: send, or start the agent.
+// Shift+Enter in a reopen box saves it as planned.
 host.addEventListener("keydown", (e) => {
-  const act = KEYS[e.target.dataset?.field];
-  if (e.key !== "Enter" || !(e.ctrlKey || e.metaKey) || !act || e.isComposing) return;
+  const f = e.target.dataset?.field, shift = e.shiftKey && !(e.ctrlKey || e.metaKey) && /^r(title|prompt)$/.test(f);
+  const act = shift ? "reopen-plan" : KEYS[f];
+  if (e.key !== "Enter" || !(e.ctrlKey || e.metaKey || shift) || !act || e.isComposing) return;
   e.preventDefault();
   const scope = host.id === "popDlg" ? host : e.target.closest("[data-slug]");
   scope.querySelector(`[data-act="${act}"]`)?.click();
@@ -2713,10 +2715,14 @@ $("#newStart").addEventListener("click", (e) => {
   menuPick(b, "new", drawNewStart);
 });
 $("#addPlan").onclick = () => addFeature(true);
+$("#addPlan").title += " Shift+Enter saves.";
+$("#addPlan").insertAdjacentHTML("beforeend", keysHint("shift"));
 // Ctrl+Enter anywhere in these presses the main button. A disabled (busy) one ignores it.
+// Shift+Enter in New task saves as planned.
 for (const d of ["#newDlg", "#repoDlg", "#defaultsDlg"]) $(d).addEventListener("keydown", (e) => {
-  if (e.key !== "Enter" || !(e.ctrlKey || e.metaKey) || e.isComposing) return;
-  e.preventDefault(); $(d).querySelector("footer .primary").click();
+  if (e.key !== "Enter" || e.isComposing) return;
+  if (e.ctrlKey || e.metaKey) { e.preventDefault(); $(d).querySelector("footer .primary").click(); }
+  else if (e.shiftKey && d === "#newDlg") { e.preventDefault(); $("#addPlan").click(); }
 });
 
 // Agent defaults. Everything the dashboard sends an agent is listed: what you
