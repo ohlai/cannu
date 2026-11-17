@@ -14,7 +14,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
-import { execFileSync } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 
 export const META = path.dirname(fileURLToPath(import.meta.url));
 // config.json lists every repo. server.js starts one repo.js per repo and
@@ -183,16 +183,24 @@ export const resumeText = () => `${AUTO} ${defaults().resumeText}`;
 // Whether a recorded claude PID is still a running claude. Hooks only say
 // what an agent last reported; this says whether it's still alive. The name
 // is checked too, since after a restart the PID can belong to anything.
-let pidCache = { at: 0, pids: new Set() };
+// tasklist takes ~0.4s and every poll asks, so after the first (blocking)
+// read it refreshes in the background and callers get the last list at once.
+const TL = ["tasklist", ["/FO", "CSV", "/NH", "/FI", "IMAGENAME eq claude.exe"]];
+const parsePids = (out) => new Set([...out.matchAll(/^"claude\.exe","(\d+)"/gim)].map((m) => Number(m[1])));
+let pidCache = null, pidBusy = false;
 function winClaudePids() {
-  if (Date.now() - pidCache.at < 1500) return pidCache.pids;
-  let pids = new Set();
-  try {
-    const out = execFileSync("tasklist", ["/FO", "CSV", "/NH", "/FI", "IMAGENAME eq claude.exe"], { encoding: "utf8", windowsHide: true });
-    pids = new Set([...out.matchAll(/^"claude\.exe","(\d+)"/gim)].map((m) => Number(m[1])));
-  } catch {}
-  pidCache = { at: Date.now(), pids };
-  return pids;
+  if (!pidCache) {
+    let pids = new Set();
+    try { pids = parsePids(execFileSync(...TL, { encoding: "utf8", windowsHide: true })); } catch {}
+    pidCache = { at: Date.now(), pids };
+  } else if (!pidBusy && Date.now() - pidCache.at > 1500) {
+    pidBusy = true;
+    execFile(...TL, { encoding: "utf8", windowsHide: true }, (err, out) => {
+      pidBusy = false;
+      pidCache = { at: Date.now(), pids: err ? pidCache.pids : parsePids(out) };
+    });
+  }
+  return pidCache.pids;
 }
 export function claudeAlive(pid) {
   if (!pid) return false;
