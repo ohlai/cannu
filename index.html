@@ -119,64 +119,143 @@
   .stopped { align-self:center; display:flex; align-items:center; gap:6px; padding:6px 0; font-size:12px; color:var(--fg); }
   .stopped::before { content:""; width:9px; height:9px; border-radius:2px; background:var(--fg); }
   .step.think { font-style:italic; border-left:2px solid var(--line); padding-left:8px; }
-  /* Six dot loaders. Markup: <span class="dots d1"><i></i><i></i><i></i></span>  (d1..d6, always 3 <i>).
-     Colour is currentColor. Size: set --s (box), --d (dot), --g (dot spacing) on the element.
-     Every segment eases in and out, and holds are short, so nothing lurches or stalls. */
-  .dots { --s:64px; --d:10px; --g:15px; --n:0;
-    position:relative; display:inline-block; width:var(--s); height:var(--s); color:var(--work); }
-  .dotbox { position:relative; flex:none; width:26px; height:26px; }
-  .dwrap { position:absolute; left:0; top:0; width:64px; height:64px; zoom:.4; transition:opacity .35s; } .dwrap.out { opacity:0; }
-  .dots i { position:absolute; left:calc(50% - var(--d)/2 + var(--n)*var(--g)); top:calc(50% - var(--d)/2);
-    width:var(--d); height:var(--d); border-radius:50%; background:currentColor; }
-  .dots i:nth-child(1) { --n:-1 } .dots i:nth-child(2) { --n:0 } .dots i:nth-child(3) { --n:1 }
-  .dots, .dots i { animation-timing-function:ease-in-out; animation-iteration-count:infinite }
-  @media (prefers-reduced-motion:reduce) { .dots, .dots i { animation:none !important } }
+  /* 3x3 pixel-grid loaders. The "from the video" ones started as frame-by-frame fits of grid-animation.mp4; the agent-tool ones are new.
+     Markup: <span class="pix orbit"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>  (always 9 <i>, row by row)
+     From the video: orbit sweep breathe ripple scan (orbit reworked, sweep ripple scan slowed).
+     Agent tools: search fetch fire run spawn edit.
+     Size: --s (whole grid). Colour: blue, darker in light mode so it reads on white.
+     Cells: --gap (space between cells, as a fraction of --s: 0 = touching, .15 = big gaps; default .065) and
+     --r (corner rounding, 0 = square, 1 = circle; default .5). Both inherit, so set them on .pix or on any parent. */
+  .pix { --s:14px; display:inline-grid; grid-template-columns:repeat(3,1fr); width:var(--s); height:var(--s); flex:none;
+    gap:calc(var(--s) * var(--gap, .065));
+    color:#1d6fd1; filter:drop-shadow(0 0 calc(var(--s)*.08) currentColor); }
+  @media (prefers-color-scheme: dark) { .pix { color:#9ccbf0 } }
+  .pix i { background:currentColor; border-radius:calc(var(--r, .5) * 50%); opacity:0; animation:1s linear infinite; }
+  @media (prefers-reduced-motion:reduce) { .pix, .pix i { animation:none !important } .pix i { opacity:.85 } }
   
-  /* 1  Wave: dots bob up and down, left leading */
-  .d1 i { animation-name:d1; animation-duration:1s }
-  .d1 i:nth-child(2) { animation-delay:-.15s } .d1 i:nth-child(3) { animation-delay:-.3s }
-  @keyframes d1 { 0%,100% { transform:translateY(4px) } 50% { transform:translateY(-4px) } }
+  /* orbit: a comet runs clockwise round the ring, its tail fading behind it; the centre glows steadily.
+     (Started from the video's anticlockwise arc; now a sharper head, longer tail, other direction.) */
+  .orbit i { animation-name:pix-orbit; animation-duration:1s; animation-timing-function:ease-out }
+  .orbit i:nth-child(2) { animation-delay:-.875s } .orbit i:nth-child(3) { animation-delay:-.75s }  .orbit i:nth-child(6) { animation-delay:-.625s }
+  .orbit i:nth-child(9) { animation-delay:-.5s }   .orbit i:nth-child(8) { animation-delay:-.375s } .orbit i:nth-child(7) { animation-delay:-.25s }
+  .orbit i:nth-child(4) { animation-delay:-.125s }
+  .orbit i:nth-child(5) { animation:none; opacity:.35 }
+  @keyframes pix-orbit { 0% { opacity:.12 } 6% { opacity:1 } 20% { opacity:.6 } 40% { opacity:.25 } 55%,100% { opacity:.12 } }
   
-  /* 2  Fade chase: brightness ripples right to left */
-  .d2 i { animation-name:d2; animation-duration:1s }
-  .d2 i:nth-child(3) { animation-delay:0s } .d2 i:nth-child(2) { animation-delay:-.15s } .d2 i:nth-child(1) { animation-delay:-.3s }
-  @keyframes d2 { 0%,100% { opacity:.12 } 50% { opacity:1 } }
+  /* sweep: the middle row fills left to right, then empties left to right. */
+  .sweep i:nth-child(n+4):nth-child(-n+6) { animation-name:pix-sweep; animation-duration:.65s }
+  .sweep i:nth-child(4) { animation-delay:-.078s } .sweep i:nth-child(6) { animation-delay:-.52s }
+  @keyframes pix-sweep { 0%,100% { opacity:.05 } 10% { opacity:.18 } 15% { opacity:.45 } 20% { opacity:.83 } 25% { opacity:.91 }
+    30%,65% { opacity:1 } 70% { opacity:.82 } 75% { opacity:.5 } 80% { opacity:.3 } 85% { opacity:.05 } }
   
-  /* 3  Hop: the left dot arcs over the others to the right end while they shuffle left one slot */
-  .d3 i { animation-name:d3x; animation-duration:.8s }
-  .d3 i:nth-child(1) { animation-name:d3x1, d3y }
-  @keyframes d3x  { 0%,15% { translate:0 } 85%,100% { translate:calc(var(--g)*-1) } }
-  @keyframes d3x1 { 0%,15% { translate:0 } 85%,100% { translate:calc(var(--g)*2) } }
-  @keyframes d3y  { 0%,100% { transform:none } 50% { transform:translateY(-15px) } }
-  .d3 i { animation-timing-function:cubic-bezier(.45,0,.2,1) }
-  .d3 i:nth-child(1) { animation-timing-function:cubic-bezier(.45,0,.2,1), ease-in-out }
+  /* breathe: one solid square fades out, rests dark, fades back in and holds. */
+  .breathe i { animation-name:pix-breathe; animation-duration:1.205s }
+  @keyframes pix-breathe { 0%,100% { opacity:.84 } 5% { opacity:.5 } 10% { opacity:.22 } 15% { opacity:.17 } 20% { opacity:.05 }
+    25%,32% { opacity:0 } 35% { opacity:.06 } 40% { opacity:.12 } 45% { opacity:.36 } 50% { opacity:.78 } 55% { opacity:.95 } 60%,95% { opacity:.98 } }
   
-  /* 4  Swell: dots grow and shrink in a travelling wave */
-  .d4 i { animation-name:d4; animation-duration:1s }
-  .d4 i:nth-child(2) { animation-delay:-.15s } .d4 i:nth-child(3) { animation-delay:-.3s }
-  @keyframes d4 { 0%,100% { transform:scale(.85) } 50% { transform:scale(1.7) } }
+  /* ripple: centre, then edges, then corners light and fade, so rings pulse outwards. */
+  .ripple i { animation-name:pix-ripple-k; animation-duration:.9s }
+  .ripple i:nth-child(even) { animation-name:pix-ripple-e }
+  .ripple i:nth-child(5) { animation-name:pix-ripple-c }
+  @keyframes pix-ripple-k { 0%,100% { opacity:.7 } 5% { opacity:.88 } 10% { opacity:.89 } 15%,30% { opacity:.96 } 40% { opacity:.92 }
+    45% { opacity:.8 } 50% { opacity:.69 } 55% { opacity:.38 } 60% { opacity:.27 } 65%,75% { opacity:.21 } 85% { opacity:.3 } 90% { opacity:.42 } 95% { opacity:.62 } }
+  @keyframes pix-ripple-e { 0%,10% { opacity:.97 } 15% { opacity:.95 } 20% { opacity:.84 } 25% { opacity:.71 } 30% { opacity:.55 } 35% { opacity:.43 }
+    40% { opacity:.34 } 45% { opacity:.27 } 50% { opacity:.18 } 55% { opacity:.15 } 60% { opacity:.22 } 65% { opacity:.29 } 70% { opacity:.61 }
+    75% { opacity:.8 } 80% { opacity:.89 } 85% { opacity:.94 } 90%,100% { opacity:.96 } }
+  @keyframes pix-ripple-c { 0%,100% { opacity:.76 } 5% { opacity:.68 } 10% { opacity:.67 } 15% { opacity:.59 } 20% { opacity:.51 } 25% { opacity:.39 }
+    30% { opacity:.35 } 35% { opacity:.47 } 40% { opacity:.6 } 45% { opacity:.76 } 50% { opacity:.87 } 55% { opacity:.91 } 60%,65% { opacity:.92 }
+    70% { opacity:.94 } 75%,80% { opacity:.95 } 85% { opacity:.91 } 90% { opacity:.84 } 95% { opacity:.82 } }
   
-  /* 5  Triangle shuffle: bright, mid and dim dots squeeze through the middle and rotate 120deg anticlockwise each step */
-  .d5, .d5 i, .d6 i { animation-timing-function:cubic-bezier(.45,0,.2,1) }
-  .d5 { rotate:180deg; animation-name:d5r; animation-duration:2.6s }
-  .d5 i { --n:0; animation-name:d5; animation-duration:2.6s }
-  .d5 i:nth-child(1) { --n:0; --a:0deg;   opacity:.7 }
-  .d5 i:nth-child(2) { --n:0; --a:120deg; opacity:.35 }
-  .d5 i:nth-child(3) { --n:0; --a:240deg; opacity:1 }
-  @keyframes d5  { 0%,4%,33.33%,37.33%,66.67%,70.67%,100% { transform:rotate(var(--a)) translateY(-11.5px) rotate(calc(var(--a)*-1)) }
-                   18.67%,52%,85.33% { transform:rotate(var(--a)) translateY(-3px) rotate(calc(var(--a)*-1)) } }
-  @keyframes d5r { 0%,4% { rotate:180deg } 33.33%,37.33% { rotate:60deg } 66.67%,70.67% { rotate:-60deg } 100% { rotate:-180deg } }
+  /* scan: cells go out one by one in reading order, then come back in the same order. */
+  .scan i { animation-name:pix-scan; animation-duration:.65s; animation-timing-function:ease-in-out }
+  .scan i:nth-child(1) { animation-delay:-.575s } .scan i:nth-child(2) { animation-delay:-.526s } .scan i:nth-child(3) { animation-delay:-.461s }
+  .scan i:nth-child(4) { animation-delay:-.455s } .scan i:nth-child(5) { animation-delay:-.407s } .scan i:nth-child(6) { animation-delay:-.365s }
+  .scan i:nth-child(7) { animation-delay:-.365s } .scan i:nth-child(8) { animation-delay:-.300s } .scan i:nth-child(9) { animation-delay:-.243s }
+  @keyframes pix-scan { 0%,100% { opacity:.5 } 5% { opacity:.3 } 12% { opacity:.18 } 25% { opacity:.15 } 33% { opacity:.3 } 37% { opacity:.5 }
+    42% { opacity:.8 } 48%,88% { opacity:1 } 95% { opacity:.8 } }
   
-  /* 6  Cross: each step the left dot slides straight to the right end while the others shift left one slot.
-        The middle slot is small; each dot keeps its own brightness (bright, dim, mid). */
-  .d6 i { animation-duration:2s }
-  .d6 i:nth-child(1) { opacity:1;   animation-name:d6x }
-  .d6 i:nth-child(2) { opacity:.35; animation-name:d6y }
-  .d6 i:nth-child(3) { opacity:.7;  animation-name:d6z }
-  @keyframes d6x { 0%,4% { translate:0; scale:1 } 33.33%,37.33% { translate:calc(var(--g)*2); scale:1 } 66.67%,70.67% { translate:var(--g); scale:.5 } 100% { translate:0; scale:1 } }
-  @keyframes d6y { 0%,4% { translate:0; scale:.5 } 33.33%,37.33% { translate:calc(var(--g)*-1); scale:1 } 66.67%,70.67% { translate:var(--g); scale:1 } 100% { translate:0; scale:.5 } }
-  @keyframes d6z { 0%,4% { translate:0; scale:1 } 33.33%,37.33% { translate:calc(var(--g)*-1); scale:.5 } 66.67%,70.67% { translate:calc(var(--g)*-2); scale:1 } 100% { translate:0; scale:1 } }
+  /* ---- Agent tools (new designs, not from the video) ---- */
   
+  /* search (grep, glob): a 2x2 lens slides round the four quadrants, pausing on each. The centre is always under it. */
+  .search i { animation-duration:1.6s; animation-timing-function:ease-in-out }
+  .search i:nth-child(odd) { animation-name:pix-search-k }
+  .search i:nth-child(even) { animation-name:pix-search-e }
+  .search i:nth-child(5) { animation-name:none; opacity:1 }
+  .search i:nth-child(3), .search i:nth-child(6) { animation-delay:-1.2s }
+  .search i:nth-child(9), .search i:nth-child(8) { animation-delay:-.8s }
+  .search i:nth-child(7), .search i:nth-child(4) { animation-delay:-.4s }
+  @keyframes pix-search-k { 0%,21% { opacity:1 } 29%,92% { opacity:.12 } 100% { opacity:1 } }
+  @keyframes pix-search-e { 0%,46% { opacity:1 } 54%,92% { opacity:.12 } 100% { opacity:1 } }
+  
+  /* fetch (web): data drips down the three columns at different times, like packets arriving. */
+  .fetch i { animation-name:pix-fetch; animation-duration:1.2s; animation-timing-function:ease-out }
+  .fetch i:nth-child(4) { animation-delay:-1.06s } .fetch i:nth-child(7) { animation-delay:-.92s }
+  .fetch i:nth-child(2) { animation-delay:-.72s }  .fetch i:nth-child(5) { animation-delay:-.58s } .fetch i:nth-child(8) { animation-delay:-.44s }
+  .fetch i:nth-child(3) { animation-delay:-.96s }  .fetch i:nth-child(6) { animation-delay:-.82s } .fetch i:nth-child(9) { animation-delay:-.68s }
+  @keyframes pix-fetch { 0% { opacity:.1 } 8% { opacity:1 } 40%,100% { opacity:.1 } }
+  
+  /* fire: flames lick upward. Each column runs at its own speed with two flares per cycle, so it never quite repeats;
+     the bottom row burns hottest and the top row only catches the tips. */
+  .fire i { animation-name:pix-fire; animation-timing-function:ease-out }
+  .fire i:nth-child(-n+3) { --lo:.05; --hi:.6 } .fire i:nth-child(n+4):nth-child(-n+6) { --lo:.15; --hi:.85 } .fire i:nth-child(n+7) { --lo:.45; --hi:1 }
+  .fire i:nth-child(3n+1) { animation-duration:.62s } .fire i:nth-child(3n+2) { animation-duration:.5s } .fire i:nth-child(3n) { animation-duration:.56s }
+  .fire i:nth-child(4) { animation-delay:-.55s } .fire i:nth-child(1) { animation-delay:-.48s }
+  .fire i:nth-child(8) { animation-delay:-.3s }  .fire i:nth-child(5) { animation-delay:-.23s } .fire i:nth-child(2) { animation-delay:-.16s }
+  .fire i:nth-child(9) { animation-delay:-.18s } .fire i:nth-child(6) { animation-delay:-.11s } .fire i:nth-child(3) { animation-delay:-.04s }
+  @keyframes pix-fire { 0%,30%,50%,80%,100% { opacity:var(--lo) } 8%,58% { opacity:var(--hi) } }
+  
+  /* run (bash): a ">" prompt with a blinking cursor at the bottom right. The prompt pulses gently. */
+  .run i:nth-child(1), .run i:nth-child(5), .run i:nth-child(7) { animation-name:pix-run-p; animation-duration:1.8s; animation-timing-function:ease-in-out }
+  .run i:nth-child(5) { animation-delay:-1.68s } .run i:nth-child(7) { animation-delay:-1.56s }
+  .run i:nth-child(9) { animation-name:pix-run-c; animation-duration:.9s; animation-timing-function:step-end }
+  @keyframes pix-run-p { 0%,100% { opacity:.75 } 15% { opacity:1 } 50% { opacity:.6 } }
+  @keyframes pix-run-c { 0% { opacity:1 } 55% { opacity:.08 } }
+  
+  /* spawn (subagents): the centre splits through the top and bottom edges into two dots at opposite corners, they chase
+     each other one lap clockwise round the ring with fading trails, and drop back into the centre from the edges.
+     Every move, splitting out and chasing alike, takes 0.15s. Keyframes are generated from that path: 1.85s loop, 0.2s trail. */
+  .spawn i { animation-duration:1.85s }
+  .spawn i:nth-child(1) { animation-name:pix-spawn1 }
+  @keyframes pix-spawn1 { 0% { opacity:0.08 } 36.2% { opacity:0.08 } 37.8% { opacity:1 } 45.9% { opacity:1 } 56.8% { opacity:0.08 } 68.6% { opacity:0.08 } 70.3% { opacity:1 } 78.4% { opacity:1 } 89.2% { opacity:0.08 } 100% { opacity:0.08 } }
+  .spawn i:nth-child(2) { animation-name:pix-spawn2 }
+  @keyframes pix-spawn2 { 0% { opacity:0.08 } 11.9% { opacity:0.08 } 13.5% { opacity:1 } 21.6% { opacity:1 } 32.4% { opacity:0.08 } 44.3% { opacity:0.08 } 45.9% { opacity:1 } 54.1% { opacity:1 } 64.9% { opacity:0.08 } 76.8% { opacity:0.08 } 78.4% { opacity:1 } 86.5% { opacity:1 } 97.3% { opacity:0.08 } 100% { opacity:0.08 } }
+  .spawn i:nth-child(3) { animation-name:pix-spawn3 }
+  @keyframes pix-spawn3 { 0% { opacity:0.08 } 20% { opacity:0.08 } 21.6% { opacity:1 } 29.7% { opacity:1 } 40.5% { opacity:0.08 } 52.4% { opacity:0.08 } 54.1% { opacity:1 } 62.2% { opacity:1 } 73% { opacity:0.08 } 100% { opacity:0.08 } }
+  .spawn i:nth-child(4) { animation-name:pix-spawn4 }
+  @keyframes pix-spawn4 { 0% { opacity:0.08 } 28.1% { opacity:0.08 } 29.7% { opacity:1 } 37.8% { opacity:1 } 48.6% { opacity:0.08 } 60.5% { opacity:0.08 } 62.2% { opacity:1 } 70.3% { opacity:1 } 81.1% { opacity:0.08 } 100% { opacity:0.08 } }
+  .spawn i:nth-child(5) { animation-name:pix-spawn5 }
+  @keyframes pix-spawn5 { 0% { opacity:1 } 13.5% { opacity:1 } 24.3% { opacity:0.08 } 84.9% { opacity:0.08 } 86.5% { opacity:1 } 100% { opacity:1 } }
+  .spawn i:nth-child(6) { animation-name:pix-spawn6 }
+  @keyframes pix-spawn6 { 0% { opacity:0.08 } 28.1% { opacity:0.08 } 29.7% { opacity:1 } 37.8% { opacity:1 } 48.6% { opacity:0.08 } 60.5% { opacity:0.08 } 62.2% { opacity:1 } 70.3% { opacity:1 } 81.1% { opacity:0.08 } 100% { opacity:0.08 } }
+  .spawn i:nth-child(7) { animation-name:pix-spawn7 }
+  @keyframes pix-spawn7 { 0% { opacity:0.08 } 20% { opacity:0.08 } 21.6% { opacity:1 } 29.7% { opacity:1 } 40.5% { opacity:0.08 } 52.4% { opacity:0.08 } 54.1% { opacity:1 } 62.2% { opacity:1 } 73% { opacity:0.08 } 100% { opacity:0.08 } }
+  .spawn i:nth-child(8) { animation-name:pix-spawn8 }
+  @keyframes pix-spawn8 { 0% { opacity:0.08 } 11.9% { opacity:0.08 } 13.5% { opacity:1 } 21.6% { opacity:1 } 32.4% { opacity:0.08 } 44.3% { opacity:0.08 } 45.9% { opacity:1 } 54.1% { opacity:1 } 64.9% { opacity:0.08 } 76.8% { opacity:0.08 } 78.4% { opacity:1 } 86.5% { opacity:1 } 97.3% { opacity:0.08 } 100% { opacity:0.08 } }
+  .spawn i:nth-child(9) { animation-name:pix-spawn9 }
+  @keyframes pix-spawn9 { 0% { opacity:0.08 } 36.2% { opacity:0.08 } 37.8% { opacity:1 } 45.9% { opacity:1 } 56.8% { opacity:0.08 } 68.6% { opacity:0.08 } 70.3% { opacity:1 } 78.4% { opacity:1 } 89.2% { opacity:0.08 } 100% { opacity:0.08 } }
+  
+  /* edit (write, edit): cells type in one by one in reading order, flash as if saved, then clear. */
+  .edit i { animation-duration:2.4s; animation-timing-function:ease-out }
+  .edit i:nth-child(1) { animation-name:pix-edit1 }
+  .edit i:nth-child(2) { animation-name:pix-edit2 }
+  .edit i:nth-child(3) { animation-name:pix-edit3 }
+  .edit i:nth-child(4) { animation-name:pix-edit4 }
+  .edit i:nth-child(5) { animation-name:pix-edit5 }
+  .edit i:nth-child(6) { animation-name:pix-edit6 }
+  .edit i:nth-child(7) { animation-name:pix-edit7 }
+  .edit i:nth-child(8) { animation-name:pix-edit8 }
+  .edit i:nth-child(9) { animation-name:pix-edit9 }
+  @keyframes pix-edit1 { 0%,4%,94%,100% { opacity:.1 } 6% { opacity:1 } 12%,80% { opacity:.7 } 86% { opacity:1 } }
+  @keyframes pix-edit2 { 0%,12%,94%,100% { opacity:.1 } 14% { opacity:1 } 20%,80% { opacity:.7 } 86% { opacity:1 } }
+  @keyframes pix-edit3 { 0%,20%,94%,100% { opacity:.1 } 22% { opacity:1 } 28%,80% { opacity:.7 } 86% { opacity:1 } }
+  @keyframes pix-edit4 { 0%,28%,94%,100% { opacity:.1 } 30% { opacity:1 } 36%,80% { opacity:.7 } 86% { opacity:1 } }
+  @keyframes pix-edit5 { 0%,36%,94%,100% { opacity:.1 } 38% { opacity:1 } 44%,80% { opacity:.7 } 86% { opacity:1 } }
+  @keyframes pix-edit6 { 0%,44%,94%,100% { opacity:.1 } 46% { opacity:1 } 52%,80% { opacity:.7 } 86% { opacity:1 } }
+  @keyframes pix-edit7 { 0%,52%,94%,100% { opacity:.1 } 54% { opacity:1 } 60%,80% { opacity:.7 } 86% { opacity:1 } }
+  @keyframes pix-edit8 { 0%,60%,94%,100% { opacity:.1 } 62% { opacity:1 } 68%,80% { opacity:.7 } 86% { opacity:1 } }
+  @keyframes pix-edit9 { 0%,68%,94%,100% { opacity:.1 } 70% { opacity:1 } 76%,80% { opacity:.7 } 86% { opacity:1 } }
+  .dotbox { position:relative; flex:none; width:16px; height:16px; }
+  .dotbox .pix { --s:16px; position:absolute; inset:0; transition:opacity .35s; } .dotbox .pix.out { opacity:0; }
   .typing { align-self:flex-start; display:flex; align-items:center; gap:4px; max-width:100%; padding:4px 2px; } .typing .activity { margin-left:6px; }
   .stopbtn { position:absolute; right:124px; bottom:4px; width:28px; height:28px; padding:0; display:flex; align-items:center; justify-content:center; border:0; border-radius:8px; background:transparent; } .stopbtn:hover { background:var(--line); }
   .stopbtn::before { content:""; width:11px; height:11px; border-radius:3px; background:var(--fg); }
@@ -1600,21 +1679,30 @@ function msgBody(text) {
 
 // The conversation, newest at the bottom. Reloaded when the agent's state
 // changes; stays scrolled to the bottom unless you've scrolled up.
-// The dots' animation (1-6) follows the tool being used: the same tool name always gives the same one.
-function dotsFor(activity) {
-  let h = 0; for (const c of String(activity || "thinking").split(" ")[0]) h = (h * 31 + c.charCodeAt(0)) >>> 0;
-  return h % 6 + 1;
-}
-// The working indicator at the end of the thread. When the tool changes, the old dots fade out as the new ones fade in.
+// Which pixel loader goes with which tool (the first word of the activity). Several = pick one at random.
+// Anything not listed (MCP tools, Read, etc.) gets OTHER.
+const PIX = {
+  thinking: ["orbit", "sweep"],
+  Edit: ["edit"], MultiEdit: ["edit"], Write: ["edit"], NotebookEdit: ["edit"],
+  Grep: ["search"], Glob: ["search"],
+  WebFetch: ["fetch"], WebSearch: ["fetch"],
+  Bash: ["run"], PowerShell: ["run"],
+  Task: ["spawn"], Agent: ["spawn"],
+  Read: ["scan"],
+};
+const OTHER = ["ripple", "breathe"];
+// The working indicator at the end of the thread. When the tool changes, the old loader fades out as the new one fades in.
 function setTyping(el, t, f) {
   if (!f || status(f)[0] !== "working") return t?.remove();
   if (!t) { t = document.createElement("div"); t.className = "typing"; t.title = "Agent is working"; t.innerHTML = '<span class="dotbox"></span><span class="activity"></span>'; }
   el.append(t);
   t.querySelector(".activity").textContent = f.st?.activity || "";
-  const box = t.querySelector(".dotbox"), cur = box.querySelector(".dwrap:not(.out)"), n = dotsFor(f.st?.activity);
-  if (cur?.dataset.n == n) return;
-  const w = document.createElement("span"); w.className = "dwrap"; w.dataset.n = n;
-  w.innerHTML = `<span class="dots d${n}"><i></i><i></i><i></i></span>`;
+  const box = t.querySelector(".dotbox"), cur = box.querySelector(".pix:not(.out)");
+  const opts = PIX[String(f.st?.activity || "thinking").split(" ")[0]] || OTHER;
+  if (opts.includes(cur?.dataset.n)) return; // still a fit: keep it running rather than re-rolling on every reload
+  const n = opts[Math.floor(Math.random() * opts.length)];
+  const w = document.createElement("span"); w.className = `pix ${n}`; w.dataset.n = n;
+  w.innerHTML = "<i></i>".repeat(9);
   box.append(w);
   if (!cur) return;
   w.style.opacity = 0; cur.classList.add("out");
