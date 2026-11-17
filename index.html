@@ -1310,7 +1310,7 @@ function bellBtn(f) {
   const noAgent = { merged: "Its agent has finished and its folder is removed, so there's nothing to notify you about.", dropped: "Dropped, so there's nothing to notify you about." }[f.status] || "No agent running for it right now.";
   const title = mode === "silent" ? "Notifications are muted. Change it with the bells at the top."
     : mode === "all" ? "Notifying you about every task. Pick the middle option at the top to choose which."
-    : !f.worktree ? noAgent : on ? "Notifying you about this task. Click to stop." : "Not notifying you about this task. Click to turn it on.";
+    : !can ? noAgent : on ? "Notifying you about this task. Click to stop." : "Not notifying you about this task. Click to turn it on.";
   return `<button class="sq bell ${on ? "on" : ""} ${can ? "" : "off"}" data-act="bell" ${can ? "" : 'aria-disabled="true"'} title="${title}">${on ? ICON.all : ICON.off}</button>`;
 }
 // Every card ends with the same row: everyday buttons on the left, the one
