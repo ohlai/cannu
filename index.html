@@ -650,22 +650,42 @@
   #limitMsg .switch { display:flex; width:fit-content; margin-top:16px; font-size:12px; }
   @media (prefers-reduced-motion: reduce) { .urings, .uin { transition:none; } }
   .limited .dot { background:var(--bad); }
+  /* Words with a shorter version for phones: .wide shows on wider screens, .narrow on phones. */
+  .narrow { display:none; }
+  #sortBtn svg.narrow { width:15px; height:15px; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; transform:none; }
   /* ---------- phones ---------- */
-  /* Tighter edges; the logo gets its own line with the buttons wrapping under it; the status chips scroll
-     sideways in one line; board columns are nearly a screen wide and snap; popups nearly fill the screen. */
+  /* Tighter edges. The header is two lines: the logo with the usage rings on its right, then the buttons.
+     The filters are one line: short labels, sort as an icon, the status chips scrolling sideways, and
+     search as a magnifier that opens to a full-width box on its own line. Popups nearly fill the screen. */
   @media (max-width:640px) {
+    .wide { display:none; } .narrow { display:inline; }
     main { padding:12px 10px 40px; }
     #top, .filters, #board { padding:0; }
-    #top { margin-bottom:20px !important; gap:8px; }
-    #top > .grow { flex-basis:100%; }
+    #top { margin-bottom:16px !important; gap:8px; }
+    #top > .grow { flex:1 1 calc(100% - 50px); min-width:0; }
+    #top > button { padding:6px 10px; }
+    #repoPick { flex:1 1 0; min-width:0; display:flex; justify-content:flex-end; }
+    #repoPick > button { max-width:100%; }
     .brand { gap:10px; } .brand img { width:36px; height:36px; }
     .brand h1 { font-size:26px; } .brand h1 span { font-size:13px; }
-    .filters { gap:8px; }
-    #chips { flex:1 1 100%; flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none; }
+    .filters { gap:8px; flex-wrap:wrap; }
+    /* The 5H and 7D lines open over the tagline rather than beside the rings, so the rings keep their line. */
+    .rings { position:relative; }
+    .uin { position:absolute; right:48px; top:50%; translate:0 -50%; z-index:1; padding:4px 8px; border-radius:8px; background:var(--bg); }
+    .seg.text button { padding:0 8px; }
+    #sortBtn { padding:6px 8px; }
+    #sortBtn svg:not(.narrow) { display:none; }
+    #chips { flex:1 1 0; min-width:0; flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none; }
     #chips::-webkit-scrollbar { display:none; }
     #chips button { flex:none; }
     #gap { display:none; }
-    .searchbox { width:100%; }
+    .searchbox { width:34px; flex:none; margin-left:auto; }
+    #search { height:32px; padding:0; color:transparent; cursor:pointer;
+      background:var(--card) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='6'/%3E%3Cpath d='M20 20l-4.5-4.5'/%3E%3C/svg%3E") center / 16px no-repeat; }
+    #search::placeholder { color:transparent; }
+    .searchbox:is(:focus-within, :has(#search:not(:placeholder-shown))) { flex:1 1 100%; }
+    .searchbox:is(:focus-within, :has(#search:not(:placeholder-shown))) #search { padding:8px 30px 8px 10px; color:var(--fg); cursor:text; background-image:none; }
+    .searchbox:focus-within #search::placeholder { color:var(--mute); }
     .board { grid-auto-columns:calc(100vw - 56px); scroll-snap-type:x mandatory; scroll-padding:0 10px; padding:16px 10px 24px; margin:-8px -10px -16px; }
     .board > .col { scroll-snap-align:start; }
     .card { padding:12px; } .card.past { padding:10px 12px; }
@@ -677,6 +697,10 @@
     #repoDlg .panel { height:calc(100dvh - 16px); }
     .panel header, .panel .body, .panel footer, .dmsg { padding-left:14px; padding-right:14px; }
     .pop .chat { height:min(52dvh, 560px); }
+  }
+  /* A phone held upright: status and label columns stack top to bottom. Turned sideways they stay side by side. */
+  @media (max-width:640px) and (orientation:portrait) {
+    .board { grid-auto-flow:row; grid-template-columns:100%; grid-auto-columns:auto; scroll-snap-type:none; overflow-x:visible; }
   }
   /* Touch screens: 16px in text boxes so iOS doesn't zoom in on focus, and no keyboard-shortcut hints. */
   @media (pointer:coarse) {
@@ -698,7 +722,7 @@
       <p class="sub" style="margin:12px 0 0" id="totals"></p>
     </div>
     <div class="rings" id="rings" tabindex="0" aria-label="Claude usage"></div>
-    <button id="defaultsOpen" title="Model, system prompt and everything else every agent is given">Agent defaults</button>
+    <button id="defaultsOpen" title="Model, system prompt and everything else every agent is given"><span class="wide">Agent defaults</span><span class="narrow">Defaults</span></button>
     <div class="seg" id="notify">
       <span class="thumb"></span>
       <button data-mode="silent" title="No notifications"></button>
@@ -721,11 +745,11 @@
       <button data-val="label" title="A board with a column per label. Drag a card to another column to relabel it">Labels</button>
     </div>
     <div class="seg text" id="doneSeg"><span class="thumb"></span>
-      <button data-val="show" title="Every task, merged and dropped too">Show All</button>
-      <button data-val="hide" title="Hide merged and dropped tasks">Hide Completed</button>
+      <button data-val="show" title="Every task, merged and dropped too"><span class="wide">Show All</span><span class="narrow">All</span></button>
+      <button data-val="hide" title="Hide merged and dropped tasks"><span class="wide">Hide Completed</span><span class="narrow">Hide done</span></button>
     </div>
     <div class="repopick" id="sortPick">
-      <button id="sortBtn" aria-haspopup="true" aria-expanded="false" title="How cards are ordered, in every column and the list"><span id="sortName"></span><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
+      <button id="sortBtn" aria-haspopup="true" aria-expanded="false" title="How cards are ordered, in every column and the list" aria-label="Sort"><svg class="narrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4v16M3 16l4 4 4-4M17 20V4M13 8l4-4 4 4"/></svg><span id="sortName" class="wide"></span><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
       <div class="repomenu" id="sortMenu" hidden style="left:0; right:auto"></div>
     </div>
     <div class="chips" id="chips"></div>
@@ -1916,6 +1940,7 @@ function makeSeg(el, get, set) {
 }
 makeSeg($("#viewSeg"), () => view, (v) => { view = v; store.set("view", v); });
 makeSeg($("#doneSeg"), () => (hideDone ? "hide" : "show"), (v) => { hideDone = v === "hide"; store.set("hideDone", hideDone); });
+addEventListener("resize", () => { for (const place of segs) place(); }); // phones swap in shorter labels, so the square has to resize
 // The sort dropdown, built like the repo one.
 const SORT_NAMES = { status: "Needs you first", active: "Last active", created: "Newest", name: "Name", manual: "Manual" };
 $("#sortName").textContent = "Sort: " + SORT_NAMES[sortBy];
@@ -2125,9 +2150,11 @@ function follow() {
     : [lean(dx, 8, 0.12), sortBy === "manual" ? dy * PULL : lean(dy, 8, 0.15)];
   el.style.transform = `translate(${x}px, ${y}px)`;
 }
+const STACKED = matchMedia("(max-width:640px) and (orientation:portrait)"); // must match the CSS that stacks the columns
 $("#board").addEventListener("pointerdown", (e) => {
-  // ponytail: no dragging by touch, as a swipe has to scroll the board. Long-press to drag if phones need it.
-  if (e.button !== 0 || e.pointerType === "touch" || naming || !board()) return;
+  // ponytail: no dragging by touch, as a swipe has to scroll the board, nor when the columns are stacked,
+  // as the drag assumes they sit side by side. Long-press to drag if phones need it.
+  if (e.button !== 0 || e.pointerType === "touch" || STACKED.matches || naming || !board()) return;
   const h = view === "label" && !e.target.closest(".colmenu, .coladd") && e.target.closest("[data-dragcol]");
   const el = h ? h.closest(".col") : (view === "label" || sortBy === "manual") && !e.target.closest("[data-bell]") && e.target.closest(".tile");
   if (el) held = { el, id: e.pointerId, x0: e.clientX, y0: e.clientY, on: false };
