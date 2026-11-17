@@ -697,7 +697,7 @@
     .panel header, .panel .body, .panel footer, .dmsg { padding-left:14px; padding-right:14px; }
     /* Footers that don't fit wrap to the right, so Start agent stays under the hand, not under Close. */
     .panel footer.row { justify-content:flex-end; gap:8px; }
-    /* The sort menu opens leftwards from its button, which sits near the right edge. */
+    .panel footer > .grow:empty { display:none; } .panel footer > [data-close]:first-child { margin-right:auto; } /* the spacer's gap is what made New task's buttons wrap */    /* The sort menu opens leftwards from its button, which sits near the right edge. */
     #sortMenu { left:auto !important; right:0 !important; }
     /* The model picker stays in a planned task's popup; in the list it gives its room to the title. */
     #list .card select.model { display:none; }
@@ -742,6 +742,9 @@
   @media (pointer:coarse) {
     textarea, input[type=text], input[type=search], select, .gbox input, .gbox .ghost, .newlabel input { font-size:16px; }
     small.keys { display:none !important; }
+    /* Small icon buttons get a finger-sized tap area around them, without moving anything. */
+    .tbell, .coladd, .colmenu summary, #searchClear { position:relative; }
+    .tbell::after, .coladd::after, .colmenu summary::after, #searchClear::after { content:""; position:absolute; inset:-9px; }
   }
   /* No hover: tapping the usage rings opens their 5H and 7D lines instead. */
   @media (hover:none) {
