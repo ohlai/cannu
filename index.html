@@ -410,11 +410,11 @@
   .tile .foot { display:flex; gap:6px; align-items:center; margin-top:8px; flex-wrap:wrap; }
   .tile .when { margin-left:auto; font-size:11.5px; color:var(--mute); white-space:nowrap; }
   /* Title with the bell top right; the description (or its summary) under it. */
-  .tile .top { display:flex; gap:6px; align-items:flex-start; }
-  /* Title, time and bell share one 18px first line, centred in it, however many lines the title wraps to. */
+  .tile .top { display:flex; gap:6px; align-items:baseline; }
+  /* The time sits on the title's first baseline (smaller text centred instead looks high);
+     the bell, which has no baseline, fills the title's 18px first line and centres in it. */
   .tile .top .t { flex:1; min-width:0; line-height:18px; }
-  .tile .top .when { line-height:18px; }
-  .tile .top .tbell { height:18px; margin:0 -4px 0 0; }
+  .tile .top .tbell { align-self:flex-start; height:18px; margin:0 -4px 0 0; }
   .tile .foot:empty { display:none; }
   .tbell { flex:none; width:22px; height:22px; margin:-3px -6px 0 0; padding:0; border:0; background:none; border-radius:6px; display:grid; place-items:center; color:var(--mute); cursor:pointer; opacity:.45; transition:opacity .15s; }
   .tbell svg.i { width:14px; height:14px; }
