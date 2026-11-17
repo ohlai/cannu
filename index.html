@@ -199,6 +199,7 @@
   .chat .hint { padding:6px 10px 10px; }
   .chat { position:relative; }
   .atts { display:flex; flex-wrap:wrap; gap:6px; }
+  .atts:empty { display:none; }
   /* Files waiting to send float over the bottom of the thread, so the
      messages keep their full height. */
   .compose .atts { position:absolute; left:0; bottom:calc(100% + 6px); z-index:2; }
@@ -1378,7 +1379,8 @@ function card(f, inPop) {
 // in New task, data-fields on a card. The model picker sits top right in each.
 function taskForm(at, { title = "", prompt = "", self = "" } = {}) {
   return `<input type="text" ${at("title")} placeholder="Task name" value="${esc(title)}">
-    <textarea ${at("prompt")} data-mention${self ? ` data-self="${self}"` : ""} placeholder="What needs doing?">${esc(prompt)}</textarea>
+    <textarea ${at("prompt")} data-mention${self ? ` data-self="${self}"` : ""} placeholder="What needs doing?">${esc(bareText(prompt))}</textarea>
+    <div class="atts" data-pics data-paths="${esc(pathsOf(prompt).join("\n"))}">${descPics(prompt, true)}</div>
     ${mentionHint(prompt, self)}`;
 }
 const modelPick = (attr, sel, title) => `<select class="model" ${attr} title="${title}" aria-label="Model">${modelOptions(sel, true)}</select>`;
@@ -1406,7 +1408,7 @@ function simpleCard(f, inPop) {
       ${head(f, cls, label, "")}
       ${planned ? modelPick("data-model", f.model || "", "The model its agent runs on. Changeable until it starts.") : s.reopen ? modelPick('data-field="rmodel"', s.rmodel ?? f.model ?? "", "The model the new task's agent runs on") : ""}
     </div>
-    ${planned && !edit && f.prompt ? `<div class="plan md">${md(f.prompt)}</div>` : ""}
+    ${planned && !edit && f.prompt ? `<div class="atts">${descPics(f.prompt)}</div><div class="plan">${msgBody(f.prompt).html}</div>` : ""}
     ${edit ? `<div style="margin-top:10px; display:grid; gap:8px">
       ${taskForm((k) => `data-field="e${k}"`, { title: s.etitle ?? f.title, prompt: s.eprompt ?? f.prompt ?? "", self: f.slug })}${linkedFrom(f, "hint")}
     </div>` : ""}
@@ -2235,7 +2237,10 @@ function renderPop() {
   if (slot && thread) { slot.replaceWith(thread); thread.scrollTop = threadY; }
   if (slot && (!thread || thread.dataset.at !== String(f.st?.at) + (f.st?.queue?.length || 0))) loadChat(f.slug);
   // What you'd typed goes back into its box (the HTML was built without it).
-  for (const el of top.querySelectorAll("[data-field]")) if (s[el.dataset.field] != null) el.value = s[el.dataset.field];
+  for (const el of top.querySelectorAll("[data-field]")) if (s[el.dataset.field] != null) {
+    el.value = s[el.dataset.field];
+    if (/^[er]prompt$/.test(el.dataset.field)) { el.nextElementSibling.dataset.paths = pathsOf(el.value).join("\n"); el.value = bareText(el.value); showPics(el); }
+  }
   const ta = top.querySelector(".compose textarea");
   if (ta) fitCompose(ta, true);
   const plan = top.querySelector('[data-field="eprompt"]');
@@ -2262,8 +2267,8 @@ document.addEventListener("focusin", (e) => {
   const past = PAST[el.closest("[data-slug]").dataset.slug + k];
   if (!past?.length) return;
   const now = el.value;
-  el.value = past[0];
-  for (const v of [...past.slice(1), now]) { el.select(); document.execCommand(v ? "insertText" : "delete", false, v); }
+  el.value = bareText(past[0]);
+  for (const v of [...past.slice(1).map(bareText), now]) { el.select(); document.execCommand(v ? "insertText" : "delete", false, v); }
 });
 
 const TYPED = ["draft", "etitle", "eprompt", "rtitle", "rprompt", "rmodel"];
@@ -2287,6 +2292,18 @@ function markShortErrors() {
     e.title = short ? "" : "Click to show more";
   }
 }
+// Previews of the attached paths in a description box, under it.
+// Same thumbnails as New task's; ✕ (when editable) drops that path line from the text.
+const descPics = (text, edit) => text.split("\n").map((l) => l.trim()).filter((l) => ATT_LINE.test(l)).map((l) => {
+  const [, slug, file, name] = l.match(ATT_LINE), src = `/r/${encodeURIComponent(CUR)}/api/features/${slug}/file?name=${encodeURIComponent(file)}`;
+  return `<span class="att" title="${esc(name)}">${/\.(png|jpe?g|gif|webp)$/i.test(name) ? `<img src="${src}" alt="${esc(name)}">` : `<span class="name">${esc(name)}</span>`}${edit ? `<button type="button" data-unpic="${esc(l)}" title="Remove" aria-label="Remove ${esc(name)}">✕</button>` : ""}</span>`;
+}).join("");
+// A description's attached paths live beside its box, not in it: the box shows the words, the full text is both.
+const pathsOf = (t) => t.split("\n").map((l) => l.trim()).filter((l) => ATT_LINE.test(l));
+const bareText = (t) => t.split("\n").filter((l) => !ATT_LINE.test(l.trim())).join("\n");
+const descFull = (ta) => { const p = (ta.nextElementSibling.dataset.paths || "").split("\n").filter(Boolean); return p.length ? [ta.value.trimEnd(), ...p].join("\n") : ta.value; };
+const showPics = (ta) => { ta.nextElementSibling.innerHTML = descPics(descFull(ta), true); };
+const setPaths = (ta, f) => { const el = ta.nextElementSibling, p = f((el.dataset.paths || "").split("\n").filter(Boolean)); el.dataset.paths = p.join("\n"); u(ta.closest("[data-slug]").dataset.slug)[ta.dataset.field] = descFull(ta); showPics(ta); };
 async function attach(ta, files) {
   const slug = ta.closest("[data-slug]").dataset.slug, s = u(slug);
   for (const file of [...files]) {
@@ -2294,6 +2311,8 @@ async function attach(ta, files) {
     try {
       const r = await (await fetch(`/r/${encodeURIComponent(CUR)}/api/features/${slug}/attach?name=${encodeURIComponent(name)}`, { method: "POST", body: file })).json();
       if (!r.path) throw 0;
+      // A planned task's or a reopen's description has no chat to hold files: the path goes into the text itself.
+      if (/^[er]prompt$/.test(ta.dataset.field)) { setPaths(ta, (p) => [...p, r.path]); continue; }
       (s.files ||= []).push({ path: r.path, name, url: file.type.startsWith("image/") ? URL.createObjectURL(file) : "" });
       showAtts(slug);
     } catch { s.msg = `Couldn't attach ${name}.`; s.cls = "bad"; render(all); }
@@ -2308,21 +2327,30 @@ host.addEventListener("input", (e) => {
   if (e.target.dataset.field) s[e.target.dataset.field] = e.target.value;
   if (e.target.closest(".compose")) fitCompose(e.target);
   if (e.target.dataset.field === "eprompt") fitPlan(e.target);
+  if (/^[er]prompt$/.test(e.target.dataset.field)) s[e.target.dataset.field] = descFull(e.target);
+});
+host.addEventListener("click", (e) => {
+  const x = e.target.closest("[data-unpic]"); if (!x) return;
+  const ta = x.closest("[data-pics]").previousElementSibling;
+  setPaths(ta, (p) => p.filter((l) => l !== x.dataset.unpic)); fitPlan(ta);
 });
 host.addEventListener("click", onClick);
 // Files pasted or dropped into a chat are saved by the server, and their paths
 // go into the message for the agent to read. Plain text pastes as usual.
-host.addEventListener("paste", (e) => { if (e.target.closest(".compose") && e.clipboardData.files.length) { e.preventDefault(); attach(e.target, e.clipboardData.files); } });
+const DESC = "[data-field=eprompt], [data-field=rprompt]";
+host.addEventListener("paste", (e) => { if (e.target.closest(`.compose, ${DESC}`) && e.clipboardData.files.length) { e.preventDefault(); attach(e.target, e.clipboardData.files); } });
 // While files are dragged over a chat it shows a dashed drop zone. dragleave
 // also fires moving between the chat's own children, so the zone clears a
 // moment after the last dragover instead.
 let dragOff;
 host.addEventListener("dragover", (e) => {
+  if (e.target.matches(DESC) && e.dataTransfer.types.includes("Files")) return e.preventDefault();
   const c = e.target.closest(".chat"); if (!c || !e.dataTransfer.types.includes("Files")) return;
   e.preventDefault(); c.classList.add("dragging");
   clearTimeout(dragOff); dragOff = setTimeout(() => c.classList.remove("dragging"), 150);
 });
 host.addEventListener("drop", (e) => {
+  if (e.target.matches(DESC) && e.dataTransfer.files.length) { e.preventDefault(); return attach(e.target, e.dataTransfer.files); }
   const c = e.target.closest(".chat"); if (!c || !e.dataTransfer.files.length) return;
   e.preventDefault(); c.classList.remove("dragging");
   attach(c.querySelector(".compose textarea"), e.dataTransfer.files);
