@@ -408,6 +408,23 @@
   .tile .snip { margin-top:6px; font-size:12.5px; color:var(--mute); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
   .tile .foot { display:flex; gap:6px; align-items:center; margin-top:8px; flex-wrap:wrap; }
   .tile .when { margin-left:auto; font-size:11.5px; color:var(--mute); white-space:nowrap; }
+  /* Title with the bell top right; the description (or its summary) under it. */
+  .tile .top { display:flex; gap:6px; align-items:flex-start; }
+  .tile .top .t { flex:1; min-width:0; }
+  .tbell { flex:none; width:22px; height:22px; margin:-3px -6px 0 0; padding:0; border:0; background:none; border-radius:6px; display:grid; place-items:center; color:var(--mute); cursor:pointer; opacity:0; transition:opacity .15s; }
+  .tbell svg.i { width:14px; height:14px; }
+  .tbell:hover { background:color-mix(in srgb, var(--line) 80%, transparent); color:var(--fg); }
+  .tbell.on { opacity:1; color:var(--fg); }
+  .tile:hover .tbell, .tile:focus-within .tbell, .tbell:focus-visible { opacity:1; }
+  @media (hover:none) { .tbell { opacity:1; } }
+  .tile .blurb { margin-top:4px; font-size:12.5px; line-height:1.4; color:var(--mute); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .tile .activity { display:flex; align-items:center; gap:6px; }
+  .tile .activity .dots { zoom:.25; flex:none; color:var(--work); } /* zoom, like the chat's: some loaders hop by fixed px */
+  .tile .snip { padding-left:8px; border-left:2px solid var(--you); }
+  /* An error from the last action: a small mark in the footer, the text on hover and in the popup. */
+  .tilerr { display:inline-flex; align-items:center; gap:4px; font-size:11.5px; font-weight:600; color:var(--bad); }
+  .tilerr svg { width:13px; height:13px; fill:currentColor; }
+  .tilerr svg .w { fill:none; stroke:var(--card); stroke-width:2.2; stroke-linecap:round; }
   /* Labels: tinted with their own colour, never filled, so they don't read as a status. */
   .tag { display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:500; padding:1px 7px; border-radius:5px; color:var(--fg); background:color-mix(in srgb, var(--h) 18%, transparent); border:1px solid transparent; white-space:nowrap; }
   .tag::before { content:""; width:6px; height:6px; border-radius:2px; background:var(--h); }
@@ -1761,13 +1778,23 @@ function tile(f) {
   const [k, detail, name = k] = kind(f), cls = status(f)[0], st = f.st || {};
   const pill = `<span class="pill ${k} ${cls}"${detail ? ` title="${esc(detail)}"` : ""}><span class="dot"></span>${name}</span>`;
   const when = ago(st.at) || day(f.merged || f.dropped || f.created);
+  // Only an error reaches the board, as a mark by the time: the full text is its tooltip and in the popup. Confirmations stay in the popup.
+  const s = u(f.slug), err = s.msg && s.cls === "bad" ? `<span class="tilerr" title="${esc(s.msg)}">${WARN}Error</span>` : "";
   return `<div class="tile" data-open="${f.slug}" tabindex="0">
-    <div class="t">${esc(f.title)}</div>
-    ${st.activity && cls === "working" ? `<div class="activity">${esc(st.activity)}</div>` : ""}
+    <div class="top"><div class="t">${esc(f.title)}</div>${tileBell(f)}</div>
+    ${f.blurb ? `<div class="blurb"${f.blurb !== f.prompt ? ` title="${esc(f.prompt)}"` : ""}>${esc(f.blurb)}</div>` : ""}
+    ${st.activity && cls === "working" ? `<div class="activity"><span class="dots d${dotsFor(st.activity)}"><i></i><i></i><i></i></span>${esc(st.activity)}</div>` : ""}
     ${k === "waiting" && st.lastReply ? `<div class="snip">${esc(st.lastReply.replace(/[#*`>|]/g, "").trim().slice(0, 240))}</div>` : ""}
     ${schedOf(f) ? `<div class="activity">${esc(schedText(f))}</div>` : ""}
-    <div class="foot">${view === "label" ? pill : f.label ? tagHtml(f.label) : ""}${f.merged && k !== "merged" ? `<span class="meta">merged</span>` : ""}<span class="when">${when}</span></div>
-    ${u(f.slug).msg ? `<div class="msg ${u(f.slug).cls}">${esc(u(f.slug).msg)}</div>` : ""}</div>`;
+    <div class="foot">${view === "label" ? pill : f.label ? tagHtml(f.label) : ""}${f.merged && k !== "merged" ? `<span class="meta">merged</span>` : ""}${err}<span class="when">${when}</span></div></div>`;
+}
+const WARN = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 20h20z"/><path class="w" d="M12 10v4M12 16.5v.5"/></svg>`;
+// The bell, top right of a card with an agent. Not shown in "all" mode, where every card notifies.
+// From muted, turning one on switches the mode to "select", so it does what it says.
+function tileBell(f) {
+  if (!f.worktree || mode === "all") return "";
+  const on = mode === "select" && bells.has(f.slug);
+  return `<button class="tbell ${on ? "on" : ""}" data-bell="${f.slug}" aria-pressed="${on}" title="${on ? "Notifying you about this task. Click to stop." : "Click to be notified when this task needs you."}" aria-label="Notify me about this task">${on ? ICON.all : ICON.off}</button>`;
 }
 
 // The ⋯ at the top of a label column: edit, duplicate or delete it.
@@ -1814,10 +1841,16 @@ $("#board").addEventListener("click", (e) => {
   if (nc && !naming) return nameNewCol(nc, null);
   const nm = e.target.closest("[data-editcol]");
   if (nm && !naming) return editCol(nm.closest(".col").dataset.col);
+  const bl = e.target.closest("[data-bell]");
+  if (bl) {
+    if (mode === "silent") $('#notify [data-mode="select"]').click(); // asks for permission, like picking it at the top
+    bells.has(bl.dataset.bell) ? bells.delete(bl.dataset.bell) : bells.add(bl.dataset.bell);
+    store.set("notifyBells", [...bells]); return render(all);
+  }
   const t = e.target.closest("[data-open]"); if (t) openPop(t.dataset.open);
 });
 $("#board").addEventListener("keydown", (e) => {
-  if (e.key !== "Enter" && e.key !== " ") return;
+  if (e.key !== "Enter" && e.key !== " " || e.target.matches("[data-bell]")) return; // a button clicks itself
   const nc = e.target.matches("[data-newcol]") && e.target;
   if (nc && !naming) { e.preventDefault(); return nameNewCol(nc, null); }
   if (e.target.matches("[data-editcol]") && !naming) { e.preventDefault(); return editCol(e.target.closest(".col").dataset.col); }
@@ -1928,7 +1961,7 @@ function follow() {
 $("#board").addEventListener("pointerdown", (e) => {
   if (e.button !== 0 || naming || !board()) return;
   const h = view === "label" && !e.target.closest(".colmenu, .coladd") && e.target.closest("[data-dragcol]");
-  const el = h ? h.closest(".col") : (view === "label" || sortBy === "manual") && e.target.closest(".tile");
+  const el = h ? h.closest(".col") : (view === "label" || sortBy === "manual") && !e.target.closest("[data-bell]") && e.target.closest(".tile");
   if (el) held = { el, id: e.pointerId, x0: e.clientX, y0: e.clientY, on: false };
 });
 window.addEventListener("pointermove", (e) => {
