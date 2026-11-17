@@ -661,18 +661,18 @@
     .wide { display:none; } .narrow { display:inline; }
     main { padding:12px 10px 40px; }
     #top, .filters, #board { padding:0; }
-    #top { margin-bottom:16px !important; gap:8px; }
+    #top { margin-bottom:16px !important; gap:8px 6px; }
     #top > .grow { flex:1 1 calc(100% - 50px); min-width:0; }
     #top > button { padding:6px 10px; }
     #repoPick { flex:1 1 0; min-width:0; display:flex; justify-content:flex-end; }
-    #repoPick > button { max-width:100%; }
+    #repoPick > button { max-width:100%; padding:6px 8px; gap:4px; }
     .brand { gap:10px; } .brand img { width:36px; height:36px; }
     .brand h1 { font-size:26px; } .brand h1 span { font-size:13px; }
-    .filters { gap:8px; flex-wrap:wrap; }
+    .filters { gap:8px 6px; flex-wrap:wrap; }
     /* The 5H and 7D lines open over the tagline rather than beside the rings, so the rings keep their line. */
     .rings { position:relative; }
     .uin { position:absolute; right:48px; top:50%; translate:0 -50%; z-index:1; padding:4px 8px; border-radius:8px; background:var(--bg); }
-    .seg.text button { padding:0 8px; }
+    .seg.text button { padding:0 7px; }
     #sortBtn { padding:6px 8px; }
     #sortBtn svg:not(.narrow) { display:none; }
     #chips { flex:1 1 0; min-width:0; flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none; }
@@ -715,11 +715,12 @@
     .card > .row:first-child > .grow { display:contents; }
     .card > .row:first-child > .grow > * { grid-column:1 / -1; }
     .card > .row:first-child > .grow > :first-child { grid-column:1; grid-row:1; }
-    .card > .row:first-child > :not(.grow) { grid-row:1; margin-left:8px; }
+    .card > .row:first-child > :not(.grow) { grid-row:1; margin-left:6px; }
+    .card > .row:first-child .pill { padding:3px 7px; gap:5px; }
     .card > .row:first-child > .meta:empty { display:none; }
-    .card > .row:first-child .title { line-height:26px; }
+    .card > .row:first-child .title { line-height:26px; overflow-wrap:break-word; } /* a word too long for the cell breaks rather than running under the pill */
     .card > .row:first-child .right { gap:8px; }
-    .card > .row:first-child select.model { height:26px; max-width:100px; padding:0 2px; } /* stays 16px on touch, so iOS doesn't zoom when it's tapped */
+    .card > .row:first-child select.model { height:26px; max-width:min(100px, 24vw); padding:0 2px; } /* stays 16px on touch, so iOS doesn't zoom when it's tapped */
   }
   /* A phone turned sideways: wide enough for the desktop layout, but short, so tighten the header and
      filters and keep search on the filters' line. */
