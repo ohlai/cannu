@@ -1409,22 +1409,23 @@ const head = (f, cls, label, when) => { const [k, detail, name = k] = kind(f); r
 // The bell sits before the name: it's a setting on the feature, not an
 // action like the buttons at the bottom. It's on every card and always says
 // whether you'll hear about this feature: struck through (no) or ringing
-// (yes), never a plain bell. Muted and "all" decide it for every card, so the
-// bells are greyed out and can't be clicked. In "select" each one is off
-// until clicked, and greyed out while the feature has no agent to hear from.
+// (yes), never a plain bell. In "select" each one is off until clicked, and
+// greyed out while the feature has no agent to hear from.
 // A bell on a card or in the popup. From muted, one click switches to "select"
 // and turns this task on, even if it was on before muting (bells are kept).
+// From "all" it's the opposite: switch to "select" with every task on but this one.
 function toggleBell(slug) {
   if (mode === "silent") { $('#notify [data-mode="select"]').click(); bells.add(slug); } // the click asks for permission, like picking it at the top
+  else if (mode === "all") { $('#notify [data-mode="select"]').click(); all.forEach((f) => bells.add(f.slug)); bells.delete(slug); }
   else bells.has(slug) ? bells.delete(slug) : bells.add(slug);
   store.set("notifyBells", [...bells]); render(all);
 }
 function bellBtn(f) {
   const on = mode === "all" || (mode === "select" && bells.has(f.slug));
-  const can = mode !== "all" && (!!f.worktree || !["merged", "dropped"].includes(f.status));
+  const can = !!f.worktree || !["merged", "dropped"].includes(f.status);
   const noAgent = { merged: "Its agent has finished and its folder is removed, so there's nothing to notify you about.", dropped: "Dropped, so there's nothing to notify you about." }[f.status] || "No agent running for it right now.";
-  const title = mode === "all" ? "Notifying you about every task. Pick the middle option at the top to choose which."
-    : !can ? noAgent
+  const title = !can ? noAgent
+    : mode === "all" ? "Notifying you about every task. Click to silence this one."
     : mode === "silent" ? "Notifications are muted. Click to be notified about this task."
     : on ? "Notifying you about this task. Click to stop." : "Not notifying you about this task. Click to turn it on.";
   return `<button class="sq bell ${on ? "on" : ""} ${can ? "" : "off"} ${mode === "silent" ? "dim" : ""}" data-act="bell" ${can ? "" : 'aria-disabled="true"'} title="${title}">${on ? ICON.all : ICON.off}</button>`;
@@ -1917,14 +1918,14 @@ function tile(f) {
 }
 const WARN = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 20h20z"/><path class="w" d="M12 10v4M12 16.5v.5"/></svg>`;
 // The bell, top right of every card that's still to do or in progress: faint when off, solid when on.
-// A planned task's bell can be set ahead of its start. In "all" mode every card notifies, so it's on and can't be changed here.
-// From muted, turning one on switches the mode to "select", so it does what it says.
+// A planned task's bell can be set ahead of its start. In "all" mode every card's bell is on.
+// From muted or "all", clicking one switches the mode to "select", so it does what it says.
 function tileBell(f) {
   if (["merged", "dropped"].includes(kind(f)[0])) return "";
   // Ringing in "all" too, but grey like muted: only a bell picked in "select" is dark.
   const all = mode === "all", on = mode === "select" && bells.has(f.slug);
-  const title = all ? "Notifying you about every task. Pick the middle bell at the top to choose which." : on ? "Notifying you about this task. Click to stop." : "Click to be notified when this task needs you.";
-  return `<button class="tbell ${on ? "on" : ""}" data-bell="${f.slug}" aria-pressed="${on || all}"${all ? ' aria-disabled="true"' : ""} title="${title}" aria-label="Notify me about this task">${on || all ? ICON.all : ICON.off}</button>`;
+  const title = all ? "Notifying you about every task. Click to silence this one." : on ? "Notifying you about this task. Click to stop." : "Click to be notified when this task needs you.";
+  return `<button class="tbell ${on ? "on" : ""}" data-bell="${f.slug}" aria-pressed="${on || all}" title="${title}" aria-label="Notify me about this task">${on || all ? ICON.all : ICON.off}</button>`;
 }
 
 // The ⋯ at the top of a label column: edit, duplicate or delete it.
