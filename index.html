@@ -350,7 +350,7 @@
   @media (prefers-color-scheme: dark) { .brand img { filter:invert(1); } }
   /* Logo: a still .pix grid spelling "C", in the text colour instead of blue. Lit cells have .on. */
   .pix.logo { --s:48px; color:var(--fg); }
-  .pix.logo i { opacity:0; } .pix.logo i.on { opacity:1; }
+  .pix.logo i { opacity:.12; } .pix.logo i.on { opacity:1; }
   .brand h1 { margin:0; font-size:34px; line-height:1.1; letter-spacing:-.025em; font-weight:700; }
   /* While a popup is open the page behind it stays put. */
   html.locked { overflow:hidden; }
@@ -669,7 +669,7 @@
 <main>
   <div class="row" id="top" style="margin-bottom:36px" data-tip-below>
     <div class="grow">
-      <div class="brand"><span class="pix logo" aria-hidden="true"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i class="on"></i><i class="on"></i><i class="on"></i></span><h1>Cannu <span>Agent board</span></h1></div>
+      <div class="brand"><span class="pix logo" aria-hidden="true"><i></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i class="on"></i><i class="on"></i></span><h1>Cannu <span>Agent board</span></h1></div>
       <p class="sub" style="margin:12px 0 0" id="totals"></p>
     </div>
     <div class="rings" id="rings" tabindex="0" aria-label="Claude usage"></div>
