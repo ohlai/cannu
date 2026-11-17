@@ -247,8 +247,8 @@
   button.sq { width:30px; height:30px; padding:0; display:inline-grid; place-items:center; }
   button.bell { width:26px; height:26px; align-self:flex-start; margin-right:-4px; }
   button.bell svg.i { width:15px; height:15px; }
+  /* Greyed out in muted and "all" alike: only a bell picked in "select" is dark. */
   button.bell.off { opacity:.35; cursor:default; } button.bell.off:hover { border-color:var(--line); }
-  button.bell.off.on { opacity:.45; }
   /* No repos yet: the usual header and filters, with the stone logo and one button where the board goes.
      Things that need a repo stay visible but dimmed and unclickable. */
   /* Stone on the left, words and the button on the right; stacked on narrow screens. */
@@ -411,6 +411,8 @@
   /* Title with the bell top right; the description (or its summary) under it. */
   .tile .top { display:flex; gap:6px; align-items:flex-start; }
   .tile .top .t { flex:1; min-width:0; }
+  .tile .top .when { line-height:1.55; }
+  .tile .foot:empty { display:none; }
   .tbell { flex:none; width:22px; height:22px; margin:-3px -6px 0 0; padding:0; border:0; background:none; border-radius:6px; display:grid; place-items:center; color:var(--mute); cursor:pointer; opacity:.45; transition:opacity .15s; }
   .tbell svg.i { width:14px; height:14px; }
   .tbell:hover { background:color-mix(in srgb, var(--line) 80%, transparent); color:var(--fg); opacity:1; }
@@ -419,7 +421,7 @@
   .tile .blurb { margin-top:4px; font-size:12.5px; line-height:1.4; color:var(--mute); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
   .tile .activity { display:flex; align-items:center; gap:6px; }
   .tile .activity .dots { zoom:.25; flex:none; color:var(--work); } /* zoom, like the chat's: some loaders hop by fixed px */
-  .tile .snip { padding-left:8px; border-left:2px solid var(--you); }
+  .tile .blurb ~ .snip { margin-top:8px; padding-top:7px; border-top:1px solid var(--line); }
   /* An error from the last action: a small mark in the footer, the text on hover and in the popup. */
   .tilerr { display:inline-flex; align-items:center; gap:4px; font-size:11.5px; font-weight:600; color:var(--bad); }
   .tilerr svg { width:13px; height:13px; fill:currentColor; }
@@ -1370,11 +1372,11 @@ function card(f, inPop) {
     ${st.denied?.length ? errBlock(s, "denied", "Blocked in the background run (open the session to allow):\n" + st.denied.join("\n")) : ""}`;
   return `<div class="card" data-slug="${f.slug}">
     <div class="row top">
-      ${bellBtn(f)}
       <div class="grow"><div class="head" data-act="collapse" title="${c ? "Show details" : "Fold to title, status and buttons"}">
         <div class="title"><svg class="chev ${c ? "" : "open"} ${turned === f.slug ? "turn" : ""}" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>${esc(f.title)}${f.merged && cls !== "merged" ? " <span class='meta'>· merged</span>" : ""}${f.label ? tagHtml(f.label) : ""}</div>
       </div>${c ? "" : details}</div>
       <div class="right">${head(f, cls, label, ago(st.at))}</div>
+      ${bellBtn(f)}
     </div>
     ${c ? "" : body}
     ${(s.fb || inPop) && !c ? chatBox(f, s, cls) : ""}
@@ -1415,7 +1417,6 @@ function simpleCard(f, inPop) {
   const leftover = f.status === "dropped" && f.dir && !f.removed;
   return `<div class="card past ${cls}" data-slug="${f.slug}">
     <div class="row">
-      ${bellBtn(f)}
       <div class="grow">
         <div class="title">${esc(f.title)}${f.label ? tagHtml(f.label) : ""}</div>
         <div class="meta">${when}${spent(f.usage) ? " · " + spent(f.usage) : ""}${prev ? ` · continues “${esc(prev.title)}”` : ""}${later.length ? " · continued in " + later.map((x) => "“" + esc(x.title) + "”").join(", ") : ""}</div>
@@ -1423,6 +1424,7 @@ function simpleCard(f, inPop) {
       </div>
       ${head(f, cls, label, "")}
       ${planned ? modelPick("data-model", f.model || "", "The model its agent runs on. Changeable until it starts.") : s.reopen ? modelPick('data-field="rmodel"', s.rmodel ?? f.model ?? "", "The model the new task's agent runs on") : ""}
+      ${bellBtn(f)}
     </div>
     ${planned && !edit && f.prompt ? `<div class="atts">${descPics(f.prompt)}</div><div class="plan">${msgBody(f.prompt).html}</div>` : ""}
     ${edit ? `<div style="margin-top:10px; display:grid; gap:8px">
@@ -1780,12 +1782,12 @@ function tile(f) {
   // Only an error reaches the board, as a mark by the time: the full text is its tooltip and in the popup. Confirmations stay in the popup.
   const s = u(f.slug), err = s.msg && s.cls === "bad" ? `<span class="tilerr" title="${esc(s.msg)}">${WARN}Error</span>` : "";
   return `<div class="tile" data-open="${f.slug}" tabindex="0">
-    <div class="top"><div class="t">${esc(f.title)}</div>${tileBell(f)}</div>
+    <div class="top"><div class="t">${esc(f.title)}</div><span class="when">${when}</span>${tileBell(f)}</div>
     ${f.blurb ? `<div class="blurb"${f.blurb !== f.prompt ? ` title="${esc(f.prompt)}"` : ""}>${esc(f.blurb)}</div>` : ""}
     ${st.activity && cls === "working" ? `<div class="activity"><span class="dots d${dotsFor(st.activity)}"><i></i><i></i><i></i></span>${esc(st.activity)}</div>` : ""}
     ${k === "waiting" && st.lastReply ? `<div class="snip">${esc(st.lastReply.replace(/[#*`>|]/g, "").trim().slice(0, 240))}</div>` : ""}
     ${schedOf(f) ? `<div class="activity">${esc(schedText(f))}</div>` : ""}
-    <div class="foot">${view === "label" ? pill : f.label ? tagHtml(f.label) : ""}${f.merged && k !== "merged" ? `<span class="meta">merged</span>` : ""}${err}<span class="when">${when}</span></div></div>`;
+    <div class="foot">${view === "label" ? pill : f.label ? tagHtml(f.label) : ""}${f.merged && k !== "merged" ? `<span class="meta">merged</span>` : ""}${err}</div></div>`;
 }
 const WARN = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 20h20z"/><path class="w" d="M12 10v4M12 16.5v.5"/></svg>`;
 // The bell, top right of every card that's still to do or in progress: faint when off, solid when on.
@@ -1793,9 +1795,10 @@ const WARN = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 20h20
 // From muted, turning one on switches the mode to "select", so it does what it says.
 function tileBell(f) {
   if (["merged", "dropped"].includes(kind(f)[0])) return "";
-  const all = mode === "all", on = all || (mode === "select" && bells.has(f.slug));
+  // Ringing in "all" too, but grey like muted: only a bell picked in "select" is dark.
+  const all = mode === "all", on = mode === "select" && bells.has(f.slug);
   const title = all ? "Notifying you about every task. Pick the middle bell at the top to choose which." : on ? "Notifying you about this task. Click to stop." : "Click to be notified when this task needs you.";
-  return `<button class="tbell ${on ? "on" : ""}" data-bell="${f.slug}" aria-pressed="${on}"${all ? ' aria-disabled="true"' : ""} title="${title}" aria-label="Notify me about this task">${on ? ICON.all : ICON.off}</button>`;
+  return `<button class="tbell ${on ? "on" : ""}" data-bell="${f.slug}" aria-pressed="${on || all}"${all ? ' aria-disabled="true"' : ""} title="${title}" aria-label="Notify me about this task">${on || all ? ICON.all : ICON.off}</button>`;
 }
 
 // The ⋯ at the top of a label column: edit, duplicate or delete it.
