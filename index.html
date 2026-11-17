@@ -703,9 +703,19 @@
     #list .card select.model { display:none; }
     .pop .chat { height:min(52dvh, 560px); }
     /* A card's top row stays one line: the title wraps in what's left, with the status, model and bell on its first line. */
-    .card > .row:first-child { flex-wrap:nowrap; align-items:flex-start; gap:8px; }
-    .card > .row:first-child > .grow { min-width:0; }
-    .card > .row:first-child > :not(.grow) { flex:none; }
+    /* A grid: the title in the first cell, the controls in the cells beside it, and the title's details
+       (dates, branch, links) under the whole row rather than squeezed under the title. */
+    #top { align-items:flex-start; } #rings { margin-top:4px; } /* level with the logo, even when the totals line sits under it */
+    /* A button row that wraps keeps its main button at the right. */
+    .actions > :last-child { margin-left:auto; }
+    /* The popup's buttons join Close in one row that wraps, rather than a block of their own beside it. */
+    #popActs, #popActs > .actions { display:contents; }
+    #popActs .actions > .grow { display:none; }
+    .card > .row:first-child { display:grid; grid-template-columns:minmax(0,1fr) repeat(5, auto); align-items:start; gap:0; }
+    .card > .row:first-child > .grow { display:contents; }
+    .card > .row:first-child > .grow > * { grid-column:1 / -1; }
+    .card > .row:first-child > .grow > :first-child { grid-column:1; grid-row:1; }
+    .card > .row:first-child > :not(.grow) { grid-row:1; margin-left:8px; }
     .card > .row:first-child > .meta:empty { display:none; }
     .card > .row:first-child .title { line-height:26px; }
     .card > .row:first-child .right { gap:8px; }
@@ -1998,7 +2008,7 @@ function tile(f) {
   return `<div class="tile" data-open="${f.slug}" tabindex="0">
     <div class="top"><div class="t">${esc(f.title)}</div><span class="when">${when}</span>${tileBell(f)}</div>
     ${f.blurb ? `<div class="blurb"${f.blurb !== f.prompt ? ` title="${esc(f.prompt)}"` : ""}>${esc(f.blurb)}</div>` : ""}
-    ${st.activity && cls === "working" ? `<div class="activity agent"><span class="dots d${dotsFor(st.activity)}"><i></i><i></i><i></i></span>${esc(st.activity)}</div>` : ""}
+    ${st.activity && cls === "working" ? `<div class="activity agent"><span class="pix ${(PIX[st.activity.split(" ")[0]] || OTHER)[0]}" style="--s:12px">${"<i></i>".repeat(9)}</span>${esc(st.activity)}</div>` : ""}
     ${k === "waiting" && st.lastReply ? `<div class="snip">${esc(st.lastReply.replace(/[#*`>|]/g, "").trim().slice(0, 240))}</div>` : ""}
     ${schedOf(f) ? `<div class="activity">${esc(schedText(f))}</div>` : ""}
     <div class="foot">${view === "label" ? pill : f.label ? tagHtml(f.label) : ""}${f.merged && k !== "merged" ? `<span class="meta">merged</span>` : ""}${err}</div></div>`;
