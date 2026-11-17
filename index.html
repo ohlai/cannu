@@ -1916,7 +1916,7 @@ function tile(f) {
   return `<div class="tile" data-open="${f.slug}" tabindex="0">
     <div class="top"><div class="t">${esc(f.title)}</div><span class="when">${when}</span>${tileBell(f)}</div>
     ${f.blurb ? `<div class="blurb"${f.blurb !== f.prompt ? ` title="${esc(f.prompt)}"` : ""}>${esc(f.blurb)}</div>` : ""}
-    ${st.activity && cls === "working" ? `<div class="activity agent"><span class="dots d${dotsFor(st.activity)}"><i></i><i></i><i></i></span>${esc(st.activity)}</div>` : ""}
+    ${st.activity && cls === "working" ? `<div class="activity agent"><span class="pix ${(PIX[st.activity.split(" ")[0]] || OTHER)[0]}">${"<i></i>".repeat(9)}</span>${esc(st.activity)}</div>` : ""}
     ${k === "waiting" && st.lastReply ? `<div class="snip">${esc(st.lastReply.replace(/[#*`>|]/g, "").trim().slice(0, 240))}</div>` : ""}
     ${schedOf(f) ? `<div class="activity">${esc(schedText(f))}</div>` : ""}
     <div class="foot">${view === "label" ? pill : f.label ? tagHtml(f.label) : ""}${f.merged && k !== "merged" ? `<span class="meta">merged</span>` : ""}${err}</div></div>`;
