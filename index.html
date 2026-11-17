@@ -63,10 +63,9 @@
   .err { position:relative; margin-top:8px; border:2px solid color-mix(in srgb, var(--bad) 30%, transparent); border-radius:7px; background:color-mix(in srgb, var(--bad) 5%, var(--card)); }
   .err { cursor:pointer; } .err.short { cursor:auto; } .err.full pre { max-height:calc(6 * 1.45em + 16px); }
   .err pre { margin:0; padding:8px 50px 8px 10px; overflow-wrap:anywhere; font-size:12px; line-height:1.45; color:var(--bad); white-space:pre-wrap; word-break:break-word; max-height:calc(3 * 1.45em + 16px); overflow:auto; }
-  /* Copy is the code blocks' icon button (.inbtn), kept clear of the scrollbar. */
-  .err .inbtn { right:14px; }
-  /* An open box keeps Copy where it sat in the 3 line box: half of that box's height. */
-  .err.full .inbtn { top:calc((3 * 1.45 * 12px + 16px) / 2); }
+  /* Copy is the code blocks' icon button (.inbtn), top right, red, kept clear of the scrollbar. */
+  .err .inbtn { top:2px; right:14px; transform:none; color:var(--bad); }
+  .err .inbtn:hover, .err .inbtn:focus-visible { color:color-mix(in srgb, var(--bad) 70%, var(--fg)); background:color-mix(in srgb, var(--bad) 15%, transparent); }
   a { color: inherit; }
   details summary { cursor:pointer; color:var(--mute); font-size:13px; }
   .empty { color: var(--mute); text-align:center; padding: 30px; }
