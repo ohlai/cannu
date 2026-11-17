@@ -1726,12 +1726,13 @@ const LOGO_ON = [0,1,1, 1,0,0, 0,1,1], LOGO_LO = .12;
 const cOp = i => LOGO_ON[i] ? 1 : LOGO_LO;
 const row = i => Math.floor(i / 3);
 const LOGO_ANIMS = {
-  // ignite: the C dims to embers, the rows catch from the bottom up straight into the fire loader, then it burns
-  // down top row first and settles back to the C. The catch ends on the exact frame the fire starts on, so no jump.
+  // ignite: the rows ease from the C into the fire loader, bottom row first, then it burns down top row first and
+  // settles back to the C. Every row lands on the fire's first frame at the same moment, so it hands over with no jump
+  // or pause; the later rows just move faster to catch up.
   async ignite(el, cells) {
     el.classList.add("fire"); const to = cells.map(c => +getComputedStyle(c).opacity); el.classList.remove("fire");
-    const a = cells.map((c, i) => c.animate([{ opacity: cOp(i) }, { opacity: .05, offset: .35 }, { opacity: to[i] }],
-      { duration: 600, delay: (2 - row(i)) * 180, easing: "ease-in", fill: "both" }));
+    const a = cells.map((c, i) => c.animate([{ opacity: cOp(i) }, { opacity: cOp(i), offset: (2 - row(i)) * .25, easing: "ease-in-out" }, { opacity: to[i] }],
+      { duration: 1000, fill: "forwards" }));
     await Promise.all(a.map(x => x.finished));
     el.classList.add("fire"); a.forEach(x => x.cancel());
     await new Promise(r => setTimeout(r, 3500));
