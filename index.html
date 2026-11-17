@@ -1343,7 +1343,10 @@ function card(f, inPop) {
   else if (cls === "not-started") banner = `<div class="banner">The terminal for this task never started a session. <button data-act="resume-term">Start it now</button></div>`;
   const c = !inPop && collapsed.has(f.slug);
   // Three lines: where it lives, its git state, then time and cost.
-  const details = `<div class="meta">created ${day(f.created)} · ${esc(f.branch)}${f.model ? " · " + esc(MODELS[f.model] || f.model) : ""}</div>
+  // An "Agent default" task has no model of its own: name the one it ran on, else the default it will get.
+  const mid = f.model || f.usage?.last?.model || DEF?.model || "";
+  const mname = mid && (Object.entries(MODELS).find(([k]) => k && mid.startsWith(k))?.[1] || mid);
+  const details = `<div class="meta">created ${day(f.created)} · ${esc(f.branch)}${mname ? " · " + esc(mname) : ""}</div>
         <div class="meta">${git}</div>
         ${spent(f.usage) ? `<div class="meta">${spent(f.usage)}</div>` : ""}
         ${prev ? `<div class="meta">Continues “${esc(prev.title)}”</div>` : ""}
