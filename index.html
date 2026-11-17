@@ -38,6 +38,7 @@
   .md code { font-family: ui-monospace, monospace; font-size: 12px; background: var(--bg); padding: 1px 4px; border-radius: 4px; }
   .md pre { background: var(--bg); padding: 8px 10px; border-radius: 6px; white-space: pre-wrap; overflow-wrap: anywhere; } /* wrapped: one long line used to widen the whole chat */
   .md pre code { padding: 0; background: none; }
+  .md pre { position: relative; padding-right: 40px; } .md pre .cbcopy { top: 4px; transform: none; }
   .md blockquote { border-left: 2px solid var(--line); padding-left: 10px; color: var(--mute); }
   .md table { border-collapse: collapse; margin: 6px 0; } .md td, .md th { border: 1px solid var(--line); padding: 3px 8px; text-align: left; }
   .md hr { border: 0; border-top: 1px solid var(--line); }
@@ -676,6 +677,17 @@
 const $ = (s, el = document) => el.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
 
+const COPY_ICON = '<svg viewBox="0 0 512 512" width="16" height="16" fill="currentColor" aria-hidden="true"><rect x="150" y="64" width="298" height="298" rx="60" fill="none" stroke="currentColor" stroke-width="42"/><rect x="42" y="128" width="342" height="342" rx="80"/></svg>';
+const COPIED_ICON = '<svg viewBox="0 0 512 512" width="16" height="16" fill="none" stroke="currentColor" stroke-width="48" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M70 270l120 120 252-268"/></svg>';
+// Code blocks' Copy button. Captured first so it doesn't also open or expand what it sits in.
+document.addEventListener("click", async (e) => {
+  const b = e.target.closest(".cbcopy"); if (!b) return;
+  e.stopPropagation(); e.preventDefault();
+  try { await navigator.clipboard.writeText(b.previousElementSibling.textContent); b.innerHTML = COPIED_ICON; b.title = "Copied"; }
+  catch { b.title = "Couldn't copy"; }
+  setTimeout(() => { b.innerHTML = COPY_ICON; b.title = "Copy"; }, 1500);
+}, true);
+
 // Small markdown renderer for agent replies: headings, lists, code, quotes,
 // tables, bold, italics, links. Everything is escaped first.
 function md(src) {
@@ -692,7 +704,7 @@ function md(src) {
     if (/^```/.test(l)) {
       const code = []; i++;
       while (i < lines.length && !/^```/.test(lines[i])) code.push(lines[i++]);
-      i++; out.push(`<pre><code>${esc(code.join("\n"))}</code></pre>`); continue;
+      i++; out.push(`<pre><code>${esc(code.join("\n"))}</code><button type="button" class="inbtn cbcopy" title="Copy" aria-label="Copy code">${COPY_ICON}</button></pre>`); continue;
     }
     if (/^#{1,6}\s/.test(l)) { const n = Math.min(4, l.match(/^#+/)[0].length); out.push(`<h${n}>${inline(l.replace(/^#+\s*/, ""))}</h${n}>`); i++; continue; }
     if (/^\s*(---|\*\*\*)\s*$/.test(l)) { out.push("<hr>"); i++; continue; }
