@@ -3,6 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- iOS zooms in when you tap a text box under 16px. maximum-scale=1 stops that, and iOS still lets you pinch-zoom.
+     iOS only: on Android it would block pinch-zoom. -->
+<script>if (/iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)) document.querySelector("meta[name=viewport]").content += ", maximum-scale=1";</script>
 <title>Cannu</title>
 <link rel="icon" type="image/png" href="/logo.png?v=2">
 <style>
@@ -723,7 +726,7 @@
     .card > .row:first-child > .meta:empty { display:none; }
     .card > .row:first-child .title { line-height:26px; overflow-wrap:break-word; } /* a word too long for the cell breaks rather than running under the pill */
     .card > .row:first-child .right { gap:8px; }
-    .card > .row:first-child select.model { height:26px; max-width:min(100px, 24vw); padding:0 2px; } /* stays 16px on touch, so iOS doesn't zoom when it's tapped */
+    .card > .row:first-child select.model { height:26px; max-width:min(110px, 28vw); padding:0 2px; }
   }
   /* A phone turned sideways: wide enough for the desktop layout, but short, so tighten the header and
      filters and keep search on the filters' line. */
@@ -741,9 +744,8 @@
   @media (max-width:640px) and (orientation:portrait) {
     .board { grid-auto-flow:row; grid-template-columns:100%; grid-auto-columns:auto; scroll-snap-type:none; overflow-x:visible; }
   }
-  /* Touch screens: 16px in text boxes so iOS doesn't zoom in on focus, and no keyboard-shortcut hints. */
+  /* Touch screens: no keyboard-shortcut hints. (Text boxes keep their size: the viewport script up top stops iOS zooming in on them.) */
   @media (pointer:coarse) {
-    textarea, input[type=text], input[type=search], select, .gbox input, .gbox .ghost, .newlabel input { font-size:16px; }
     small.keys { display:none !important; }
     * { -webkit-tap-highlight-color:transparent; } /* no grey flash on tap: buttons show their own states */
     /* Small icon buttons get a finger-sized tap area around them, without moving anything. */
