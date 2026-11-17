@@ -742,6 +742,7 @@
   @media (pointer:coarse) {
     textarea, input[type=text], input[type=search], select, .gbox input, .gbox .ghost, .newlabel input { font-size:16px; }
     small.keys { display:none !important; }
+    * { -webkit-tap-highlight-color:transparent; } /* no grey flash on tap: buttons show their own states */
     /* Small icon buttons get a finger-sized tap area around them, without moving anything. */
     .tbell, .coladd, .colmenu summary, #searchClear { position:relative; }
     .tbell::after, .coladd::after, .colmenu summary::after, #searchClear::after { content:""; position:absolute; inset:-9px; }
