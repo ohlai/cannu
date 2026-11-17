@@ -2042,8 +2042,10 @@ function renderBoard(features) {
   const cols = view === "status"
     ? CHIPS.filter((k) => !(hide && ["merged", "dropped"].includes(k)) && shown.some((f) => kind(f)[0] === k)).map((k) => ({ key: k, head: `<span class="pill ${k}"><span class="dot"></span></span>${cap(k)}`, items: shown.filter((f) => kind(f)[0] === k) }))
     : [...labels(), ""].map((l) => ({ key: l, head: l ? `<span class="editcol" data-editcol tabindex="0" title="Click to rename, describe or recolour">${tagHtml(l)}</span>` : "Unlabelled", menu: l ? colMenu(l) : "", desc: LABELS[l]?.description || "", items: shown.filter((f) => (f.label || "") === l) }));
-  const empty = view === "label" ? "Drag a card here to label it" : "Nothing here";
-  const add = view === "label" ? `<div class="col newcol" data-newcol tabindex="0" title="Click to make an empty label, or drop a task here to give it a new one"><div class="colhead">+ New label</div><div class="none">Click to name it, or drag a task here.</div></div>` : "";
+  // No dragging on touch or with stacked columns, so don't offer it there; a card's label buttons do it instead.
+  const drag = !STACKED.matches && !matchMedia("(pointer:coarse)").matches;
+  const empty = view === "label" ? (drag ? "Drag a card here to label it" : "Open a card to label it") : "Nothing here";
+  const add = view === "label" ? `<div class="col newcol" data-newcol tabindex="0" title="Click to make an empty label, or drop a task here to give it a new one"><div class="colhead">+ New label</div><div class="none">${drag ? "Click to name it, or drag a task here." : "Tap to name it."}</div></div>` : "";
   const plus = (l) => view === "label" ? `<button class="coladd" data-addcol title="${l ? `New task labelled ${esc(l)}` : "New task without a label"}" aria-label="New task"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M5 1v8M1 5h8"/></svg></button>` : "";
   const html = `<div class="board">${cols.map((c) => `<div class="col" data-col="${esc(c.key)}"><div class="colhead"${view === "label" && c.key ? ' data-dragcol title="Drag to move this column"' : ""}>${c.head}<span class="n">${c.items.length}</span>${plus(c.key)}${c.menu || ""}</div>${c.desc ? `<div class="desc">${esc(c.desc)}</div>` : ""}${c.items.map(tile).join("") || `<div class="none">${empty}</div>`}</div>`).join("")}${add}</div>`;
   const host = $("#board");
