@@ -549,11 +549,11 @@
   /* Our own hover tooltip, in place of the browser's. A popover so it sits
      above open dialogs too. --x nudges the arrow back onto the element when
      the bubble is pushed in from the window's edge. */
-  #tip { position:fixed; inset:auto; margin:0; border:0; padding:9px 16px; max-width:260px; border-radius:14px; background:#161b22; color:#fff; font-size:13px; line-height:1.4; text-align:center; box-shadow:0 8px 24px rgba(0,0,0,.18); pointer-events:none; overflow:visible; opacity:0; transition:opacity .12s; }
+  #tip { position:fixed; inset:auto; margin:0; border:0; padding:9px 14px; max-width:260px; border-radius:11px; background:#161b22; color:#fff; font-size:13px; line-height:1.4; text-align:center; box-shadow:0 8px 24px rgba(0,0,0,.18); pointer-events:none; overflow:visible; opacity:0; transition:opacity .12s; }
   #tip.on { opacity:1; }
   /* The tail: curved sides narrowing to a rounded tip, like a speech bubble. */
-  #tip::after { content:""; position:absolute; left:calc(50% + var(--x, 0px)); top:100%; width:22px; height:9px; translate:-50% -.5px; background:#161b22;
-    mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 9'%3E%3Cpath d='M0 0C6 0 7.5 2 9 6Q11 10 13 6C14.5 2 16 0 22 0Z'/%3E%3C/svg%3E") center/100% 100%; }
+  #tip::after { content:""; position:absolute; left:calc(50% + var(--x, 0px)); top:100%; width:24px; height:11px; translate:-50% -.5px; background:#161b22;
+    mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 11'%3E%3Cpath d='M0 0C5 0 7.5 2 9 6C10 9 10.8 10.6 12 10.6C13.2 10.6 14 9 15 6C16.5 2 19 0 24 0Z'/%3E%3C/svg%3E") center/100% 100%; }
   #tip.below::after { top:auto; bottom:100%; translate:-50% .5px; rotate:180deg; }
   #tip kbd { display:inline-block; margin-left:8px; padding:0 7px; min-width:20px; border-radius:7px; background:#33373f; font:600 11.5px/20px ui-monospace, monospace; }
   @media (prefers-reduced-motion: reduce) { #tip { transition:none; } }
@@ -3003,7 +3003,7 @@ function showTip(el) {
   if (el.dataset.key) tip.append(Object.assign(document.createElement("kbd"), { textContent: el.dataset.key }));
   if (tip.matches(":popover-open")) tip.hidePopover();
   tip.showPopover(); // re-shown so it's above any dialog opened since
-  const r = el.getBoundingClientRect(), w = tip.offsetWidth, h = tip.offsetHeight, gap = 11;
+  const r = el.getBoundingClientRect(), w = tip.offsetWidth, h = tip.offsetHeight, gap = 13;
   const below = r.top - h - gap < 4, mid = r.left + r.width / 2, left = Math.min(Math.max(mid - w / 2, 6), innerWidth - w - 6);
   tip.classList.toggle("below", below);
   tip.style.left = left + "px";
