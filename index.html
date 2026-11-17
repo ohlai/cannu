@@ -249,6 +249,7 @@
   button.bell svg.i { width:15px; height:15px; }
   /* Greyed out in muted and "all" alike: only a bell picked in "select" is dark. */
   button.bell.off { opacity:.35; cursor:default; } button.bell.off:hover { border-color:var(--line); }
+  button.bell.dim { opacity:.35; } button.bell.dim:hover { opacity:1; } /* muted, but a click turns this one on */
   /* No repos yet: the usual header and filters, with the stone logo and one button where the board goes.
      Things that need a repo stay visible but dimmed and unclickable. */
   /* Stone on the left, words and the button on the right; stacked on narrow screens. */
@@ -410,8 +411,10 @@
   .tile .when { margin-left:auto; font-size:11.5px; color:var(--mute); white-space:nowrap; }
   /* Title with the bell top right; the description (or its summary) under it. */
   .tile .top { display:flex; gap:6px; align-items:flex-start; }
-  .tile .top .t { flex:1; min-width:0; }
-  .tile .top .when { line-height:1.55; }
+  /* Title, time and bell share one 18px first line, centred in it, however many lines the title wraps to. */
+  .tile .top .t { flex:1; min-width:0; line-height:18px; }
+  .tile .top .when { line-height:18px; }
+  .tile .top .tbell { height:18px; margin:0 -4px 0 0; }
   .tile .foot:empty { display:none; }
   .tbell { flex:none; width:22px; height:22px; margin:-3px -6px 0 0; padding:0; border:0; background:none; border-radius:6px; display:grid; place-items:center; color:var(--mute); cursor:pointer; opacity:.45; transition:opacity .15s; }
   .tbell svg.i { width:14px; height:14px; }
@@ -421,7 +424,8 @@
   .tile .blurb { margin-top:4px; font-size:12.5px; line-height:1.4; color:var(--mute); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
   .tile .activity { display:flex; align-items:center; gap:6px; }
   .tile .activity .dots { zoom:.25; flex:none; color:var(--work); } /* zoom, like the chat's: some loaders hop by fixed px */
-  .tile .blurb ~ .snip { margin-top:8px; padding-top:7px; border-top:1px solid var(--line); }
+  /* The agent's side (working line, or its reply once done) sits under a divider, apart from the task's own text. */
+  .tile .top ~ .activity.agent, .tile .top ~ .snip { margin-top:8px; padding-top:7px; border-top:1px solid var(--line); }
   /* An error from the last action: a small mark in the footer, the text on hover and in the popup. */
   .tilerr { display:inline-flex; align-items:center; gap:4px; font-size:11.5px; font-weight:600; color:var(--bad); }
   .tilerr svg { width:13px; height:13px; fill:currentColor; }
@@ -1306,14 +1310,22 @@ const head = (f, cls, label, when) => { const [k, detail, name = k] = kind(f); r
 // (yes), never a plain bell. Muted and "all" decide it for every card, so the
 // bells are greyed out and can't be clicked. In "select" each one is off
 // until clicked, and greyed out while the feature has no agent to hear from.
+// A bell on a card or in the popup. From muted, one click switches to "select"
+// and turns this task on, even if it was on before muting (bells are kept).
+function toggleBell(slug) {
+  if (mode === "silent") { $('#notify [data-mode="select"]').click(); bells.add(slug); } // the click asks for permission, like picking it at the top
+  else bells.has(slug) ? bells.delete(slug) : bells.add(slug);
+  store.set("notifyBells", [...bells]); render(all);
+}
 function bellBtn(f) {
   const on = mode === "all" || (mode === "select" && bells.has(f.slug));
-  const can = mode === "select" && (!!f.worktree || !["merged", "dropped"].includes(f.status));
+  const can = mode !== "all" && (!!f.worktree || !["merged", "dropped"].includes(f.status));
   const noAgent = { merged: "Its agent has finished and its folder is removed, so there's nothing to notify you about.", dropped: "Dropped, so there's nothing to notify you about." }[f.status] || "No agent running for it right now.";
-  const title = mode === "silent" ? "Notifications are muted. Change it with the bells at the top."
-    : mode === "all" ? "Notifying you about every task. Pick the middle option at the top to choose which."
-    : !can ? noAgent : on ? "Notifying you about this task. Click to stop." : "Not notifying you about this task. Click to turn it on.";
-  return `<button class="sq bell ${on ? "on" : ""} ${can ? "" : "off"}" data-act="bell" ${can ? "" : 'aria-disabled="true"'} title="${title}">${on ? ICON.all : ICON.off}</button>`;
+  const title = mode === "all" ? "Notifying you about every task. Pick the middle option at the top to choose which."
+    : !can ? noAgent
+    : mode === "silent" ? "Notifications are muted. Click to be notified about this task."
+    : on ? "Notifying you about this task. Click to stop." : "Not notifying you about this task. Click to turn it on.";
+  return `<button class="sq bell ${on ? "on" : ""} ${can ? "" : "off"} ${mode === "silent" ? "dim" : ""}" data-act="bell" ${can ? "" : 'aria-disabled="true"'} title="${title}">${on ? ICON.all : ICON.off}</button>`;
 }
 // Every card ends with the same row: everyday buttons on the left, the one
 // that moves the feature on (in black) on the right.
@@ -1784,7 +1796,7 @@ function tile(f) {
   return `<div class="tile" data-open="${f.slug}" tabindex="0">
     <div class="top"><div class="t">${esc(f.title)}</div><span class="when">${when}</span>${tileBell(f)}</div>
     ${f.blurb ? `<div class="blurb"${f.blurb !== f.prompt ? ` title="${esc(f.prompt)}"` : ""}>${esc(f.blurb)}</div>` : ""}
-    ${st.activity && cls === "working" ? `<div class="activity"><span class="dots d${dotsFor(st.activity)}"><i></i><i></i><i></i></span>${esc(st.activity)}</div>` : ""}
+    ${st.activity && cls === "working" ? `<div class="activity agent"><span class="dots d${dotsFor(st.activity)}"><i></i><i></i><i></i></span>${esc(st.activity)}</div>` : ""}
     ${k === "waiting" && st.lastReply ? `<div class="snip">${esc(st.lastReply.replace(/[#*`>|]/g, "").trim().slice(0, 240))}</div>` : ""}
     ${schedOf(f) ? `<div class="activity">${esc(schedText(f))}</div>` : ""}
     <div class="foot">${view === "label" ? pill : f.label ? tagHtml(f.label) : ""}${f.merged && k !== "merged" ? `<span class="meta">merged</span>` : ""}${err}</div></div>`;
@@ -1847,10 +1859,8 @@ $("#board").addEventListener("click", (e) => {
   if (nm && !naming) return editCol(nm.closest(".col").dataset.col);
   const bl = e.target.closest("[data-bell]");
   if (bl) {
-    if (bl.getAttribute("aria-disabled")) return;
-    if (mode === "silent") $('#notify [data-mode="select"]').click(); // asks for permission, like picking it at the top
-    bells.has(bl.dataset.bell) ? bells.delete(bl.dataset.bell) : bells.add(bl.dataset.bell);
-    store.set("notifyBells", [...bells]); return render(all);
+    if (!bl.getAttribute("aria-disabled")) toggleBell(bl.dataset.bell);
+    return;
   }
   const t = e.target.closest("[data-open]"); if (t) openPop(t.dataset.open);
 });
@@ -2461,7 +2471,7 @@ async function onClick(e) {
   if (act === "fb") { s.fb = !s.fb; return render(all); }
   if (act === "reopen") { s.reopen = !s.reopen; return render(all); }
   if (act === "bell" && b.getAttribute("aria-disabled")) return; // greyed out: no agent to hear from
-  if (act === "bell") { bells.has(slug) ? bells.delete(slug) : bells.add(slug); store.set("notifyBells", [...bells]); return render(all); }
+  if (act === "bell") return toggleBell(slug);
   if (act === "app") { window.open(appUrl(port(slug)), "_blank"); return; }
   if (act === "appstop") { const r = await api(`${base}/appstop`, {}); return say(r.msg, r.ok ? "" : "bad"); }
   // Greyed out, but it still says why when clicked (a disabled button can't).
