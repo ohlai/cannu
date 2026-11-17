@@ -38,6 +38,10 @@
   .md code { font-family: ui-monospace, monospace; font-size: 12px; background: var(--bg); padding: 1px 4px; border-radius: 4px; }
   .md pre { background: var(--bg); padding: 8px 10px; border-radius: 6px; white-space: pre-wrap; overflow-wrap: anywhere; } /* wrapped: one long line used to widen the whole chat */
   .md pre code { padding: 0; background: none; }
+  .md pre { background: var(--card); border: 1px solid var(--line); } /* --bg matched the agent's bubble, so blocks vanished into it */
+  /* Language and Copy float top right, so code wraps around them rather than under. */
+  .md pre .cbbar { float: right; display: flex; align-items: center; gap: 2px; margin: -4px -6px 0 8px; }
+  .md pre .cblang { color: var(--mute); font-size: 11px; } .md pre .cbcopy { position: static; transform: none; }
   .md blockquote { border-left: 2px solid var(--line); padding-left: 10px; color: var(--mute); }
   .md table { border-collapse: collapse; margin: 6px 0; } .md td, .md th { border: 1px solid var(--line); padding: 3px 8px; text-align: left; }
   .md hr { border: 0; border-top: 1px solid var(--line); }
@@ -676,6 +680,17 @@
 const $ = (s, el = document) => el.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
 
+const COPY_ICON = '<svg viewBox="0 0 512 512" width="16" height="16" fill="currentColor" aria-hidden="true"><rect x="150" y="64" width="298" height="298" rx="60" fill="none" stroke="currentColor" stroke-width="42"/><rect x="42" y="128" width="342" height="342" rx="80"/></svg>';
+const COPIED_ICON = '<svg viewBox="0 0 512 512" width="16" height="16" fill="none" stroke="currentColor" stroke-width="48" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M70 270l120 120 252-268"/></svg>';
+// Code blocks' Copy button. Captured first so it doesn't also open or expand what it sits in.
+document.addEventListener("click", async (e) => {
+  const b = e.target.closest(".cbcopy"); if (!b) return;
+  e.stopPropagation(); e.preventDefault();
+  try { await navigator.clipboard.writeText(b.closest("pre").querySelector("code").textContent); b.innerHTML = COPIED_ICON; b.title = "Copied"; }
+  catch { b.title = "Couldn't copy"; }
+  setTimeout(() => { b.innerHTML = COPY_ICON; b.title = "Copy"; }, 1500);
+}, true);
+
 // Small markdown renderer for agent replies: headings, lists, code, quotes,
 // tables, bold, italics, links. Everything is escaped first.
 function md(src) {
@@ -689,10 +704,19 @@ function md(src) {
   const out = [];
   for (let i = 0; i < lines.length; ) {
     const l = lines[i];
-    if (/^```/.test(l)) {
-      const code = []; i++;
-      while (i < lines.length && !/^```/.test(lines[i])) code.push(lines[i++]);
-      i++; out.push(`<pre><code>${esc(code.join("\n"))}</code></pre>`); continue;
+    const open = l.match(/^\s{0,3}(`{3,}|~{3,})/);
+    if (open) {
+      // Closes on a bare fence of the same kind at least as long as the opening
+      // one (so ```` can wrap ```). Agents also nest plain ``` inside ```, so a
+      // ```lang inside opens a level that the next bare fence closes instead.
+      const f = open[1], code = []; let depth = 0; i++;
+      for (; i < lines.length; code.push(lines[i++])) {
+        const m = lines[i].match(/^\s*(`{3,}|~{3,})\s*(\S*)/);
+        if (!m || m[1][0] !== f[0] || m[1].length < f.length) continue;
+        if (m[2]) depth++; else if (depth) depth--; else break;
+      }
+      const lang = l.slice(open[0].length).trim().split(/\s/)[0];
+      i++; out.push(`<pre><span class="cbbar">${lang ? `<span class="cblang">${esc(lang)}</span>` : ""}<button type="button" class="inbtn cbcopy" title="Copy" aria-label="Copy code">${COPY_ICON}</button></span><code>${esc(code.join("\n"))}</code></pre>`); continue;
     }
     if (/^#{1,6}\s/.test(l)) { const n = Math.min(4, l.match(/^#+/)[0].length); out.push(`<h${n}>${inline(l.replace(/^#+\s*/, ""))}</h${n}>`); i++; continue; }
     if (/^\s*(---|\*\*\*)\s*$/.test(l)) { out.push("<hr>"); i++; continue; }
@@ -713,7 +737,7 @@ function md(src) {
     }
     if (/^>\s?/.test(l)) { const q = []; while (i < lines.length && /^>\s?/.test(lines[i])) q.push(lines[i++].replace(/^>\s?/, "")); out.push(`<blockquote>${inline(q.join(" "))}</blockquote>`); continue; }
     if (!l.trim()) { i++; continue; }
-    const p = []; while (i < lines.length && lines[i].trim() && !/^(```|#{1,6}\s|>|\s*([-*+]|\d+[.)])\s+|\s*\|)/.test(lines[i])) p.push(lines[i++]);
+    const p = []; while (i < lines.length && lines[i].trim() && !/^(\s{0,3}(```|~~~)|#{1,6}\s|>|\s*([-*+]|\d+[.)])\s+|\s*\|)/.test(lines[i])) p.push(lines[i++]);
     if (!p.length) p.push(lines[i++]);
     out.push(`<p>${p.map(inline).join("<br>")}</p>`);
   }
