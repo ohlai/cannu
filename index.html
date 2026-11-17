@@ -636,6 +636,8 @@
     <div class="body">
       <div class="labels" id="newLabels" style="margin-top:0"></div>
       <div id="newForm" style="display:contents"></div>
+      <div class="atts" id="newAtts"></div>
+      <div class="hint">Paste or drag in images and files to attach them.</div>
       <div class="banner" id="limitNew" hidden></div>
     </div>
     <div class="dmsg" id="addMsg"></div>
@@ -2593,6 +2595,22 @@ let newLabel = "";
 $("#newForm").innerHTML = taskForm((k) => ({ title: 'id="title"', prompt: 'id="prompt" class="tall"' })[k]);
 const saveNew = () => { try { sessionStorage.setItem(NEW_KEY, JSON.stringify({ title: $("#title").value, prompt: $("#prompt").value, model: $("#newModel").value, label: newLabel })); } catch {} };
 let newDraft = {}; try { newDraft = JSON.parse(sessionStorage.getItem(NEW_KEY)) || {}; } catch {}
+let newFiles = []; // held on the server until the task is made
+const showNewAtts = () => { $("#newAtts").innerHTML = attsHtml({ files: newFiles }); };
+async function attachNew(files) {
+  for (const file of [...files]) {
+    const name = file.name || "pasted.png";
+    try {
+      const r = await (await fetch(`/r/${encodeURIComponent(CUR)}/api/attach?name=${encodeURIComponent(name)}`, { method: "POST", body: file })).json();
+      if (!r.file) throw 0;
+      newFiles.push({ file: r.file, name, url: file.type.startsWith("image/") ? URL.createObjectURL(file) : "" }); showNewAtts();
+    } catch { dlgMsg("#addMsg", `Couldn't attach ${name}.`, "bad"); }
+  }
+}
+$("#newDlg").addEventListener("paste", (e) => { if (e.clipboardData.files.length) { e.preventDefault(); attachNew(e.clipboardData.files); } });
+$("#newDlg").addEventListener("dragover", (e) => { if (e.dataTransfer.types.includes("Files")) e.preventDefault(); });
+$("#newDlg").addEventListener("drop", (e) => { if (e.dataTransfer.files.length) { e.preventDefault(); attachNew(e.dataTransfer.files); } });
+$("#newAtts").addEventListener("click", (e) => { const b = e.target.closest("[data-act=unattach]"); if (b) { newFiles.splice(+b.dataset.i, 1); showNewAtts(); } });
 $("#title").value = newDraft.title || ""; $("#prompt").value = newDraft.prompt || ""; newLabel = newDraft.label || "";
 for (const id of ["#title", "#prompt", "#newModel"]) $(id).addEventListener("input", saveNew);
 // Its label: the same tags and + box as a feature's popup, but only picked here; made when it's created.
@@ -2636,14 +2654,14 @@ async function addFeature(plan) {
   if (typeof v === "string" && v !== "now") { dlgMsg("#addMsg", v, "bad"); return; } // a day or time missing or past
   const schedule = v === "now" ? null : v;
   if (!title || ((!plan || schedule) && !prompt)) { dlgMsg("#addMsg", schedule ? "Needs a name and what you want, so the agent has something to start on." : plan ? "Needs a name." : "Needs a name and what you want. Or save it as planned.", "bad"); return; }
-  const keep = { title: $("#title").value, prompt: $("#prompt").value };
-  closeModal($("#newDlg"));
+  const keep = { title: $("#title").value, prompt: $("#prompt").value }, files = newFiles.map((a) => a.file), keepFiles = newFiles;
+  closeModal($("#newDlg")); newFiles = []; showNewAtts();
   $("#title").value = ""; $("#prompt").value = ""; $("#newModel").value = ""; newLabel = ""; newDraft = {};
   try { sessionStorage.removeItem(NEW_KEY); } catch {}
-  const r = await api("/api/features", { title, prompt, plan, model, label, schedule }).catch(() => ({ msg: "Couldn't reach Cannu, or it sent back something unexpected." }));
+  const r = await api("/api/features", { title, prompt, plan, model, label, schedule, files }).catch(() => ({ msg: "Couldn't reach Cannu, or it sent back something unexpected." }));
   if (r.msg) {
     if ($("#title").value || $("#prompt").value) return boardSay(`Couldn't create “${title}”: ${r.msg}`); // already typing the next one
-    $("#title").value = keep.title; $("#prompt").value = keep.prompt; newDraft = { model }; newLabel = label; saveNew();
+    $("#title").value = keep.title; $("#prompt").value = keep.prompt; newDraft = { model }; newLabel = label; newFiles = keepFiles; showNewAtts(); saveNew();
     await openNew(); dlgMsg("#addMsg", r.msg, "bad"); return;
   }
   whenSel.delete("new"); drawNewStart(); // kept for a retry; the next feature starts now unless told otherwise
