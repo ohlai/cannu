@@ -411,12 +411,11 @@
   /* Title with the bell top right; the description (or its summary) under it. */
   .tile .top { display:flex; gap:6px; align-items:flex-start; }
   .tile .top .t { flex:1; min-width:0; }
-  .tbell { flex:none; width:22px; height:22px; margin:-3px -6px 0 0; padding:0; border:0; background:none; border-radius:6px; display:grid; place-items:center; color:var(--mute); cursor:pointer; opacity:0; transition:opacity .15s; }
+  .tbell { flex:none; width:22px; height:22px; margin:-3px -6px 0 0; padding:0; border:0; background:none; border-radius:6px; display:grid; place-items:center; color:var(--mute); cursor:pointer; opacity:.45; transition:opacity .15s; }
   .tbell svg.i { width:14px; height:14px; }
-  .tbell:hover { background:color-mix(in srgb, var(--line) 80%, transparent); color:var(--fg); }
+  .tbell:hover { background:color-mix(in srgb, var(--line) 80%, transparent); color:var(--fg); opacity:1; }
   .tbell.on { opacity:1; color:var(--fg); }
-  .tile:hover .tbell, .tile:focus-within .tbell, .tbell:focus-visible { opacity:1; }
-  @media (hover:none) { .tbell { opacity:1; } }
+  .tbell[aria-disabled] { cursor:default; background:none; }
   .tile .blurb { margin-top:4px; font-size:12.5px; line-height:1.4; color:var(--mute); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
   .tile .activity { display:flex; align-items:center; gap:6px; }
   .tile .activity .dots { zoom:.25; flex:none; color:var(--work); } /* zoom, like the chat's: some loaders hop by fixed px */
@@ -1307,8 +1306,8 @@ const head = (f, cls, label, when) => { const [k, detail, name = k] = kind(f); r
 // until clicked, and greyed out while the feature has no agent to hear from.
 function bellBtn(f) {
   const on = mode === "all" || (mode === "select" && bells.has(f.slug));
-  const can = mode === "select" && !!f.worktree;
-  const noAgent = { planned: "No agent yet. You can turn this on once it's started.", merged: "Its agent has finished and its folder is removed, so there's nothing to notify you about.", dropped: "Dropped, so there's nothing to notify you about." }[f.status] || "No agent running for it right now.";
+  const can = mode === "select" && (!!f.worktree || !["merged", "dropped"].includes(f.status));
+  const noAgent = { merged: "Its agent has finished and its folder is removed, so there's nothing to notify you about.", dropped: "Dropped, so there's nothing to notify you about." }[f.status] || "No agent running for it right now.";
   const title = mode === "silent" ? "Notifications are muted. Change it with the bells at the top."
     : mode === "all" ? "Notifying you about every task. Pick the middle option at the top to choose which."
     : !f.worktree ? noAgent : on ? "Notifying you about this task. Click to stop." : "Not notifying you about this task. Click to turn it on.";
@@ -1789,12 +1788,14 @@ function tile(f) {
     <div class="foot">${view === "label" ? pill : f.label ? tagHtml(f.label) : ""}${f.merged && k !== "merged" ? `<span class="meta">merged</span>` : ""}${err}<span class="when">${when}</span></div></div>`;
 }
 const WARN = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 20h20z"/><path class="w" d="M12 10v4M12 16.5v.5"/></svg>`;
-// The bell, top right of a card with an agent. Not shown in "all" mode, where every card notifies.
+// The bell, top right of every card that's still to do or in progress: faint when off, solid when on.
+// A planned task's bell can be set ahead of its start. In "all" mode every card notifies, so it's on and can't be changed here.
 // From muted, turning one on switches the mode to "select", so it does what it says.
 function tileBell(f) {
-  if (!f.worktree || mode === "all") return "";
-  const on = mode === "select" && bells.has(f.slug);
-  return `<button class="tbell ${on ? "on" : ""}" data-bell="${f.slug}" aria-pressed="${on}" title="${on ? "Notifying you about this task. Click to stop." : "Click to be notified when this task needs you."}" aria-label="Notify me about this task">${on ? ICON.all : ICON.off}</button>`;
+  if (["merged", "dropped"].includes(kind(f)[0])) return "";
+  const all = mode === "all", on = all || (mode === "select" && bells.has(f.slug));
+  const title = all ? "Notifying you about every task. Pick the middle bell at the top to choose which." : on ? "Notifying you about this task. Click to stop." : "Click to be notified when this task needs you.";
+  return `<button class="tbell ${on ? "on" : ""}" data-bell="${f.slug}" aria-pressed="${on}"${all ? ' aria-disabled="true"' : ""} title="${title}" aria-label="Notify me about this task">${on ? ICON.all : ICON.off}</button>`;
 }
 
 // The ⋯ at the top of a label column: edit, duplicate or delete it.
@@ -1843,6 +1844,7 @@ $("#board").addEventListener("click", (e) => {
   if (nm && !naming) return editCol(nm.closest(".col").dataset.col);
   const bl = e.target.closest("[data-bell]");
   if (bl) {
+    if (bl.getAttribute("aria-disabled")) return;
     if (mode === "silent") $('#notify [data-mode="select"]').click(); // asks for permission, like picking it at the top
     bells.has(bl.dataset.bell) ? bells.delete(bl.dataset.bell) : bells.add(bl.dataset.bell);
     store.set("notifyBells", [...bells]); return render(all);
