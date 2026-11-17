@@ -851,7 +851,7 @@
       <div class="labels" id="newLabels" style="margin-top:0"></div>
       <div id="newForm" style="display:contents"></div>
       <div class="atts" id="newAtts"></div>
-      <div class="hint">Paste or drag in images and files to attach them, or <label class="pickfile">choose files<input type="file" multiple hidden id="newPick"></label>.</div>
+      <div class="hint"><span class="wide">Paste or drag in images and files to attach them, or </span><span class="narrow">Attach images and files: </span><label class="pickfile">choose files<input type="file" multiple hidden id="newPick"></label>.</div>
       <div class="banner" id="limitNew" hidden></div>
     </div>
     <div class="dmsg" id="addMsg"></div>
@@ -1555,7 +1555,7 @@ function chatBox(f, s, cls) {
         <button class="primary send" data-act="send" title="${MAC ? "⌘+Enter" : "Ctrl+Enter"} sends">Send${keysHint(true)}</button>
       </div>
       <div class="hint" data-tags>${tagsHtml(s.draft)}</div>
-      <div class="hint">${f.live?.open ? "Its terminal is open. Sending closes that terminal session and carries on here (the conversation is kept). " : f.live?.background || cls === "working" ? "It's mid-turn. Your message waits and goes as soon as this turn ends. " : ""}@ to tag a related task. The agent reads their notes first. Paste or drag in images and files to attach them, or <label class="pickfile">choose files<input type="file" multiple hidden data-pickfile></label>.</div>
+      <div class="hint">${f.live?.open ? "Its terminal is open. Sending closes that terminal session and carries on here (the conversation is kept). " : f.live?.background || cls === "working" ? "It's mid-turn. Your message waits and goes as soon as this turn ends. " : ""}@ to tag a related task. The agent reads their notes first. <span class="wide">Paste or drag in images and files to attach them, or </span><span class="narrow">Attach images and files: </span><label class="pickfile">choose files<input type="file" multiple hidden data-pickfile></label>.</div>
     </div>`;
 }
 
