@@ -147,12 +147,18 @@ function contextBlock({ title, continues, refs }, since) {
 // A new feature is a feature.md committed on main. Planned ones stop there.
 // Started ones get a branch made from main after that commit, so the branch
 // has its feature.md, and only main ever changes it.
-function createFeature(title, prompt, { continues = null, refs = [], plan = false, model = "", label = "" } = {}) {
+function createFeature(title, prompt, { continues = null, refs = [], plan = false, model = "", label = "", files = [] } = {}) {
   const list = loadFeatures();
   if (list.some((f) => f.title.toLowerCase() === title.toLowerCase())) throw new Error("A task already has that name. Pick another.");
   const base = slugify(title);
   let slug = base;
   for (let n = 2; list.some((f) => f.slug === slug) || fs.existsSync(path.join(FEATURES_DIR, slug)) || fs.existsSync(path.join(WORKTREES, slug)) || branchExists(`feat/${slug}`); n++) slug = `${base}-${n}`;
+  // Files attached in New task waited in a holding folder; they move to this task's own, and their paths go after the prompt.
+  const moved = files.map((n) => path.basename(String(n))).filter((n) => fs.existsSync(path.join(ATTACH, "_new", n))).map((n) => {
+    const dir = path.join(ATTACH, slug); fs.mkdirSync(dir, { recursive: true });
+    fs.renameSync(path.join(ATTACH, "_new", n), path.join(dir, n)); return path.join(dir, n);
+  });
+  if (moved.length) prompt = [prompt, ...moved].join("\n");
   const f = { slug, title, prompt, status: "planned", label, created: stamp(), continues, refs, model: model in MODELS ? model : "" };
   if (plan) { writeFeature(f, `Plan task: ${title}`); return f; }
   return startFeature(f, `Start task: ${title}`);
@@ -1014,9 +1020,17 @@ const server = http.createServer(async (req, res) => {
       }
       return send(res, 200, { values: defaults(), builtIn: BUILT_IN, models: MODELS, claudeDefault: claudeDefault(), plugins: userPlugins(), ponytailLevel: ponytailLevel() });
     }
+    // A file pasted or dropped into New task, held until the task exists.
+    if (req.method === "POST" && url.pathname === "/api/attach") {
+      const dir = path.join(ATTACH, "_new"); fs.mkdirSync(dir, { recursive: true });
+      const name = `${Date.now()}-${(url.searchParams.get("name") || "file").replace(/[^\w.-]+/g, "_").slice(-80)}`;
+      const chunks = []; for await (const c of req) chunks.push(c);
+      fs.writeFileSync(path.join(dir, name), Buffer.concat(chunks));
+      return send(res, 200, { file: name });
+    }
     if (req.method === "POST" && url.pathname === "/api/features") {
       fresh();
-      const { title, prompt, plan, model, label, schedule } = await body(req);
+      const { title, prompt, plan, model, label, schedule, files } = await body(req);
       if (!title?.trim()) return send(res, 400, { msg: "Needs a name." });
       if (schedule && !prompt?.trim()) return send(res, 400, { msg: "Needs a starting prompt to schedule an agent." });
       if (!plan && !prompt?.trim()) return send(res, 400, { msg: "Needs a starting prompt to start an agent. Or save it as planned." });
@@ -1025,7 +1039,7 @@ const server = http.createServer(async (req, res) => {
       const lab = cleanLabel(label), l = readLabels();
       if (lab && !(lab in l)) newLabel(lab); // saved like any other, so its column stays if the feature leaves it
       // Scheduled: saved as planned, and the tick starts it when it's due.
-      const made = createFeature(title.trim(), String(prompt || "").trim(), { refs: mentions(prompt), plan: !!plan || !!sched, model, label: lab });
+      const made = createFeature(title.trim(), String(prompt || "").trim(), { refs: mentions(prompt), plan: !!plan || !!sched, model, label: lab, files: Array.isArray(files) ? files : [] });
       if (sched) saveRuntime(made.slug, { schedule: { ...sched, due: dueAt(sched) } });
       return send(res, 200, made);
     }
