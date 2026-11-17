@@ -2595,6 +2595,7 @@ let newLabel = "";
 $("#newForm").innerHTML = taskForm((k) => ({ title: 'id="title"', prompt: 'id="prompt" class="tall"' })[k]);
 const saveNew = () => { try { sessionStorage.setItem(NEW_KEY, JSON.stringify({ title: $("#title").value, prompt: $("#prompt").value, model: $("#newModel").value, label: newLabel })); } catch {} };
 let newDraft = {}; try { newDraft = JSON.parse(sessionStorage.getItem(NEW_KEY)) || {}; } catch {}
+$("#prompt").after($("#newAtts")); // between the box and its hints
 let newFiles = []; // held on the server until the task is made
 const showNewAtts = () => { $("#newAtts").innerHTML = attsHtml({ files: newFiles }); };
 async function attachNew(files) {
