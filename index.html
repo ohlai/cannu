@@ -1721,9 +1721,8 @@ function msgBody(text) {
 
 // The conversation, newest at the bottom. Reloaded when the agent's state
 // changes; stays scrolled to the bottom unless you've scrolled up.
-// Logo animations. Each click plays the next one (its name shows on hover after); each starts and ends on the C.
-// ponytail: the cycling is for trying them out; pick one and drop the rest.
-const LOGO_ON = [0,1,1, 1,0,0, 0,1,1], LOGO_LO = .12, RING = [0,1,2,5,8,7,6,3]; // RING: the 8 outer cells, clockwise
+// Logo animations. Clicks alternate between them (the name shows on hover after); each starts and ends on the C.
+const LOGO_ON = [0,1,1, 1,0,0, 0,1,1], LOGO_LO = .12;
 const cOp = i => LOGO_ON[i] ? 1 : LOGO_LO;
 const row = i => Math.floor(i / 3);
 const LOGO_ANIMS = {
@@ -1740,36 +1739,13 @@ const LOGO_ANIMS = {
     await Promise.all(cells.map((c, i) => c.animate([{ opacity: from[i] }, { opacity: cOp(i) }],
       { duration: 700, delay: row(i) * 200, easing: "ease-out", fill: "backwards" }).finished));
   },
-  // roll: the C turns one full lap round the ring, speeding up then easing back into place.
-  async roll(el, cells) {
-    const P = RING.map(i => LOGO_ON[i]);
-    await Promise.all(RING.map((i, p) => cells[i].animate(
-      Array.from({ length: 9 }, (_, k) => ({ opacity: P[(p - k + 8) % 8] ? 1 : LOGO_LO })),
-      { duration: 1100, easing: "ease-in-out" }).finished));
-  },
-  // write: the C fades out, then is drawn back in pen order: top right, top, left, bottom, bottom right.
-  async write(el, cells) {
-    const STROKE = [2, 1, 3, 7, 8];
-    await Promise.all(STROKE.map((i, s) => { const on = .35 + s * .11; return cells[i].animate(
-      [{ opacity: 1 }, { opacity: LOGO_LO, offset: .2 }, { opacity: LOGO_LO, offset: on }, { opacity: 1, offset: on + .08 }, { opacity: 1 }],
-      { duration: 1400, easing: "ease-in-out" }).finished; }));
-  },
-  // fill: the gaps light one by one until it's a solid square, hold, then drain back to the C.
-  async fill(el, cells) {
-    await Promise.all([4, 5, 0, 6].map((i, j) => cells[i].animate(
-      [{ opacity: LOGO_LO }, { opacity: 1, offset: .25 }, { opacity: 1, offset: .65 }, { opacity: LOGO_LO }],
-      { duration: 1300, delay: j * 110, easing: "ease-in-out" }).finished));
-  },
-  // ripple: an inverted ring runs out from the centre (lit cells dip, faint ones flash), like the ripple loader.
-  async ripple(el, cells) {
-    const dist = [2,1,2, 1,0,1, 2,1,2];
-    await Promise.all(cells.map((c, i) => c.animate([{ opacity: cOp(i) }, { opacity: LOGO_ON[i] ? LOGO_LO : 1 }, { opacity: cOp(i) }],
-      { duration: 500, delay: dist[i] * 150, easing: "ease-in-out" }).finished));
-  },
-  // flip: the whole C spins once round its vertical axis, like a coin.
-  async flip(el) {
-    await el.animate([{ transform: "perspective(200px) rotateY(0)" }, { transform: "perspective(200px) rotateY(360deg)" }],
-      { duration: 900, easing: "cubic-bezier(.5,0,.3,1)" }).finished;
+  // grow: the C fades out, then grows back from the left like a branch: the stem lights, splits up and down,
+  // and both arms reach right. Each stage lights a beat after the one before.
+  async grow(el, cells) {
+    const STAGE = [-1, 1, 2, 0, -1, -1, -1, 1, 2]; // the beat each lit cell comes on (stem 0, split 1, arms 2); -1 = unlit
+    await Promise.all(cells.map((c, i) => { if (STAGE[i] < 0) return; const on = .3 + STAGE[i] * .17; return c.animate(
+      [{ opacity: 1 }, { opacity: LOGO_LO, offset: .2 }, { opacity: LOGO_LO, offset: on }, { opacity: 1, offset: on + .1 }, { opacity: 1 }],
+      { duration: 1500, easing: "ease-in-out" }).finished; }));
   },
 };
 let logoN = 0, logoBusy = false;
