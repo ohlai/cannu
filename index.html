@@ -701,9 +701,17 @@ function md(src) {
   const out = [];
   for (let i = 0; i < lines.length; ) {
     const l = lines[i];
-    if (/^```/.test(l)) {
-      const code = []; i++;
-      while (i < lines.length && !/^```/.test(lines[i])) code.push(lines[i++]);
+    const open = l.match(/^\s{0,3}(`{3,}|~{3,})/);
+    if (open) {
+      // Closes on a bare fence of the same kind at least as long as the opening
+      // one (so ```` can wrap ```). Agents also nest plain ``` inside ```, so a
+      // ```lang inside opens a level that the next bare fence closes instead.
+      const f = open[1], code = []; let depth = 0; i++;
+      for (; i < lines.length; code.push(lines[i++])) {
+        const m = lines[i].match(/^\s*(`{3,}|~{3,})\s*(\S*)/);
+        if (!m || m[1][0] !== f[0] || m[1].length < f.length) continue;
+        if (m[2]) depth++; else if (depth) depth--; else break;
+      }
       i++; out.push(`<pre><code>${esc(code.join("\n"))}</code><button type="button" class="inbtn cbcopy" title="Copy" aria-label="Copy code">${COPY_ICON}</button></pre>`); continue;
     }
     if (/^#{1,6}\s/.test(l)) { const n = Math.min(4, l.match(/^#+/)[0].length); out.push(`<h${n}>${inline(l.replace(/^#+\s*/, ""))}</h${n}>`); i++; continue; }
@@ -725,7 +733,7 @@ function md(src) {
     }
     if (/^>\s?/.test(l)) { const q = []; while (i < lines.length && /^>\s?/.test(lines[i])) q.push(lines[i++].replace(/^>\s?/, "")); out.push(`<blockquote>${inline(q.join(" "))}</blockquote>`); continue; }
     if (!l.trim()) { i++; continue; }
-    const p = []; while (i < lines.length && lines[i].trim() && !/^(```|#{1,6}\s|>|\s*([-*+]|\d+[.)])\s+|\s*\|)/.test(lines[i])) p.push(lines[i++]);
+    const p = []; while (i < lines.length && lines[i].trim() && !/^(\s{0,3}(```|~~~)|#{1,6}\s|>|\s*([-*+]|\d+[.)])\s+|\s*\|)/.test(lines[i])) p.push(lines[i++]);
     if (!p.length) p.push(lines[i++]);
     out.push(`<p>${p.map(inline).join("<br>")}</p>`);
   }
