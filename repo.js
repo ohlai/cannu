@@ -861,8 +861,37 @@ function gitInfo(f, st) {
   return p;
 }
 
+// The line under a card's title: its description, minus attached file paths.
+// A long one gets a one-sentence Haiku summary, made once per text and kept
+// by its hash. One at a time, and none while the usage limit is full.
+const BLURBS = path.join(STATE, "_blurbs.json");
+let blurbs = (() => { try { return JSON.parse(fs.readFileSync(BLURBS, "utf8")); } catch { return {}; } })();
+let summarising = false;
+const LONG = 160;
+function blurb(prompt) {
+  const text = String(prompt || "").split("\n").filter((l) => !/[\\/]attachments[\\/][a-z0-9-]+[\\/]\d+-/.test(l.trim())).join("\n").trim();
+  if (text.length <= LONG) return text;
+  const key = crypto.createHash("sha1").update(text).digest("hex").slice(0, 16);
+  if (blurbs[key]) return blurbs[key];
+  if (!summarising && !fullLimit()) {
+    summarising = true;
+    // A temp folder as cwd, so no repo CLAUDE.md or worktree hooks apply.
+    run("claude", ["-p", "--model", "claude-haiku-5-5", "--output-format", "json"], { cwd: os.tmpdir(), timeout: 60e3,
+      input: `Summarise this task description for a small card on a kanban board: one plain sentence, at most 110 characters, no preamble, no quotes, no trailing full stop.\n\n${text}` })
+      .then(({ code, out }) => {
+        let s = ""; try { const j = JSON.parse(out.slice(out.indexOf("{"))); if (!j.is_error) s = String(j.result || "").trim(); } catch {}
+        // Failed: fall back to the text for good, rather than retrying every poll.
+        blurbs[key] = code === 0 && s ? s.slice(0, 160) : text.slice(0, LONG) + "…";
+        fs.writeFileSync(BLURBS, JSON.stringify(blurbs));
+        fresh();
+      }).finally(() => { summarising = false; });
+  }
+  return text.slice(0, LONG) + "…";
+}
+
 async function buildOverview() {
   return Promise.all(loadFeatures().map(async (f) => {
+    f.blurb = blurb(f.prompt);
     const st = readState(f.slug);
     // No worktree: planned, imported, dropped, or removed after merging.
     if (!hasWorktree(f)) return { ...f, st, worktree: false, live: { state: f.status }, usage: f.dir ? usage(f) : null };
