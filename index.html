@@ -1404,7 +1404,7 @@ function simpleCard(f, inPop) {
       ${head(f, cls, label, "")}
       ${planned ? modelPick("data-model", f.model || "", "The model its agent runs on. Changeable until it starts.") : s.reopen ? modelPick('data-field="rmodel"', s.rmodel ?? f.model ?? "", "The model the new task's agent runs on") : ""}
     </div>
-    ${planned && !edit && f.prompt ? `<div class="plan md">${md(f.prompt)}</div>` : ""}
+    ${planned && !edit && f.prompt ? (b => `${b.pics ? `<div class="atts">${b.pics}</div>` : ""}<div class="plan">${b.html}</div>`)(msgBody(f.prompt)) : ""}
     ${edit ? `<div style="margin-top:10px; display:grid; gap:8px">
       ${taskForm((k) => `data-field="e${k}"`, { title: s.etitle ?? f.title, prompt: s.eprompt ?? f.prompt ?? "", self: f.slug })}${linkedFrom(f, "hint")}
     </div>` : ""}
@@ -2292,6 +2292,8 @@ async function attach(ta, files) {
     try {
       const r = await (await fetch(`/r/${encodeURIComponent(CUR)}/api/features/${slug}/attach?name=${encodeURIComponent(name)}`, { method: "POST", body: file })).json();
       if (!r.path) throw 0;
+      // A planned task's or a reopen's description has no chat to hold files: the path goes into the text itself.
+      if (/^[er]prompt$/.test(ta.dataset.field)) { ta.value = `${ta.value.trimEnd()}\n${r.path}`.trim(); s[ta.dataset.field] = ta.value; fitPlan(ta); continue; }
       (s.files ||= []).push({ path: r.path, name, url: file.type.startsWith("image/") ? URL.createObjectURL(file) : "" });
       showAtts(slug);
     } catch { s.msg = `Couldn't attach ${name}.`; s.cls = "bad"; render(all); }
@@ -2310,17 +2312,20 @@ host.addEventListener("input", (e) => {
 host.addEventListener("click", onClick);
 // Files pasted or dropped into a chat are saved by the server, and their paths
 // go into the message for the agent to read. Plain text pastes as usual.
-host.addEventListener("paste", (e) => { if (e.target.closest(".compose") && e.clipboardData.files.length) { e.preventDefault(); attach(e.target, e.clipboardData.files); } });
+const DESC = "[data-field=eprompt], [data-field=rprompt]";
+host.addEventListener("paste", (e) => { if (e.target.closest(`.compose, ${DESC}`) && e.clipboardData.files.length) { e.preventDefault(); attach(e.target, e.clipboardData.files); } });
 // While files are dragged over a chat it shows a dashed drop zone. dragleave
 // also fires moving between the chat's own children, so the zone clears a
 // moment after the last dragover instead.
 let dragOff;
 host.addEventListener("dragover", (e) => {
+  if (e.target.matches(DESC) && e.dataTransfer.types.includes("Files")) return e.preventDefault();
   const c = e.target.closest(".chat"); if (!c || !e.dataTransfer.types.includes("Files")) return;
   e.preventDefault(); c.classList.add("dragging");
   clearTimeout(dragOff); dragOff = setTimeout(() => c.classList.remove("dragging"), 150);
 });
 host.addEventListener("drop", (e) => {
+  if (e.target.matches(DESC) && e.dataTransfer.files.length) { e.preventDefault(); return attach(e.target, e.dataTransfer.files); }
   const c = e.target.closest(".chat"); if (!c || !e.dataTransfer.files.length) return;
   e.preventDefault(); c.classList.remove("dragging");
   attach(c.querySelector(".compose textarea"), e.dataTransfer.files);
