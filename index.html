@@ -650,6 +650,8 @@
   #limitMsg .switch { display:flex; width:fit-content; margin-top:16px; font-size:12px; }
   @media (prefers-reduced-motion: reduce) { .urings, .uin { transition:none; } }
   .limited .dot { background:var(--bad); }
+  /* "choose files" in the attach hints: a link that opens the file picker. */
+  .pickfile { color:var(--fg); text-decoration:underline; text-underline-offset:2px; cursor:pointer; }
   /* Words with a shorter version for phones: .wide shows on wider screens, .narrow on phones. */
   .narrow { display:none; }
   #sortBtn svg.narrow { width:15px; height:15px; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; transform:none; }
@@ -846,7 +848,7 @@
       <div class="labels" id="newLabels" style="margin-top:0"></div>
       <div id="newForm" style="display:contents"></div>
       <div class="atts" id="newAtts"></div>
-      <div class="hint">Paste or drag in images and files to attach them.</div>
+      <div class="hint">Paste or drag in images and files to attach them, or <label class="pickfile">choose files<input type="file" multiple hidden id="newPick"></label>.</div>
       <div class="banner" id="limitNew" hidden></div>
     </div>
     <div class="dmsg" id="addMsg"></div>
@@ -1550,7 +1552,7 @@ function chatBox(f, s, cls) {
         <button class="primary send" data-act="send" title="${MAC ? "⌘+Enter" : "Ctrl+Enter"} sends">Send${keysHint(true)}</button>
       </div>
       <div class="hint" data-tags>${tagsHtml(s.draft)}</div>
-      <div class="hint">${f.live?.open ? "Its terminal is open. Sending closes that terminal session and carries on here (the conversation is kept). " : f.live?.background || cls === "working" ? "It's mid-turn. Your message waits and goes as soon as this turn ends. " : ""}@ to tag a related task. The agent reads their notes first. Paste or drag in images and files to attach them.</div>
+      <div class="hint">${f.live?.open ? "Its terminal is open. Sending closes that terminal session and carries on here (the conversation is kept). " : f.live?.background || cls === "working" ? "It's mid-turn. Your message waits and goes as soon as this turn ends. " : ""}@ to tag a related task. The agent reads their notes first. Paste or drag in images and files to attach them, or <label class="pickfile">choose files<input type="file" multiple hidden data-pickfile></label>.</div>
     </div>`;
 }
 
@@ -2627,6 +2629,9 @@ host.addEventListener("drop", (e) => {
 });
 // A planned feature's model, saved as soon as it's picked.
 host.addEventListener("change", async (e) => {
+  // "choose files" under a chat: the only way to attach on a phone, which can't drag and rarely pastes files.
+  // ponytail: if the card re-renders while the picker is open, the pick is lost; pick again.
+  if (e.target.matches("[data-pickfile]")) { const files = [...e.target.files]; e.target.value = ""; return attach(e.target.closest("[data-slug]").querySelector(".compose textarea"), files); }
   if (!e.target.matches("[data-model]")) return;
   const slug = e.target.closest("[data-slug]").dataset.slug, s = u(slug);
   const r = await api(`/api/features/${slug}/model`, { model: e.target.value });
@@ -2913,6 +2918,7 @@ async function attachNew(files) {
 $("#newDlg").addEventListener("paste", (e) => { if (e.clipboardData.files.length) { e.preventDefault(); attachNew(e.clipboardData.files); } });
 $("#newDlg").addEventListener("dragover", (e) => { if (e.dataTransfer.types.includes("Files")) e.preventDefault(); });
 $("#newDlg").addEventListener("drop", (e) => { if (e.dataTransfer.files.length) { e.preventDefault(); attachNew(e.dataTransfer.files); } });
+$("#newPick").addEventListener("change", (e) => { const files = [...e.target.files]; e.target.value = ""; attachNew(files); });
 $("#newAtts").addEventListener("click", (e) => { const b = e.target.closest("[data-act=unattach]"); if (b) { newFiles.splice(+b.dataset.i, 1); showNewAtts(); } });
 $("#title").value = newDraft.title || ""; $("#prompt").value = newDraft.prompt || ""; newLabel = newDraft.label || "";
 for (const id of ["#title", "#prompt", "#newModel"]) $(id).addEventListener("input", saveNew);
