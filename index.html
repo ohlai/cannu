@@ -348,6 +348,10 @@
   .brand { display:flex; align-items:center; gap:14px; }
   .brand img { width:48px; height:48px; }
   @media (prefers-color-scheme: dark) { .brand img { filter:invert(1); } }
+  /* Dot-grid "C", drawn like the .pix loaders but in the text colour. Lit cells have .on; the rest show faintly. */
+  .logo { display:inline-grid; grid-template-columns:repeat(5,1fr); width:48px; height:48px; gap:3px; flex:none; color:var(--fg); }
+  .logo i { background:currentColor; border-radius:50%; opacity:.08; }
+  .logo i.on { opacity:1; }
   .brand h1 { margin:0; font-size:34px; line-height:1.1; letter-spacing:-.025em; font-weight:700; }
   /* While a popup is open the page behind it stays put. */
   html.locked { overflow:hidden; }
@@ -666,7 +670,7 @@
 <main>
   <div class="row" id="top" style="margin-bottom:36px" data-tip-below>
     <div class="grow">
-      <div class="brand"><img src="/logo.png?v=2" alt=""><h1>Cannu <span>Agent board</span></h1></div>
+      <div class="brand"><span class="logo" aria-hidden="true"><i></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i class="on"></i><i></i><i></i><i></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i class="on"></i><i></i><i></i><i></i><i class="on"></i><i></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></span><h1>Cannu <span>Agent board</span></h1></div>
       <p class="sub" style="margin:12px 0 0" id="totals"></p>
     </div>
     <div class="rings" id="rings" tabindex="0" aria-label="Claude usage"></div>
