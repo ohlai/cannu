@@ -179,6 +179,8 @@
   .typing { align-self:flex-start; display:flex; align-items:center; gap:4px; max-width:100%; padding:4px 2px; } .typing .activity { margin-left:6px; }
   .stopbtn { position:absolute; right:124px; bottom:4px; width:28px; height:28px; padding:0; display:flex; align-items:center; justify-content:center; border:0; border-radius:8px; background:transparent; } .stopbtn:hover { background:var(--line); }
   .stopbtn::before { content:""; width:11px; height:11px; border-radius:3px; background:var(--fg); }
+  .inwrap { position:relative; } .inwrap input { width:100%; box-sizing:border-box; padding-right:40px; }
+  .inbtn { position:absolute; right:4px; top:50%; transform:translateY(-50%); width:28px; height:28px; padding:0; display:flex; align-items:center; justify-content:center; border:0; border-radius:6px; background:transparent; color:var(--mute); } .inbtn:hover, .inbtn:focus-visible { color:var(--fg); background:var(--line); outline:none; }
   .compose.multi .stopbtn { right:116px; bottom:4px; } .compose:has(.stopbtn):not(.multi) textarea { padding-right:40px; }
   .bubble .who { font-size:11px; opacity:.65; margin-top:4px; }
   /* Message box: its own rounded box with Send on its right. Once the text
@@ -610,7 +612,7 @@
   <div class="panel">
     <header><h2>Add a repo</h2><div class="hint">Cannu runs agents on it from a board of its own. A <code>cannu.json</code> in the repo says how to set it up, run and check it; without one it uses the defaults.</div></header>
     <div class="body">
-      <div class="field"><label for="repoDir">Folder</label><input type="text" id="repoDir" placeholder="C:\Users\you\github\my-project"></div>
+      <div class="field"><label for="repoDir">Folder</label><div class="inwrap"><input type="text" id="repoDir" placeholder="C:\Users\you\github\my-project"><button type="button" id="repoBrowse" class="inbtn" title="Choose a folder in your file explorer" aria-label="Browse for a folder"><svg viewBox="0 0 512 512" width="16" height="16" fill="currentColor"><path d="M0 90Q0 58 32 58H155Q172 58 182 72L212 118H400Q431 118 431 150V188H110Q88 188 78 208L0 360Z"/><path d="M118 218H478Q520 218 500 262L430 430Q420 455 390 455H40Q0 455 20 412L88 244Q98 218 118 218Z"/></svg></button></div></div>
       <div class="field" id="foundField"><label>Suggested</label><div class="found" id="found"><div class="hint">Looking…</div></div></div>
       <div class="reposet" id="repoSet" hidden>
         <div class="field"><label for="repoNameIn">Name</label><input type="text" id="repoNameIn" placeholder="From the folder's name"><div class="hint">Shown in the dropdown and in the board's address.</div></div>
@@ -2916,6 +2918,12 @@ async function openAddRepo() {
 $("#found").addEventListener("click", (e) => {
   const b = e.target.closest("[data-dir]"); if (!b) return;
   $("#repoDir").value = b.dataset.dir; inspectDir();
+});
+$("#repoBrowse").addEventListener("click", async (e) => {
+  const b = e.currentTarget; b.disabled = true;
+  const r = await fetch("/api/repos/browse", { method: "POST" }).then((x) => x.json()).catch(() => ({}));
+  b.disabled = false;
+  if (r.dir) { $("#repoDir").value = r.dir; inspectDir(); }
 });
 $("#repoDir").addEventListener("input", () => { clearTimeout(inspectTimer); inspectTimer = setTimeout(inspectDir, 350); });
 $("#repoNameIn").addEventListener("input", () => { nameTouched = $("#repoNameIn").value.trim() !== ""; });

@@ -64,6 +64,26 @@ function found() {
 const cleanDir = (dir) => path.resolve(String(dir || "").trim().replace(/^["']|["']$/g, ""));
 // The name is in addresses and folder names, so keep it plain.
 const plainName = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "");
+// Native folder dialog of the OS the server runs on (it's your own machine). "" = cancelled or none available.
+// Windows: the modern Explorer-style dialog (IFileOpenDialog, pick-folders mode), not the old tree FolderBrowserDialog.
+const WIN_PICK = `
+Add-Type -TypeDefinition @'
+using System; using System.Runtime.InteropServices;
+[ComImport, Guid("DC1C5A9C-E88A-4dde-A5A1-60F82A20AEF7")] class FOD {}
+[ComImport, Guid("43826D1E-E718-42EE-BC55-A1E261C37BFE"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IItem { void B(); void P(); void N(uint s, [MarshalAs(UnmanagedType.LPWStr)] out string n); }
+[ComImport, Guid("42f85136-db7e-439c-85f1-e4075d135fc8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IFD { [PreserveSig] int Show(IntPtr h); void a(); void b(); void c(); void d(); void e(); void SetOptions(uint o); void f(); void g(); void h(); void i(); void j(); void k(); void l(); void SetTitle([MarshalAs(UnmanagedType.LPWStr)] string t); void m(); void n(); void GetResult(out IItem r); }
+public static class Pick { [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow(); public static string Run() { var d = (IFD)new FOD(); d.SetOptions(0x20 | 0x40); d.SetTitle("Choose a folder"); int rc = d.Show(GetForegroundWindow()); if (rc != 0) return ""; IItem r; d.GetResult(out r); string p; r.N(0x80058000, out p); return p; } }
+'@
+[Pick]::Run()`;
+function browseDir() {
+  const [cmd, ...args] = process.platform === "win32"
+    ? ["powershell", "-NoProfile", "-STA", "-EncodedCommand", Buffer.from(WIN_PICK, "utf16le").toString("base64")]
+    : process.platform === "darwin" ? ["osascript", "-e", "POSIX path of (choose folder)"]
+    : ["zenity", "--file-selection", "--directory"];
+  try { return execFileSync(cmd, args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true, timeout: 300000 }).trim().replace(/(.)\/$/, "$1"); } catch { return ""; }
+}
 const gitIn = (dir, ...args) => { try { return execFileSync("git", args, { cwd: dir, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true }).trim(); } catch { return ""; } };
 const readJson = (f) => { try { return JSON.parse(fs.readFileSync(f, "utf8")); } catch { return null; } };
 
@@ -183,6 +203,7 @@ const handler = async (req, res) => {
   }
   // Claude plan usage for the rings: one account for every repo, so served here.
   if (url.pathname === "/api/usage") return json(res, planUsage());
+  if (url.pathname === "/api/repos/browse" && req.method === "POST") return json(res, { dir: browseDir() });
   if (url.pathname === "/api/repos/found") return json(res, found());
   if (url.pathname === "/api/repos/inspect") return json(res, inspect(url.searchParams.get("dir")));
   if (url.pathname === "/api/repos/remove" && req.method === "POST") return json(res, await removeRepo((await readBody(req)).name));
