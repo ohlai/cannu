@@ -694,8 +694,13 @@
     #mention { min-width:0; max-width:calc(100vw - 16px); }
     dialog.modal, dialog.modal.popdlg, #askDlg { max-width:calc(100vw - 16px); }
     .panel { max-height:calc(100dvh - 16px); }
-    #repoDlg .panel { height:calc(100dvh - 16px); }
     .panel header, .panel .body, .panel footer, .dmsg { padding-left:14px; padding-right:14px; }
+    /* Footers that don't fit wrap to the right, so Start agent stays under the hand, not under Close. */
+    .panel footer.row { justify-content:flex-end; gap:8px; }
+    /* The sort menu opens leftwards from its button, which sits near the right edge. */
+    #sortMenu { left:auto !important; right:0 !important; }
+    /* The model picker stays in a planned task's popup; in the list it gives its room to the title. */
+    #list .card select.model { display:none; }
     .pop .chat { height:min(52dvh, 560px); }
     /* A card's top row stays one line: the title wraps in what's left, with the status, model and bell on its first line. */
     .card > .row:first-child { flex-wrap:nowrap; align-items:flex-start; gap:8px; }
@@ -704,7 +709,19 @@
     .card > .row:first-child > .meta:empty { display:none; }
     .card > .row:first-child .title { line-height:26px; }
     .card > .row:first-child .right { gap:8px; }
-    .card > .row:first-child select.model { height:26px; max-width:112px; padding:0 4px; }
+    .card > .row:first-child select.model { height:26px; max-width:100px; padding:0 2px; } /* stays 16px on touch, so iOS doesn't zoom when it's tapped */
+  }
+  /* A phone turned sideways: wide enough for the desktop layout, but short, so tighten the header and
+     filters and keep search on the filters' line. */
+  @media (max-height:500px) and (orientation:landscape) {
+    main { padding:10px 16px 24px; }
+    #top { margin-bottom:12px !important; }
+    .brand img { width:32px; height:32px; } .brand h1 { font-size:24px; } .brand h1 span { display:inline; margin-left:8px; font-size:13px; }
+    .filters { margin-bottom:10px; }
+    .searchbox { width:200px; }
+    .board { padding-top:16px; margin-top:-8px; }
+    .panel { max-height:calc(100dvh - 16px); }
+    .pop .chat { height:calc(100dvh - 190px); min-height:140px; }
   }
   /* A phone held upright: status and label columns stack top to bottom. Turned sideways they stay side by side. */
   @media (max-width:640px) and (orientation:portrait) {
