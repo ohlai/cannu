@@ -197,6 +197,7 @@
   .chat .hint { padding:6px 10px 10px; }
   .chat { position:relative; }
   .atts { display:flex; flex-wrap:wrap; gap:6px; }
+  .atts:empty { display:none; }
   /* Files waiting to send float over the bottom of the thread, so the
      messages keep their full height. */
   .compose .atts { position:absolute; left:0; bottom:calc(100% + 6px); z-index:2; }
@@ -1377,6 +1378,7 @@ function card(f, inPop) {
 function taskForm(at, { title = "", prompt = "", self = "" } = {}) {
   return `<input type="text" ${at("title")} placeholder="Task name" value="${esc(title)}">
     <textarea ${at("prompt")} data-mention${self ? ` data-self="${self}"` : ""} placeholder="What needs doing?">${esc(prompt)}</textarea>
+    <div class="atts" data-pics>${msgBody(prompt).pics}</div>
     ${mentionHint(prompt, self)}`;
 }
 const modelPick = (attr, sel, title) => `<select class="model" ${attr} title="${title}" aria-label="Model">${modelOptions(sel, true)}</select>`;
@@ -2285,6 +2287,8 @@ function markShortErrors() {
     e.title = short ? "" : "Click to show more";
   }
 }
+// Previews of the attached paths in a description box, under it.
+const showPics = (ta) => { const el = ta.nextElementSibling; if (el?.matches("[data-pics]")) el.innerHTML = msgBody(ta.value).pics; };
 async function attach(ta, files) {
   const slug = ta.closest("[data-slug]").dataset.slug, s = u(slug);
   for (const file of [...files]) {
@@ -2293,7 +2297,7 @@ async function attach(ta, files) {
       const r = await (await fetch(`/r/${encodeURIComponent(CUR)}/api/features/${slug}/attach?name=${encodeURIComponent(name)}`, { method: "POST", body: file })).json();
       if (!r.path) throw 0;
       // A planned task's or a reopen's description has no chat to hold files: the path goes into the text itself.
-      if (/^[er]prompt$/.test(ta.dataset.field)) { ta.value = `${ta.value.trimEnd()}\n${r.path}`.trim(); s[ta.dataset.field] = ta.value; fitPlan(ta); continue; }
+      if (/^[er]prompt$/.test(ta.dataset.field)) { ta.value = `${ta.value.trimEnd()}\n${r.path}`.trim(); s[ta.dataset.field] = ta.value; fitPlan(ta); showPics(ta); continue; }
       (s.files ||= []).push({ path: r.path, name, url: file.type.startsWith("image/") ? URL.createObjectURL(file) : "" });
       showAtts(slug);
     } catch { s.msg = `Couldn't attach ${name}.`; s.cls = "bad"; render(all); }
@@ -2308,6 +2312,7 @@ host.addEventListener("input", (e) => {
   if (e.target.dataset.field) s[e.target.dataset.field] = e.target.value;
   if (e.target.closest(".compose")) fitCompose(e.target);
   if (e.target.dataset.field === "eprompt") fitPlan(e.target);
+  if (/^[er]prompt$/.test(e.target.dataset.field)) showPics(e.target);
 });
 host.addEventListener("click", onClick);
 // Files pasted or dropped into a chat are saved by the server, and their paths
