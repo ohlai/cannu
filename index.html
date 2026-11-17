@@ -697,6 +697,14 @@
     #repoDlg .panel { height:calc(100dvh - 16px); }
     .panel header, .panel .body, .panel footer, .dmsg { padding-left:14px; padding-right:14px; }
     .pop .chat { height:min(52dvh, 560px); }
+    /* A card's top row stays one line: the title wraps in what's left, with the status, model and bell on its first line. */
+    .card > .row:first-child { flex-wrap:nowrap; align-items:flex-start; gap:8px; }
+    .card > .row:first-child > .grow { min-width:0; }
+    .card > .row:first-child > :not(.grow) { flex:none; }
+    .card > .row:first-child > .meta:empty { display:none; }
+    .card > .row:first-child .title { line-height:26px; }
+    .card > .row:first-child .right { gap:8px; }
+    .card > .row:first-child select.model { height:26px; max-width:112px; padding:0 4px; }
   }
   /* A phone held upright: status and label columns stack top to bottom. Turned sideways they stay side by side. */
   @media (max-width:640px) and (orientation:portrait) {
