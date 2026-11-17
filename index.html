@@ -38,7 +38,10 @@
   .md code { font-family: ui-monospace, monospace; font-size: 12px; background: var(--bg); padding: 1px 4px; border-radius: 4px; }
   .md pre { background: var(--bg); padding: 8px 10px; border-radius: 6px; white-space: pre-wrap; overflow-wrap: anywhere; } /* wrapped: one long line used to widen the whole chat */
   .md pre code { padding: 0; background: none; }
-  .md pre { position: relative; padding-right: 40px; background: var(--card); border: 1px solid var(--line); } /* --bg matched the agent's bubble, so blocks vanished into it */ .md pre .cbcopy { top: 4px; transform: none; }
+  .md pre { background: var(--card); border: 1px solid var(--line); } /* --bg matched the agent's bubble, so blocks vanished into it */
+  /* Language and Copy float top right, so code wraps around them rather than under. */
+  .md pre .cbbar { float: right; display: flex; align-items: center; gap: 2px; margin: -4px -6px 0 8px; }
+  .md pre .cblang { color: var(--mute); font-size: 11px; } .md pre .cbcopy { position: static; transform: none; }
   .md blockquote { border-left: 2px solid var(--line); padding-left: 10px; color: var(--mute); }
   .md table { border-collapse: collapse; margin: 6px 0; } .md td, .md th { border: 1px solid var(--line); padding: 3px 8px; text-align: left; }
   .md hr { border: 0; border-top: 1px solid var(--line); }
@@ -683,7 +686,7 @@ const COPIED_ICON = '<svg viewBox="0 0 512 512" width="16" height="16" fill="non
 document.addEventListener("click", async (e) => {
   const b = e.target.closest(".cbcopy"); if (!b) return;
   e.stopPropagation(); e.preventDefault();
-  try { await navigator.clipboard.writeText(b.previousElementSibling.textContent); b.innerHTML = COPIED_ICON; b.title = "Copied"; }
+  try { await navigator.clipboard.writeText(b.closest("pre").querySelector("code").textContent); b.innerHTML = COPIED_ICON; b.title = "Copied"; }
   catch { b.title = "Couldn't copy"; }
   setTimeout(() => { b.innerHTML = COPY_ICON; b.title = "Copy"; }, 1500);
 }, true);
@@ -712,7 +715,8 @@ function md(src) {
         if (!m || m[1][0] !== f[0] || m[1].length < f.length) continue;
         if (m[2]) depth++; else if (depth) depth--; else break;
       }
-      i++; out.push(`<pre><code>${esc(code.join("\n"))}</code><button type="button" class="inbtn cbcopy" title="Copy" aria-label="Copy code">${COPY_ICON}</button></pre>`); continue;
+      const lang = l.slice(open[0].length).trim().split(/\s/)[0];
+      i++; out.push(`<pre><span class="cbbar">${lang ? `<span class="cblang">${esc(lang)}</span>` : ""}<button type="button" class="inbtn cbcopy" title="Copy" aria-label="Copy code">${COPY_ICON}</button></span><code>${esc(code.join("\n"))}</code></pre>`); continue;
     }
     if (/^#{1,6}\s/.test(l)) { const n = Math.min(4, l.match(/^#+/)[0].length); out.push(`<h${n}>${inline(l.replace(/^#+\s*/, ""))}</h${n}>`); i++; continue; }
     if (/^\s*(---|\*\*\*)\s*$/.test(l)) { out.push("<hr>"); i++; continue; }
