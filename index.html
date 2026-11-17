@@ -343,7 +343,7 @@
   #welcome ol { color:var(--mute); margin:0 0 22px; padding-left:20px; line-height:1.7; }
   #welcome ol b { color:var(--fg); font-weight:600; }
   @media (max-width:760px) { #welcome:not([hidden]) { flex-direction:column; text-align:center; gap:20px; } #welcome ol { text-align:left; } #welcome .copy { width:auto; } #welcome h2 { white-space:normal; } }
-  body.norepo #board, body.norepo #list, body.norepo #boardMsg { display:none; }
+  body.norepo #board, body.norepo #boardMsg { display:none; }
   body.norepo .filters, body.norepo #newOpen, body.norepo #notify, body.norepo #defaultsOpen, body.norepo #rings { opacity:.4; pointer-events:none; }
   /* The welcome fills the space under the header, so the stone and words sit mid-screen. */
   body.norepo main { min-height:100vh; box-sizing:border-box; display:flex; flex-direction:column; }
@@ -410,6 +410,9 @@
   body.boarding main > *:not(#board, #top, .filters) { width:100%; }
   body.boarding #board { flex:1; display:flex; flex-direction:column; }
   body.boarding .board { flex:1; margin-bottom:0; }
+  /* The list: the same cards in one centred column, no column box around them. */
+  .board.list { grid-auto-flow:row; grid-template-columns:minmax(0, 720px); justify-content:center; }
+  .board.list > .col { background:none; padding:0; }
   .col { background:color-mix(in srgb, var(--line) 35%, transparent); border-radius:12px; padding:10px; min-height:110px; }
   .col.drop { outline:2px dashed var(--mute); outline-offset:-2px; }
   .colhead[data-dragcol] { cursor:grab; }
@@ -652,7 +655,7 @@
   .limited .dot { background:var(--bad); }
 </style>
 </head>
-<body>
+<body class="boarding">
 <main>
   <div class="row" id="top" style="margin-bottom:36px">
     <div class="grow">
@@ -696,7 +699,6 @@
   </div>
   <div class="msg bad" id="boardMsg" hidden style="margin-bottom:10px"></div>
   <div id="board"></div>
-  <div id="list"></div>
   <div id="welcome" hidden>
     <img src="/docs/images/logo-stone.png" alt="">
     <div class="copy">
@@ -1618,78 +1620,15 @@ function render(features) {
   const ms = live.reduce((a, f) => a + f.usage.ms, 0), cost = live.reduce((a, f) => a + f.usage.cost, 0);
   // The totals go on their own line under the tagline.
   $("#totals").textContent = ms || cost ? `All tasks: ${dur(ms)} agent time, ≈$${cost.toFixed(2)} at API prices.` : "";
-  const typing = document.activeElement?.closest?.("#list") && document.activeElement.matches("textarea, input[type=text]");
-  // Filter chips, with how many features each would show.
-  const inGroup = (f, g) => g === "all" || kind(f)[0] === g;
+  // Filter chips, with how many features each would show. Only the list has them; the boards have Hide done.
   $("#chips").innerHTML = ["all", ...CHIPS].map((g) => `<button data-filter="${g}" title="${KIND_TIPS[g]}" class="${g === filter ? "on" : ""}">${cap(g)}<span class="n">${features.filter((f) => inGroup(f, g)).length}</span></button>`).join("");
-  const onBoard = view !== "list";
-  document.body.classList.toggle("boarding", onBoard);
-  $("#chips").hidden = onBoard; $("#doneSeg").hidden = !onBoard;
+  const onList = view === "list";
+  $("#chips").hidden = !onList; $("#doneSeg").hidden = onList;
   for (const place of segs) place();
   if (popSlug) renderPop();
-  if (onBoard) { if ($("#list").firstChild) $("#list").innerHTML = ""; return renderBoard(features); }
-  if ($("#board").firstChild) { $("#board").innerHTML = ""; $("#board")._html = ""; }
-  // Replacing a card under a drag or a selection throws the selection onto
-  // the new HTML. Hold the cards still until it's let go.
-  const sel = getSelection();
-  if (mouseDown || (sel && !sel.isCollapsed && $("#list").contains(sel.anchorNode))) return;
-  if (typing) { // don't wipe what you're typing, but keep open chats up to date
-    for (const f of features) {
-      const el = u(f.slug).fb && $(`[data-slug="${f.slug}"] [data-chat][data-loaded]`);
-      if (el && el.dataset.at !== String(f.st?.at) + (f.st?.queue?.length || 0)) loadChat(f.slug);
-    }
-    return;
-  }
-  // Keep open chats as they are (scroll position) instead of rebuilding them on every refresh.
-  const keep = {};
-  // Taking it out of the page resets its scroll, so note where it was.
-  for (const el of document.querySelectorAll("[data-chat][data-loaded]")) { el.dataset.top = el.scrollTop; keep[el.closest("[data-slug]").dataset.slug] = el; }
-  const q = $("#search").value.trim().toLowerCase();
-  const shown = features.filter((f) => inGroup(f, filter) && (!q || (f.title + " " + (f.prompt || "")).toLowerCase().includes(q)));
-  shown.sort(bySort);
-  const html = shown.length ? shown.map((f) => (f.worktree ? card(f) : simpleCard(f)))
-    : [`<div class="card empty">${q ? "Nothing matches that search." : filter === "all" ? "No tasks yet. Add one with + New task." : `Nothing is ${filter} right now.`}</div>`];
-  patchList(html);
-  for (const t of document.querySelectorAll('#list [data-field="eprompt"]')) fitPlan(t);
-  for (const f of shown) {
-    const s = u(f.slug);
-    const slot = s.fb && $(`[data-slug="${f.slug}"] [data-chat]`);
-    if (!slot) continue;
-    const old = keep[f.slug];
-    if (old && old !== slot) { slot.replaceWith(old); old.scrollTop = +old.dataset.top; }
-    if (!old || old.dataset.at !== String(f.st?.at) + (f.st?.queue?.length || 0)) loadChat(f.slug);
-  }
-  for (const ta of document.querySelectorAll(".compose textarea")) fitCompose(ta, true);
+  renderBoard(features);
 }
-
-// The list is redrawn every 2 seconds. Rewriting all of it reset every
-// scrolled box inside the cards and briefly changed the page's height, so the
-// page jumped while scrolling. Now a card is only swapped when its HTML
-// changed, and the scroll of each box inside it carries over.
-function patchList(html) {
-  const list = $("#list");
-  const tpl = document.createElement("template");
-  tpl.innerHTML = html.join("");
-  const next = [...tpl.content.children];
-  next.forEach((el, i) => (el._html = html[i])); // what it was built from; the live DOM drifts (open chats, box sizes)
-  const old = new Map([...list.children].map((el) => [el.dataset.slug ?? "", el]));
-  let at = list.firstElementChild;
-  for (const el of next) {
-    const cur = old.get(el.dataset.slug ?? "");
-    let use = el;
-    if (cur && cur._html === el._html) use = cur; // unchanged: keep the node and its scroll
-    else if (cur) {
-      // Changed: carry over the scroll of each box, matched by position.
-      const tops = [...cur.querySelectorAll(".reply, .thread")].map((b) => b.scrollTop);
-      [...el.querySelectorAll(".reply, .thread")].forEach((b, i) => { if (tops[i]) requestAnimationFrame(() => (b.scrollTop = tops[i])); });
-    }
-    if (cur && use !== cur) cur.replaceWith(use);
-    else if (use !== at) list.insertBefore(use, at);
-    at = use.nextElementSibling;
-    old.delete(el.dataset.slug ?? "");
-  }
-  for (const el of old.values()) el.remove();
-}
+const inGroup = (f, g) => g === "all" || kind(f)[0] === g;
 
 // A message's attachments went as paths on their own lines: show those as
 // previews (a thumbnail for an image, the name for anything else) and the rest
@@ -1913,7 +1852,7 @@ function tile(f) {
     ${st.activity && cls === "working" ? `<div class="activity agent"><span class="dots d${dotsFor(st.activity)}"><i></i><i></i><i></i></span>${esc(st.activity)}</div>` : ""}
     ${k === "waiting" && st.lastReply ? `<div class="snip">${esc(st.lastReply.replace(/[#*`>|]/g, "").trim().slice(0, 240))}</div>` : ""}
     ${schedOf(f) ? `<div class="activity">${esc(schedText(f))}</div>` : ""}
-    <div class="foot">${view === "label" ? pill : f.label ? tagHtml(f.label) : ""}${f.merged && k !== "merged" ? `<span class="meta">merged</span>` : ""}${err}</div></div>`;
+    <div class="foot">${view !== "status" ? pill : ""}${view !== "label" && f.label ? tagHtml(f.label) : ""}${f.merged && k !== "merged" ? `<span class="meta">merged</span>` : ""}${err}</div></div>`;
 }
 const WARN = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 20h20z"/><path class="w" d="M12 10v4M12 16.5v.5"/></svg>`;
 // The bell, top right of every card that's still to do or in progress: faint when off, solid when on.
@@ -1935,7 +1874,14 @@ function renderBoard(features) {
   // don't move cards under the pointer, the box you're naming in, or an open ⋯ menu
   if (mouseDown || dragging || naming || $("#board .colmenu[open]")) return;
   const q = $("#search").value.trim().toLowerCase(), hide = hideDone;
-  const shown = features.filter((f) => (!q || (f.title + " " + (f.prompt || "") + " " + (f.label || "")).toLowerCase().includes(q)) && !(hide && ["merged", "dropped"].includes(kind(f)[0]))).sort(bySort);
+  const shown = features.filter((f) => (!q || (f.title + " " + (f.prompt || "") + " " + (f.label || "")).toLowerCase().includes(q)) && (view === "list" ? inGroup(f, filter) : !(hide && ["merged", "dropped"].includes(kind(f)[0])))).sort(bySort);
+  if (view === "list") {
+    const none = q ? "Nothing matches that search." : filter === "all" ? "No tasks yet. Add one with + New task." : `Nothing is ${filter} right now.`;
+    const html = `<div class="board list"><div class="col" data-col="">${shown.map(tile).join("") || `<div class="none">${none}</div>`}</div></div>`;
+    const host = $("#board");
+    if (host._html !== html) { host.innerHTML = html; host._html = html; }
+    return markRing();
+  }
   const cols = view === "status"
     ? CHIPS.filter((k) => !(hide && ["merged", "dropped"].includes(k)) && shown.some((f) => kind(f)[0] === k)).map((k) => ({ key: k, head: `<span class="pill ${k}"><span class="dot"></span></span>${cap(k)}`, items: shown.filter((f) => kind(f)[0] === k) }))
     : [...labels(), ""].map((l) => ({ key: l, head: l ? `<span class="editcol" data-editcol tabindex="0" title="Click to rename, describe or recolour">${tagHtml(l)}</span>` : "Unlabelled", menu: l ? colMenu(l) : "", desc: LABELS[l]?.description || "", items: shown.filter((f) => (f.label || "") === l) }));
@@ -2483,7 +2429,7 @@ async function attach(ta, files) {
 // An open Start ▾ menu holds the board still.
 async function refresh() { if (menuOpen || !CUR) return; try { const [fs, ls] = await Promise.all([api("/api/features"), api("/api/labels")]); LABELS = ls; render(fs); markShortErrors(); renderUsage(); } catch {} }
 
-for (const host of [$("#list"), $("#popDlg")]) {
+for (const host of [$("#popDlg")]) {
 host.addEventListener("input", (e) => {
   const c = e.target.closest("[data-slug]"); if (!c) return; const s = u(c.dataset.slug);
   if (e.target.dataset.field) s[e.target.dataset.field] = e.target.value;
