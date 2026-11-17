@@ -546,6 +546,15 @@
   #limitMsg .switch { display:flex; width:fit-content; margin-top:16px; font-size:12px; }
   @media (prefers-reduced-motion: reduce) { .urings, .uin { transition:none; } }
   .limited .dot { background:var(--bad); }
+  /* Our own hover tooltip, in place of the browser's. A popover so it sits
+     above open dialogs too. --x nudges the arrow back onto the element when
+     the bubble is pushed in from the window's edge. */
+  #tip { position:fixed; inset:auto; margin:0; border:0; padding:7px 11px; max-width:260px; border-radius:9px; background:#161b22; color:#f2f3f5; font-size:12.5px; line-height:1.4; text-align:center; box-shadow:0 6px 20px rgba(0,0,0,.22); pointer-events:none; overflow:visible; opacity:0; transition:opacity .12s; }
+  #tip.on { opacity:1; }
+  #tip::after { content:""; position:absolute; left:calc(50% + var(--x, 0px)); top:100%; translate:-50% -1px; border:6px solid transparent; border-top-color:#161b22; }
+  #tip.below::after { top:auto; bottom:100%; translate:-50% 1px; border-top-color:transparent; border-bottom-color:#161b22; }
+  #tip kbd { display:inline-block; margin-left:6px; padding:0 5px; min-width:18px; border-radius:4px; background:rgba(255,255,255,.14); font:600 11px/17px ui-monospace, monospace; }
+  @media (prefers-reduced-motion: reduce) { #tip { transition:none; } }
 </style>
 </head>
 <body>
@@ -563,7 +572,7 @@
       <button data-mode="select" title="Notify me about tasks with their bell on"></button>
       <button data-mode="all" title="Notify me about every task"></button>
     </div>
-    <button class="primary" id="newOpen">+ New task</button>
+    <button class="primary" id="newOpen" data-tip="Add task" data-key="N">+ New task</button>
     <div class="repopick" id="repoPick">
       <button id="repoBtn" aria-haspopup="true" aria-expanded="false" title="Which repo this board shows"><span id="repoName">Repo</span><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
       <div class="repomenu" id="repoMenu" hidden></div>
@@ -588,7 +597,7 @@
     </div>
     <div class="chips" id="chips"></div>
     <span class="grow" id="gap" style="min-width:0"></span>
-    <span class="searchbox"><input type="search" id="search" placeholder="Search tasks"><button type="button" id="searchClear" title="Clear search" aria-label="Clear search"><svg viewBox="0 0 10 10" width="10" height="10" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7"/></svg></button></span>
+    <span class="searchbox"><input type="search" id="search" placeholder="Search tasks" data-tip="Search" data-key="/"><button type="button" id="searchClear" title="Clear search" aria-label="Clear search"><svg viewBox="0 0 10 10" width="10" height="10" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7"/></svg></button></span>
   </div>
   <div class="msg bad" id="boardMsg" hidden style="margin-bottom:10px"></div>
   <div id="board"></div>
@@ -2977,6 +2986,44 @@ $("#repoAdd").onclick = async () => {
 addEventListener("hashchange", () => { const n = decodeURIComponent(location.hash.slice(1)); if (n && n !== CUR) pickRepo(n); });
 fetch("/api/repos").then((r) => r.json()).then((list) => { REPOS = /[?&]norepo\b/.test(location.search) ? [] : list; pickRepo(CUR); }); // ?norepo previews the empty screen
 setInterval(refresh, 2000);
+
+// Hover tooltips. Any element's title is moved to data-tip on hover (so the
+// browser's own never shows) and shown in #tip; data-key adds a shortcut chip.
+// Re-reading title each hover picks up titles the code changes later.
+const tip = Object.assign(document.createElement("div"), { id: "tip", popover: "manual" });
+tip.setAttribute("role", "tooltip");
+document.body.append(tip);
+let tipEl = null, tipTimer = 0;
+function hideTip() { clearTimeout(tipTimer); tipEl = null; tip.classList.remove("on"); if (tip.matches(":popover-open")) tip.hidePopover(); }
+function showTip(el) {
+  if (!el.isConnected || !el.dataset.tip) return;
+  tip.textContent = el.dataset.tip;
+  if (el.dataset.key) tip.append(Object.assign(document.createElement("kbd"), { textContent: el.dataset.key }));
+  if (tip.matches(":popover-open")) tip.hidePopover();
+  tip.showPopover(); // re-shown so it's above any dialog opened since
+  const r = el.getBoundingClientRect(), w = tip.offsetWidth, h = tip.offsetHeight, gap = 9;
+  const below = r.top - h - gap < 4, mid = r.left + r.width / 2, left = Math.min(Math.max(mid - w / 2, 6), innerWidth - w - 6);
+  tip.classList.toggle("below", below);
+  tip.style.left = left + "px";
+  tip.style.top = (below ? r.bottom + gap : r.top - h - gap) + "px";
+  tip.style.setProperty("--x", mid - (left + w / 2) + "px");
+  tip.classList.add("on");
+}
+document.addEventListener("mouseover", (e) => {
+  const el = e.target.closest?.("[title], [data-tip]");
+  if (el === tipEl) return;
+  hideTip();
+  if (!el) return;
+  if (el.hasAttribute("title")) {
+    // An icon-only button's title was its name for screen readers; keep it.
+    if (!el.hasAttribute("aria-label") && !el.textContent.trim()) el.setAttribute("aria-label", el.title);
+    el.dataset.tip = el.title; el.removeAttribute("title");
+  }
+  tipEl = el;
+  tipTimer = setTimeout(() => showTip(el), 350);
+});
+document.addEventListener("mouseout", (e) => { if (tipEl && !tipEl.contains(e.relatedTarget)) hideTip(); });
+for (const t of ["mousedown", "scroll", "keydown", "blur"]) addEventListener(t, hideTip, true);
 </script>
 </body>
 </html>
