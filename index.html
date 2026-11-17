@@ -415,7 +415,7 @@
      The bell shape is top-heavy in its box, so it drops 2px to look centred on the text. */
   .tile .top .t { flex:1; min-width:0; line-height:18px; }
   .tile .top .when { line-height:18px; }
-  .tile .top .tbell { height:18px; margin:0 -4px 0 0; }
+  .tile .top .tbell { margin:-2px -4px -2px 0; } /* 22px square, overhanging the 18px line by 2px each way so it stays centred on it */
   .tile .top .tbell svg { translate:0 2px; }
   .tile .foot:empty { display:none; }
   .tbell { flex:none; width:22px; height:22px; margin:-3px -6px 0 0; padding:0; border:0; background:none; border-radius:6px; display:grid; place-items:center; color:var(--mute); cursor:pointer; opacity:.45; transition:opacity .15s; }
