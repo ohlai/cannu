@@ -9,7 +9,7 @@ import crypto from "node:crypto";
 import os from "node:os";
 import { spawn, execFile, execFileSync } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
-import { CLAUDE_SETTINGS, META, APP, WORKTREES, STATE, FEATURES_DIR, REPO_FILE, MAIN, NOTES, COMMIT_NOTES, notesDir, repo, repoRaw, BUILT_IN, MODELS, defaults, fill, MD_KEYS, config, loadFeatures, saveRuntime, featureMd, readState, writeState, stamp, claudeBaseArgs, liveStatus, killTree, AUTO, resumeText, FEEDBACK, forget, watchUsage, fullLimit, refreshUsage } from "./lib.js";
+import { CLAUDE_SETTINGS, META, APP, WORKTREES, STATE, FEATURES_DIR, REPO_FILE, MAIN, NOTES, COMMIT_NOTES, notesDir, repo, repoRaw, BUILT_IN, MODELS, defaults, fill, MD_KEYS, config, loadFeatures, saveRuntime, featureMd, readState, writeState, stamp, claudeBaseArgs, liveStatus, killTree, AUTO, resumeText, FEEDBACK, forget, watchUsage, fullLimit, refreshUsage, callKey, ruleFor, RULES } from "./lib.js";
 watchUsage();
 
 const WIN = process.platform === "win32";
@@ -316,7 +316,7 @@ function headless(f, text, label, first = false) {
   const session = first ? ["--session-id", f.sessionId] : ["--resume", st.session_id || f.sessionId];
   const d = defaults();
   const args = ["-p", ...session, "-n", f.slug, ...claudeBaseArgs(f),
-    "--permission-mode", "acceptEdits",
+    "--permission-mode", d.permissionMode || "auto",
     ...(d.allowedTools.length ? ["--allowedTools", ...d.allowedTools] : []),
     ...(d.disallowedTools.length ? ["--disallowedTools", ...d.disallowedTools] : []),
     "--output-format", "json"];
@@ -326,7 +326,10 @@ function headless(f, text, label, first = false) {
   }).then(({ code, out }) => {
     let reply = tail(out), denied = [];
     let failed = code !== 0;
-    try { const j = JSON.parse(out.slice(out.indexOf("{"))); reply = j.result ?? reply; failed ||= !!j.is_error; denied = (j.permission_denials || []).map((d) => `${d.tool_name} ${JSON.stringify(d.tool_input).slice(0, 120)}`); } catch {}
+    try { const j = JSON.parse(out.slice(out.indexOf("{"))); reply = j.result ?? reply; failed ||= !!j.is_error; denied = (j.permission_denials || []).map((d) => ({ tool: d.tool_name, key: callKey(d.tool_name, d.tool_input), hard: false })); } catch {}
+    // The hook's refusals (hard rules) are already listed, with their reason; add Claude Code's own.
+    const hooked = readState(f.slug).denied || [];
+    denied = [...hooked, ...denied.filter((d) => !hooked.some((x) => x.tool === d.tool && x.key === d.key))];
     running.delete(f.slug);
     if (failed && LIMIT_HIT.test(String(reply).slice(0, 400))) {
       // If the session never got saved, start it again; otherwise carry it on.

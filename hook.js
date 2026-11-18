@@ -1,11 +1,16 @@
 // Claude Code runs this on session and turn events in a feature worktree
 // (wired up in that worktree's .claude/settings.local.json). It records
 // what the agent is doing for the dashboard, and appends every message you
-// send, word for word, to <notes>/<slug>/prompts.md.
-// It must never block the session, so every failure is swallowed.
+// send, word for word, to <notes>/<slug>/prompts.md. Before each tool call it
+// refuses what lib.js's RULES forbid, unless Oli allowed that call once.
+// A failure in here must never block the session, so every one is swallowed.
 import fs from "node:fs";
 import path from "node:path";
-import { findByDir, writeState, stamp, AUTO, notesDir, readState, LIMIT_HIT, resumeText } from "./lib.js";
+import { findByDir, loadFeatures, writeState, stamp, AUTO, notesDir, readState, LIMIT_HIT, resumeText, broken, callKey } from "./lib.js";
+
+// PreToolUse's answer to Claude Code. Written synchronously: the process exits straight after.
+const decide = (permissionDecision, permissionDecisionReason) =>
+  fs.writeSync(1, JSON.stringify({ hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision, permissionDecisionReason } }));
 
 let raw = "";
 process.stdin.on("data", (c) => (raw += c));
@@ -28,7 +33,10 @@ function lastReply(transcript) {
 }
 
 function run(h) {
-  const f = findByDir(h.cwd || process.cwd());
+  // By FEATURE_SLUG (set in the worktree's settings) first, so an agent that
+  // cd's out of its folder is still known, and still held to the rules.
+  const slug = process.env.FEATURE_SLUG;
+  const f = (slug && loadFeatures().find((x) => x.slug === slug && x.dir)) || findByDir(h.cwd || process.cwd());
   if (!f) return;
   const headless = process.env.META_HEADLESS === "1";
   const base = { session_id: h.session_id, headless };
@@ -37,7 +45,7 @@ function run(h) {
       writeState(f.slug, { ...base, state: "idle", activity: "", started: true });
       break;
     case "UserPromptSubmit": {
-      writeState(f.slug, { ...base, state: "working", activity: "thinking", lastPrompt: h.prompt });
+      writeState(f.slug, { ...base, state: "working", activity: "thinking", lastPrompt: h.prompt, denied: [] });
       const dir = notesDir(f);
       fs.mkdirSync(dir, { recursive: true });
       const file = path.join(dir, "prompts.md");
@@ -49,7 +57,17 @@ function run(h) {
     case "PreToolUse": {
       const i = h.tool_input || {};
       const what = i.file_path ? path.basename(i.file_path) : i.command ? String(i.command).slice(0, 80) : i.pattern || "";
-      writeState(f.slug, { ...base, state: "working", activity: `${h.tool_name} ${what}`.trim() });
+      const st = readState(f.slug), key = callKey(h.tool_name, i);
+      // Allow once is used up by the one call it was for.
+      const pass = (st.passes || []).findIndex((p) => p.tool === h.tool_name && p.key === key);
+      const why = pass < 0 ? broken(f, h.tool_name, i, h.cwd || f.dir) : "";
+      writeState(f.slug, {
+        ...base, state: "working", activity: `${h.tool_name} ${what}`.trim(),
+        ...(pass >= 0 && { passes: st.passes.filter((_, n) => n !== pass) }),
+        ...(why && { denied: [...(st.denied || []).filter((d) => !(d.tool === h.tool_name && d.key === key)), { tool: h.tool_name, key, why, hard: true }] }),
+      });
+      if (pass >= 0) decide("allow", "Oli allowed this once from the dashboard.");
+      else if (why) decide("deny", `Cannu blocks this: ${why}`);
       break;
     }
     case "Notification":
