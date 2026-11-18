@@ -3099,8 +3099,8 @@ setInterval(refresh, 2000);
 // Hover tooltips. Every title attribute is moved to data-tip as soon as it
 // appears (including ones the code sets later, and on each re-render), so the
 // browser's own tooltip never shows; #tip shows it instead. A trailing
-// "[Ctrl+Enter]" in the text becomes key chips; inside [data-tip-below] it
-// shows underneath.
+// "[Ctrl+Enter]" in the text becomes key chips; inside [data-tip-below], or a
+// .row holding one, it shows underneath.
 const KEYNAME = { ctrl: MAC ? "⌘" : "Ctrl", shift: MAC ? "⇧" : "Shift", enter: "↵", esc: "Esc" };
 const tipParts = (t) => { const m = t.match(/^(.*?)\s*\[([^\]]+)\]$/); return m ? [m[1], m[2].split("+").map((k) => k.trim()).map((k) => KEYNAME[k.toLowerCase()] || k)] : [t, []]; };
 const tip = Object.assign(document.createElement("div"), { id: "tip", popover: "manual" });
@@ -3134,7 +3134,10 @@ function showTip(el) {
   tip.classList.toggle("long", text.length > 90); // a long error reads better left-aligned
   if (!tip.matches(":popover-open")) tip.showPopover();
   const r = el.getBoundingClientRect(), w = tip.offsetWidth, h = tip.offsetHeight, gap = 12;
-  const below = !!el.closest("[data-tip-below]") || r.top - h - gap < 4, mid = r.left + r.width / 2, left = Math.min(Math.max(mid - w / 2, 6), innerWidth - w - 6);
+  // Every tip in a .row opens on one side: below if anything in the row asks for it
+  // (like the Start split) or the row sits too near the top, else above.
+  const row = el.closest(".row");
+  const below = !!(el.closest("[data-tip-below]") || row?.querySelector("[data-tip-below]")) || (row || el).getBoundingClientRect().top - h - gap < 4, mid = r.left + r.width / 2, left = Math.min(Math.max(mid - w / 2, 6), innerWidth - w - 6);
   tip.classList.toggle("below", below);
   tip.style.left = left + "px";
   tip.style.top = (below ? r.bottom + gap : r.top - h - gap) + "px";
