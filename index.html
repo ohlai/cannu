@@ -686,7 +686,8 @@
     .more { display:none; position:absolute; z-index:30; top:calc(100% + 6px); width:max-content; max-width:calc(100vw - 20px);
       padding:12px; flex-direction:column; gap:12px; background:var(--card); border:1px solid var(--line); border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,.16); }
     .more.open { display:flex; }
-    #topMore { right:0; } #viewMore { left:0; }
+    #topMore { right:0; }
+    #viewMore { left:0; top:40px; } /* under the view button, over List view's chips line rather than below it */
     .morerow { display:flex; align-items:center; justify-content:space-between; gap:16px; }
     .morerow > .narrow { color:var(--mute); font-size:12.5px; font-weight:600; }
     .morerow:has(> [hidden]) { display:none; } /* Show all / Hide completed only exists on the boards */
