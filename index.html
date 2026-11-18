@@ -351,7 +351,7 @@
   @media (prefers-color-scheme: dark) { .brand img { filter:invert(1); } }
   /* Logo: a still .pix grid spelling "C", in the text colour instead of blue. Lit cells have .on. */
   .pix.logo { --s:48px; --slow:1.6; color:var(--fg); cursor:pointer;
-    filter:drop-shadow(0 0 calc(var(--s)*.05) currentColor); } /* softer glow than the loaders' .08 */ /* click: logoPlay() runs the next logo animation; its fire is 1.6x slower */
+    filter:drop-shadow(0 0 calc(var(--s)*.05) currentColor); } /* softer glow than the loaders' .08; click: logoPlay() sets it alight, fire 1.6x slower */
   .pix.logo i { opacity:.12; } .pix.logo i.on { opacity:1; }
   .brand h1 { margin:0; font-size:34px; line-height:1.1; letter-spacing:-.025em; font-weight:700; }
   /* While a popup is open the page behind it stays put. */
@@ -1720,43 +1720,32 @@ function msgBody(text) {
   return { pics, html: rest ? `<div class="md">${md(rest)}</div>` : "", bare: !rest && atts.length > 0 };
 }
 
-// The conversation, newest at the bottom. Reloaded when the agent's state
-// changes; stays scrolled to the bottom unless you've scrolled up.
-// Logo animations. Clicks alternate between them (the name shows on hover after); each starts and ends on the C.
+// Clicking the logo sets it alight: the rows move from the C into the fire loader (fast off the mark, easing in),
+// bottom row first, then it burns down top row first and settles back to the C. Every row lands on the fire's first
+// frame at the same moment, so it hands over with no jump or pause; the later rows just move faster to catch up.
 const LOGO_ON = [0,1,1, 1,0,0, 0,1,1], LOGO_LO = .12;
-const cOp = i => LOGO_ON[i] ? 1 : LOGO_LO;
-const row = i => Math.floor(i / 3);
-const LOGO_ANIMS = {
-  // ignite: the rows move from the C into the fire loader (fast off the mark, easing in), bottom row first, then it burns down top row first and
-  // settles back to the C. Every row lands on the fire's first frame at the same moment, so it hands over with no jump
-  // or pause; the later rows just move faster to catch up.
-  async ignite(el, cells) {
+const logoOp = i => LOGO_ON[i] ? 1 : LOGO_LO;
+const logoRow = i => Math.floor(i / 3);
+let logoBusy = false;
+async function logoPlay(el) {
+  if (logoBusy || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  logoBusy = true;
+  try {
+    const cells = [...el.children];
     el.classList.add("fire"); const to = cells.map(c => +getComputedStyle(c).opacity); el.classList.remove("fire");
-    const a = cells.map((c, i) => c.animate([{ opacity: cOp(i) }, { opacity: cOp(i), offset: (2 - row(i)) * .2, easing: "ease-out" }, { opacity: to[i] }],
+    const a = cells.map((c, i) => c.animate([{ opacity: logoOp(i) }, { opacity: logoOp(i), offset: (2 - logoRow(i)) * .2, easing: "ease-out" }, { opacity: to[i] }],
       { duration: 400, fill: "forwards" }));
     await Promise.all(a.map(x => x.finished));
     el.classList.add("fire"); a.forEach(x => x.cancel());
     await new Promise(r => setTimeout(r, 2500));
     const from = cells.map(c => +getComputedStyle(c).opacity); el.classList.remove("fire");
-    await Promise.all(cells.map((c, i) => c.animate([{ opacity: from[i] }, { opacity: cOp(i) }],
-      { duration: 500, delay: row(i) * 140, easing: "ease-out", fill: "backwards" }).finished));
-  },
-  // grow: the C fades out, then grows back from the left like a branch: the stem lights, splits up and down,
-  // and both arms reach right. Each stage lights a beat after the one before.
-  async grow(el, cells) {
-    const STAGE = [-1, 1, 2, 0, -1, -1, -1, 1, 2]; // the beat each lit cell comes on (stem 0, split 1, arms 2); -1 = unlit
-    await Promise.all(cells.map((c, i) => { if (STAGE[i] < 0) return; const on = .3 + STAGE[i] * .17; return c.animate(
-      [{ opacity: 1 }, { opacity: LOGO_LO, offset: .2 }, { opacity: LOGO_LO, offset: on }, { opacity: 1, offset: on + .1 }, { opacity: 1 }],
-      { duration: 1500, easing: "ease-in-out" }).finished; }));
-  },
-};
-let logoN = 0, logoBusy = false;
-async function logoPlay(el) {
-  if (logoBusy || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-  const names = Object.keys(LOGO_ANIMS), name = names[logoN++ % names.length];
-  el.title = name; logoBusy = true;
-  try { await LOGO_ANIMS[name](el, [...el.children]); } finally { logoBusy = false; }
+    await Promise.all(cells.map((c, i) => c.animate([{ opacity: from[i] }, { opacity: logoOp(i) }],
+      { duration: 500, delay: logoRow(i) * 140, easing: "ease-out", fill: "backwards" }).finished));
+  } finally { logoBusy = false; }
 }
+
+// The conversation, newest at the bottom. Reloaded when the agent's state
+// changes; stays scrolled to the bottom unless you've scrolled up.
 
 // Which pixel loader goes with which tool (the first word of the activity). Several = pick one at random.
 // Anything not listed (MCP tools, Read, etc.) gets OTHER.
