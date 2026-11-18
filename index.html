@@ -199,10 +199,11 @@
      the bottom row burns hottest and the top row only catches the tips. */
   .fire i { animation-name:pix-fire; animation-timing-function:ease-out }
   .fire i:nth-child(-n+3) { --lo:.05; --hi:.6 } .fire i:nth-child(n+4):nth-child(-n+6) { --lo:.15; --hi:.85 } .fire i:nth-child(n+7) { --lo:.45; --hi:1 }
-  .fire i:nth-child(3n+1) { animation-duration:.62s } .fire i:nth-child(3n+2) { animation-duration:.5s } .fire i:nth-child(3n) { animation-duration:.56s }
-  .fire i:nth-child(4) { animation-delay:-.55s } .fire i:nth-child(1) { animation-delay:-.48s }
-  .fire i:nth-child(8) { animation-delay:-.3s }  .fire i:nth-child(5) { animation-delay:-.23s } .fire i:nth-child(2) { animation-delay:-.16s }
-  .fire i:nth-child(9) { animation-delay:-.18s } .fire i:nth-child(6) { animation-delay:-.11s } .fire i:nth-child(3) { animation-delay:-.04s }
+  /* --slow stretches the timings (1 = normal; the logo uses 1.6). */
+  .fire i:nth-child(3n+1) { animation-duration:calc(.62s * var(--slow,1)) } .fire i:nth-child(3n+2) { animation-duration:calc(.5s * var(--slow,1)) } .fire i:nth-child(3n) { animation-duration:calc(.56s * var(--slow,1)) }
+  .fire i:nth-child(4) { animation-delay:calc(-.55s * var(--slow,1)) } .fire i:nth-child(1) { animation-delay:calc(-.48s * var(--slow,1)) }
+  .fire i:nth-child(8) { animation-delay:calc(-.3s * var(--slow,1)) }  .fire i:nth-child(5) { animation-delay:calc(-.23s * var(--slow,1)) } .fire i:nth-child(2) { animation-delay:calc(-.16s * var(--slow,1)) }
+  .fire i:nth-child(9) { animation-delay:calc(-.18s * var(--slow,1)) } .fire i:nth-child(6) { animation-delay:calc(-.11s * var(--slow,1)) } .fire i:nth-child(3) { animation-delay:calc(-.04s * var(--slow,1)) }
   @keyframes pix-fire { 0%,30%,50%,80%,100% { opacity:var(--lo) } 8%,58% { opacity:var(--hi) } }
   
   /* run (bash): a ">" prompt with a blinking cursor at the bottom right. The prompt pulses gently. */
@@ -349,6 +350,10 @@
   .brand { display:flex; align-items:center; gap:14px; }
   .brand img { width:48px; height:48px; }
   @media (prefers-color-scheme: dark) { .brand img { filter:invert(1); } }
+  /* Logo: a still .pix grid spelling "C", in the text colour instead of blue. Lit cells have .on. */
+  .pix.logo { --s:48px; --slow:1.6; color:var(--fg); cursor:pointer;
+    filter:drop-shadow(0 0 calc(var(--s)*.05) currentColor); } /* softer glow than the loaders' .08; click: logoPlay() sets it alight, fire 1.6x slower */
+  .pix.logo i { opacity:.12; } .pix.logo i.on { opacity:1; }
   .brand h1 { margin:0; font-size:34px; line-height:1.1; letter-spacing:-.025em; font-weight:700; }
   /* While a popup is open the page behind it stays put. */
   html.locked { overflow:hidden; }
@@ -670,7 +675,7 @@
 <main>
   <div class="row" id="top" style="margin-bottom:36px" data-tip-below>
     <div class="grow">
-      <div class="brand"><img src="/logo.png?v=2" alt=""><h1>Cannu <span>Agent board</span></h1></div>
+      <div class="brand"><span class="pix logo" aria-hidden="true" onclick="logoPlay(this)"><i></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i class="on"></i><i class="on"></i></span><h1>Cannu <span>Agent board</span></h1></div>
       <p class="sub" style="margin:12px 0 0" id="totals"></p>
     </div>
     <div class="rings" id="rings" tabindex="0" aria-label="Claude usage"></div>
@@ -1655,8 +1660,33 @@ function msgBody(text) {
   return { pics, html: rest ? `<div class="md">${md(rest)}</div>` : "", bare: !rest && atts.length > 0 };
 }
 
+// Clicking the logo sets it alight: the rows move from the C into the fire loader (fast off the mark, easing in),
+// bottom row first, then it burns down top row first and settles back to the C. Every row lands on the fire's first
+// frame at the same moment, so it hands over with no jump or pause; the later rows just move faster to catch up.
+const LOGO_ON = [0,1,1, 1,0,0, 0,1,1], LOGO_LO = .12;
+const logoOp = i => LOGO_ON[i] ? 1 : LOGO_LO;
+const logoRow = i => Math.floor(i / 3);
+let logoBusy = false;
+async function logoPlay(el) {
+  if (logoBusy || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  logoBusy = true;
+  try {
+    const cells = [...el.children];
+    el.classList.add("fire"); const to = cells.map(c => +getComputedStyle(c).opacity); el.classList.remove("fire");
+    const a = cells.map((c, i) => c.animate([{ opacity: logoOp(i) }, { opacity: logoOp(i), offset: (2 - logoRow(i)) * .2, easing: "ease-out" }, { opacity: to[i] }],
+      { duration: 400, fill: "forwards" }));
+    await Promise.all(a.map(x => x.finished));
+    el.classList.add("fire"); a.forEach(x => x.cancel());
+    await new Promise(r => setTimeout(r, 2500));
+    const from = cells.map(c => +getComputedStyle(c).opacity); el.classList.remove("fire");
+    await Promise.all(cells.map((c, i) => c.animate([{ opacity: from[i] }, { opacity: logoOp(i) }],
+      { duration: 500, delay: logoRow(i) * 140, easing: "ease-out", fill: "backwards" }).finished));
+  } finally { logoBusy = false; }
+}
+
 // The conversation, newest at the bottom. Reloaded when the agent's state
 // changes; stays scrolled to the bottom unless you've scrolled up.
+
 // Which pixel loader goes with which tool (the first word of the activity). Several = pick one at random.
 // Anything not listed (MCP tools, Read, etc.) gets OTHER.
 const PIX = {
