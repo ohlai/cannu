@@ -198,7 +198,7 @@
      the bottom row burns hottest and the top row only catches the tips. */
   .fire i { animation-name:pix-fire; animation-timing-function:ease-out }
   .fire i:nth-child(-n+3) { --lo:.05; --hi:.6 } .fire i:nth-child(n+4):nth-child(-n+6) { --lo:.15; --hi:.85 } .fire i:nth-child(n+7) { --lo:.45; --hi:1 }
-  /* --slow stretches the timings (1 = normal; the logo uses 2.2). */
+  /* --slow stretches the timings (1 = normal; the logo uses 1.6). */
   .fire i:nth-child(3n+1) { animation-duration:calc(.62s * var(--slow,1)) } .fire i:nth-child(3n+2) { animation-duration:calc(.5s * var(--slow,1)) } .fire i:nth-child(3n) { animation-duration:calc(.56s * var(--slow,1)) }
   .fire i:nth-child(4) { animation-delay:calc(-.55s * var(--slow,1)) } .fire i:nth-child(1) { animation-delay:calc(-.48s * var(--slow,1)) }
   .fire i:nth-child(8) { animation-delay:calc(-.3s * var(--slow,1)) }  .fire i:nth-child(5) { animation-delay:calc(-.23s * var(--slow,1)) } .fire i:nth-child(2) { animation-delay:calc(-.16s * var(--slow,1)) }
@@ -350,7 +350,7 @@
   .brand img { width:48px; height:48px; }
   @media (prefers-color-scheme: dark) { .brand img { filter:invert(1); } }
   /* Logo: a still .pix grid spelling "C", in the text colour instead of blue. Lit cells have .on. */
-  .pix.logo { --s:48px; --slow:2.2; color:var(--fg); cursor:pointer; } /* click: logoPlay() runs the next logo animation; its fire is 2.2x slower */
+  .pix.logo { --s:48px; --slow:1.6; color:var(--fg); cursor:pointer; } /* click: logoPlay() runs the next logo animation; its fire is 1.6x slower */
   .pix.logo i { opacity:.12; } .pix.logo i.on { opacity:1; }
   .brand h1 { margin:0; font-size:34px; line-height:1.1; letter-spacing:-.025em; font-weight:700; }
   /* While a popup is open the page behind it stays put. */
@@ -1732,13 +1732,13 @@ const LOGO_ANIMS = {
   async ignite(el, cells) {
     el.classList.add("fire"); const to = cells.map(c => +getComputedStyle(c).opacity); el.classList.remove("fire");
     const a = cells.map((c, i) => c.animate([{ opacity: cOp(i) }, { opacity: cOp(i), offset: (2 - row(i)) * .2, easing: "ease-out" }, { opacity: to[i] }],
-      { duration: 550, fill: "forwards" }));
+      { duration: 400, fill: "forwards" }));
     await Promise.all(a.map(x => x.finished));
     el.classList.add("fire"); a.forEach(x => x.cancel());
-    await new Promise(r => setTimeout(r, 3500));
+    await new Promise(r => setTimeout(r, 2500));
     const from = cells.map(c => +getComputedStyle(c).opacity); el.classList.remove("fire");
     await Promise.all(cells.map((c, i) => c.animate([{ opacity: from[i] }, { opacity: cOp(i) }],
-      { duration: 700, delay: row(i) * 200, easing: "ease-out", fill: "backwards" }).finished));
+      { duration: 500, delay: row(i) * 140, easing: "ease-out", fill: "backwards" }).finished));
   },
   // grow: the C fades out, then grows back from the left like a branch: the stem lights, splits up and down,
   // and both arms reach right. Each stage lights a beat after the one before.
