@@ -45,7 +45,7 @@ function run(h) {
       writeState(f.slug, { ...base, state: "idle", activity: "", started: true });
       break;
     case "UserPromptSubmit": {
-      writeState(f.slug, { ...base, state: "working", activity: "thinking", lastPrompt: h.prompt, denied: [] });
+      writeState(f.slug, { ...base, state: "working", activity: "thinking", lastPrompt: h.prompt, denied: [], turnAt: Date.now() });
       const dir = notesDir(f);
       fs.mkdirSync(dir, { recursive: true });
       const file = path.join(dir, "prompts.md");
@@ -77,9 +77,13 @@ function run(h) {
       if (h.notification_type === "idle_prompt" || /waiting for your input/i.test(h.message || "")) break;
       writeState(f.slug, { ...base, state: "needs-you", activity: h.message || "waiting for you" });
       break;
-    case "Stop":
-      writeState(f.slug, { ...base, state: "idle", activity: "", lastReply: h.last_assistant_message || lastReply(h.transcript_path) });
+    case "Stop": {
+      // An Allow once made before this turn started was for this turn: drop it if unused.
+      // One made during the turn is for the retry that's queued behind it.
+      const st = readState(f.slug);
+      writeState(f.slug, { ...base, state: "idle", activity: "", lastReply: h.last_assistant_message || lastReply(h.transcript_path), passes: (st.passes || []).filter((p) => p.at > (st.turnAt || 0)) });
       break;
+    }
     // A terminal turn cut off by a usage limit: held, and the dashboard
     // carries it on in the background once the limit resets. Background turns
     // are caught by the dashboard itself.
