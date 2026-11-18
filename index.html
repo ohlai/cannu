@@ -636,13 +636,13 @@ function msgBlock(s) {
 }
 // Click the box to make it up to 2x taller, fitting the error (it still scrolls past that); click again to shrink it.
 // What the agent was refused this turn. Allow once lets that exact call
-// through and asks it to try again. Allow and add rule (not for Cannu's hard
+// through and asks it to try again. Always allow (not for Cannu's hard
 // rules, which no rule can lift) also saves a rule in Agent defaults.
 function deniedBlock(denied) {
   return `<div class="banner denied">Blocked this turn:${denied.map((d, i) => typeof d === "string" ? `<div class="row"><code>${esc(d)}</code></div>` : `<div class="row">
       <div class="grow"><code>${esc((d.tool === "Bash" ? d.key : `${d.tool} ${d.key}`).slice(0, 200))}</code>${d.why ? `<div class="meta">Cannu's rule: ${esc(d.why)}</div>` : ""}</div>
       <span class="split"><button data-act="allow" data-i="${i}" title="Let this exact call through once, and ask the agent to try again">Allow once</button>${d.hard || !d.rule ? ""
-        : `<details class="colmenu"><summary aria-label="More ways to allow">▾</summary><div class="menu"><button data-act="allow" data-i="${i}" data-rule="1">Allow and add rule <code>${esc(d.rule)}</code></button></div></details>`}</span></div>`).join("")}</div>`;
+        : `<details class="colmenu"><summary aria-label="More ways to allow">▾</summary><div class="menu"><button data-act="allow" data-i="${i}" data-rule="1">Always allow <code>${esc(d.rule)}</code></button></div></details>`}</span></div>`).join("")}</div>`;
 }
 function errBlock(s, key, text) {
   return `<div class="err ${s.errFull?.[key] ? "full" : ""}" data-act="errexpand" data-key="${key}" title="Click to show more"><pre>${esc(text)}</pre><button data-act="copy" title="Copy the error"><svg viewBox="0 0 24 12" aria-hidden="true"><path d="M8 1H6a5 5 0 0 0 0 10h2M16 1h2a5 5 0 0 1 0 10h-2M8 6h8"/></svg><span>Copy</span></button></div>`;
@@ -2061,7 +2061,7 @@ function defaultsForm(r) {
       <div class="hint">Terminal sessions use your own Claude Code setting. Whatever's refused is listed on the card with Allow once.</div></div>
     <div class="field"><label for="dAllow">Background turns can, without asking${reset("allowedTools")}</label>
       <textarea id="dAllow" class="tall">${esc(v.allowedTools.join("\n"))}</textarea>
-      <div class="hint">One Claude Code permission rule per line. Allow and add rule on a card adds here.</div></div>
+      <div class="hint">One Claude Code permission rule per line. Always allow on a card adds here.</div></div>
     <div class="field"><label for="dDeny">Background turns are also refused${reset("disallowedTools")}</label>
       <textarea id="dDeny" placeholder="Empty: only Cannu's own rules, below">${esc(v.disallowedTools.join("\n"))}</textarea></div>
     <div class="field"><label>Cannu's own rules, for every agent and session</label>

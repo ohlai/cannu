@@ -141,7 +141,7 @@ Keys inside `agent`:
 | `systemPrompt` | | Added to every agent's system prompt, after Cannu's own short brief |
 | `env` | | Extra environment variables for every agent |
 | `permissionMode` | `auto` | How a background turn decides what it may do. `auto`: Claude Code's auto mode judges each action not on `allowedTools`. `acceptEdits`: only edits and `allowedTools`. Terminal sessions use your own Claude Code setting |
-| `allowedTools` | Reading, editing, and common git (including `git merge`, for fixing conflicts), node and npm commands | What a background turn does without asking, as Claude Code permission rules. **Allow and add rule** on a card adds to it |
+| `allowedTools` | Reading, editing, and common git (including `git merge`, for fixing conflicts), node and npm commands | What a background turn does without asking, as Claude Code permission rules. **Always allow** on a card adds to it |
 | `disallowedTools` | empty | Extra things a background turn is refused. Pushing, switching branches and the like are Cannu's own rules (below), so they don't need to be here |
 | `resumeText`, `freshText`, `conflictText`, `commitText`, `checkText`, `prFixText` | Cannu's built-in wording | Messages Cannu sends for you, or fills in for you to send: after an interrupted turn, when a session can't be reopened, when merging conflicts, when shipping finds uncommitted changes, when Check and merge's check fails, and from Ask the agent to fix on a pull request. `{title}`, `{slug}`, `{notes}`, `{files}`, `{check}`, `{out}`, `{pr}` and `{problems}` are filled in |
 
@@ -177,7 +177,7 @@ real wall needs an OS sandbox.
 Anything an agent is refused, by these rules or by Claude Code, is listed on
 its card. **Allow once** lets that exact call through once and asks the agent
 to try again. For what isn't one of Cannu's rules, the ▾ next to it has
-**Allow and add rule**, which also adds a permission rule (like
+**Always allow**, which also adds a permission rule (like
 `Bash(git restore:*)`) to the agent defaults. `node scripts/rules-check.js`
 (part of the check) tests the rules.
 

@@ -356,7 +356,7 @@ function feedback(f, raw) {
   const r = pump(f.slug);
   return { sent: r === "sent", why: r };
 }
-// Allow once (and, for what isn't a hard rule, Allow and add rule) on
+// Allow once (and, for what isn't a hard rule, Always allow) on
 // something the agent was refused, then ask it to try again. The pass lets
 // that exact call through once (hook.js); one left unused ends with the turn
 // after this one.

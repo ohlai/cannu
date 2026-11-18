@@ -332,7 +332,7 @@ export function broken(f, tool, input = {}, cwd = f.dir) {
   const t = { f, tool, input, cmd: input.command, cwd };
   return RULES.find((r) => { try { return r.test(t); } catch { return false; } })?.say || "";
 }
-// The permission rule Allow and add rule saves: a Bash command's first word or
+// The permission rule Always allow saves: a Bash command's first word or
 // two (git restore → Bash(git restore:*)), or the whole tool.
 export function ruleFor(tool, input = {}) {
   if (tool !== "Bash") return tool;
