@@ -1,4 +1,4 @@
-<img src="logo.png" alt="Cannu's logo, a silk moth" width="96">
+<img src="logo.svg" alt="Cannu's logo, a C made of pixels" width="96">
 
 # Cannu: agent board
 
