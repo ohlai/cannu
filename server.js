@@ -197,9 +197,9 @@ const handler = async (req, res) => {
     res.writeHead(200, { "content-type": "image/png", "cache-control": "max-age=3600" });
     return res.end(fs.readFileSync(path.join(META, "logo.png")));
   }
-  if (url.pathname === "/docs/images/logo-stone.png") {
+  if (url.pathname === "/docs/images/logo-metal.png") {
     res.writeHead(200, { "content-type": "image/png", "cache-control": "max-age=3600" });
-    return res.end(fs.readFileSync(path.join(META, "docs/images/logo-stone.png")));
+    return res.end(fs.readFileSync(path.join(META, "docs/images/logo-metal.png")));
   }
   // Claude plan usage for the rings: one account for every repo, so served here.
   if (url.pathname === "/api/usage") return json(res, planUsage());

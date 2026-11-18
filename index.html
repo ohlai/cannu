@@ -329,12 +329,13 @@
   /* Greyed out in muted and "all" alike: only a bell picked in "select" is dark. */
   button.bell.off { opacity:.35; cursor:default; } button.bell.off:hover { border-color:var(--line); }
   button.bell.dim { opacity:.35; } button.bell.dim:hover { opacity:1; } /* muted, but a click turns this one on */
-  /* No repos yet: the usual header and filters, with the stone logo and one button where the board goes.
+  /* No repos yet: the usual header and filters, with the metal logo and one button where the board goes.
      Things that need a repo stay visible but dimmed and unclickable. */
   /* Stone on the left, words and the button on the right; stacked on narrow screens. */
   #welcome:not([hidden]) { display:flex; align-items:center; justify-content:center; gap:48px; padding:48px 0; }
-  /* The image is square with empty space above and below the stone; cover crops it. */
-  #welcome img { width:min(400px, 80vw); aspect-ratio:1.45; object-fit:cover; flex:none; }
+  /* The metal C sits on black: a rounded tile in light mode, and in dark mode lighten drops the black into the page. */
+  #welcome img { width:min(320px, 70vw); aspect-ratio:1.1; object-fit:cover; flex:none; border-radius:18px; }
+  @media (prefers-color-scheme: dark) { #welcome img { mix-blend-mode:lighten; border-radius:0; } }
   /* The heading stays on one line and the text below wraps to its width. */
   #welcome .copy { width:min-content; }
   #welcome h2 { margin:0 0 10px; font-size:26px; line-height:1.15; letter-spacing:-.02em; white-space:nowrap; }
@@ -344,9 +345,11 @@
   @media (max-width:760px) { #welcome:not([hidden]) { flex-direction:column; text-align:center; gap:20px; } #welcome ol { text-align:left; } #welcome .copy { width:auto; } #welcome h2 { white-space:normal; } }
   body.norepo #board, body.norepo #boardMsg { display:none; }
   body.norepo .filters, body.norepo #newOpen, body.norepo #notify, body.norepo #defaultsOpen, body.norepo #rings { opacity:.4; pointer-events:none; }
-  /* The welcome fills the space under the header, so the stone and words sit mid-screen. */
+  /* The welcome is centred on the whole window, not the space under the header.
+     Short windows fall back to sitting under the header so the two never overlap. */
   body.norepo main { min-height:100vh; box-sizing:border-box; display:flex; flex-direction:column; }
   body.norepo #welcome { flex:1; }
+  @media (min-height:700px) { body.norepo #welcome { position:fixed; inset:0; padding:0 16px; pointer-events:none; } body.norepo #welcome > * { pointer-events:auto; } }
   .brand { display:flex; align-items:center; gap:14px; }
   .brand img { width:48px; height:48px; }
   @media (prefers-color-scheme: dark) { .brand img { filter:invert(1); } }
@@ -716,7 +719,7 @@
   <div class="msg bad" id="boardMsg" hidden style="margin-bottom:10px"></div>
   <div id="board"></div>
   <div id="welcome" hidden>
-    <img src="/docs/images/logo-stone.png" alt="">
+    <img src="/docs/images/logo-metal.png" alt="">
     <div class="copy">
       <h2>Give your agents somewhere to work</h2>
       <p>Each repo gets its own board. Every task on it runs as its own Claude agent, on its own branch and folder, so several can work at once without stepping on each other.</p>
