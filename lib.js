@@ -312,7 +312,7 @@ const sh = (re) => (t) => t.tool === "Bash" && re.test(unquote(t.cmd));
 const WRITE_TOOLS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
 export const RULES = [
   { say: "Don't push or use gh. Cannu pushes and opens pull requests when you ship.", test: sh(/\bgit\s+push\b|(^|[\s;&|(])gh\s/) },
-  { say: "Stay on your branch: no git checkout or switch (git restore puts files back), and don't create, move or delete branches or refs.", test: sh(/\bgit\s+(checkout|switch|update-ref|symbolic-ref)\b|\bgit\s+branch\b.*\s(-[dDfmMcC]\b|--(delete|force|move|copy)\b)/) },
+  { say: "Stay on your branch: no git checkout or switch (git restore puts files back), and no creating, moving or deleting branches (git branch -d/-D/-f/-m/-c, update-ref, symbolic-ref).", test: sh(/\bgit\s+(checkout|switch|update-ref|symbolic-ref)\b|\bgit\s+branch\b.*\s(-[dDfmMcC]\b|--(delete|force|move|copy)\b)/) },
   { say: "Leave other worktrees and the stash alone: no git worktree or git stash. Every agent shares the stash, so make a work-in-progress commit instead.", test: sh(/\bgit\s+(worktree|stash)\b/) },
   { say: "Run git only in your own folder (no git -C, --git-dir or --work-tree), and don't change git config.", test: (t) => sh(/\bgit\s+(-C\b|--git-dir|--work-tree|config\b(?!.*--(get|list)\b))/)(t) || (t.tool === "Bash" && /\bgit\s/.test(unquote(t.cmd)) && !inside(t.cwd, t.f.dir)) },
   // CANNU_URL is how the agent restarts its app. The rest of the API would let it allow its own blocked actions.
@@ -352,7 +352,7 @@ export function brief(f) {
       : `Keep notes in ${notesDir(f)}: log.md for what you did, decisions.md for each decision and why. That folder is outside git on purpose, so never git add it. prompts.md there is written for you; never edit it.`,
     r.app && `Your own copy of the app runs at http://localhost:${f.port} (PORT, DATA_DIR and APP_URL are set). After changing code the server loads at start, restart it with: curl -s -X POST $CANNU_URL/api/features/${f.slug}/apprestart`,
     r.check && `Before you say you're done, run the check: ${r.check}`,
-    `Cannu blocks these, whatever your permissions say, so don't reach for them. If one is truly needed, or the user asks for it, run it once anyway and don't work around the refusal: Cannu refuses it and shows the user an Allow once button for that exact call, and you'll be told when to run it again. Each time the user asks again, run it once again; that's how they get a new button:\n${RULES.map((x) => "- " + x.say).join("\n")}`,
+    `Cannu blocks the actions below for every agent, whatever your permissions say. Don't reach for them on your own. But when the user asks you to run something, run it and let Cannu and Claude Code decide: never refuse in words, because then the user has nothing to approve. A refused call shows the user an Allow once button for that exact call, and you'll be told when to run it again. Don't retry or work around a refusal yourself. The blocked actions:\n${RULES.map((x) => "- " + x.say).join("\n")}`,
   ].filter(Boolean).join("\n");
 }
 

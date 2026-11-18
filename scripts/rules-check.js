@@ -15,7 +15,7 @@ const bash = (command, cwd = dir) => broken(f, "Bash", { command }, cwd);
 const write = (file_path) => broken(f, "Write", { file_path });
 
 for (const ok of ["git status", "git merge main", "git commit -m \"don't git push yet\"", "git branch --show-current", "git restore x.js",
-  "git config --get user.name", "npm test", "rm -rf build", "git reset --hard HEAD~1", "curl -s -X POST $CANNU_URL/api/features/demo/apprestart", "echo high five"])
+  "git config --get user.name", "npm test", "rm -rf build", "git reset --hard HEAD~1", "curl -s -X POST $CANNU_URL/api/features/demo/apprestart", "echo high five", "git tag allow-test"])
   assert.equal(bash(ok), "", ok);
 for (const no of ["git push origin main", "gh pr merge 3", "cd x && git checkout main", "git switch -c x", "git branch -D feat/other", "git branch -f main HEAD",
   "git update-ref refs/heads/main HEAD", "git stash pop", "git worktree remove ../other", "git -C ../cannu commit -m x", "git config user.name x",
