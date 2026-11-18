@@ -350,7 +350,8 @@
   .brand img { width:48px; height:48px; }
   @media (prefers-color-scheme: dark) { .brand img { filter:invert(1); } }
   /* Logo: a still .pix grid spelling "C", in the text colour instead of blue. Lit cells have .on. */
-  .pix.logo { --s:48px; --slow:1.6; color:var(--fg); cursor:pointer; } /* click: logoPlay() runs the next logo animation; its fire is 1.6x slower */
+  .pix.logo { --s:48px; --slow:1.6; color:var(--fg); cursor:pointer;
+    filter:drop-shadow(0 0 calc(var(--s)*.05) currentColor); } /* softer glow than the loaders' .08 */ /* click: logoPlay() runs the next logo animation; its fire is 1.6x slower */
   .pix.logo i { opacity:.12; } .pix.logo i.on { opacity:1; }
   .brand h1 { margin:0; font-size:34px; line-height:1.1; letter-spacing:-.025em; font-weight:700; }
   /* While a popup is open the page behind it stays put. */
