@@ -2,7 +2,7 @@
 // (wired up in that worktree's .claude/settings.local.json). It records
 // what the agent is doing for the dashboard, and appends every message you
 // send, word for word, to <notes>/<slug>/prompts.md. Before each tool call it
-// refuses what lib.js's RULES forbid, unless Oli allowed that call once.
+// refuses what lib.js's RULES forbid, unless the user allowed that call once.
 // A failure in here must never block the session, so every one is swallowed.
 import fs from "node:fs";
 import path from "node:path";
@@ -66,7 +66,7 @@ function run(h) {
         ...(pass >= 0 && { passes: st.passes.filter((_, n) => n !== pass) }),
         ...(why && { denied: [...(st.denied || []).filter((d) => !(d.tool === h.tool_name && d.key === key)), { tool: h.tool_name, key, why, hard: true }] }),
       });
-      if (pass >= 0) decide("allow", "Oli allowed this once from the dashboard.");
+      if (pass >= 0) decide("allow", "The user allowed this once from the dashboard.");
       else if (why) decide("deny", `Cannu blocks this: ${why}`);
       break;
     }

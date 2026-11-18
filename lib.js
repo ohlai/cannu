@@ -147,7 +147,7 @@ export const stamp = (d = new Date()) => {
 };
 
 // Anything the dashboard adds to a prompt starts with this, so prompts.md
-// shows what was Oli's words and what was added.
+// shows what was the user's words and what was added.
 export const AUTO = "[Added by the dashboard, not my words]";
 
 // ---------- agent defaults ----------
@@ -156,7 +156,7 @@ export const MODELS = { "": "Claude Code's default", "claude-opus-5-5": "Opus 5.
 export const BUILT_IN = {
   model: "",
   systemPrompt: "",
-  // Sent when Oli presses Carry on after an agent was cut off mid-turn.
+  // Sent when the user presses Carry on after an agent was cut off mid-turn.
   resumeText: "You were interrupted mid-turn (the dashboard or the PC restarted, or the session was closed). Check git status and your log.md, work out where you got to, then carry on with what you were doing.",
   // Agents held by a full usage limit carry on by themselves once it resets.
   // Off: their cards offer Carry on instead.
@@ -170,7 +170,7 @@ export const BUILT_IN = {
   // Filled into the chat box when Check and merge's check fails. {check} and {out} are filled in.
   checkText: "Check and merge ran the check ({check}) on your branch and it failed. The end of its output:\n\n{out}\n\nFix what fails, run the check again, log what you did, and commit.",
   // Filled into the chat box from a pull request with failing checks or a conflict. {pr} and {problems} are filled in.
-  prFixText: "Pull request #{pr} has problems: {problems}. If it conflicts, merge main into your branch and resolve it keeping both sides' intent. Fix what fails, run the check, log what you did, and commit. Don't push: Oli presses Push in Cannu once you're done.",
+  prFixText: "Pull request #{pr} has problems: {problems}. If it conflicts, merge main into your branch and resolve it keeping both sides' intent. Fix what fails, run the check, log what you did, and commit. Don't push: the user presses Push in Cannu once you're done.",
   // How a background turn decides what it may do. "auto": Claude Code's own
   // classifier judges each action not on allowedTools. "acceptEdits": only
   // edits and allowedTools, everything else refused. Either way the hard
@@ -346,13 +346,13 @@ export function brief(f) {
   const r = repo();
   return [
     `You are a feature agent started by Cannu, a dashboard that runs one agent per feature, each on its own branch and git worktree. Yours is "${f.title}" on branch ${f.branch}.`,
-    `Commit your work on this branch as you go. Your folder and branch are yours to change freely: Cannu merges your branch or opens its pull request, and Oli checks it first.`,
+    `Commit your work on this branch as you go. Your folder and branch are yours to change freely: Cannu merges your branch or opens its pull request, and the user checks it first.`,
     COMMIT_NOTES
       ? `Keep notes in ${NOTES}/${f.slug}/: log.md for what you did, decisions.md for each decision and why. prompts.md there is written for you; never edit it.`
       : `Keep notes in ${notesDir(f)}: log.md for what you did, decisions.md for each decision and why. That folder is outside git on purpose, so never git add it. prompts.md there is written for you; never edit it.`,
     r.app && `Your own copy of the app runs at http://localhost:${f.port} (PORT, DATA_DIR and APP_URL are set). After changing code the server loads at start, restart it with: curl -s -X POST $CANNU_URL/api/features/${f.slug}/apprestart`,
     r.check && `Before you say you're done, run the check: ${r.check}`,
-    `Cannu blocks these, whatever your permissions say, so don't reach for them. If one is truly needed (or Oli asks for it), run it once anyway and don't retry or work around the refusal: Cannu refuses it and shows Oli an Allow once button for that exact call, and you'll be told when to run it again:\n${RULES.map((x) => "- " + x.say).join("\n")}`,
+    `Cannu blocks these, whatever your permissions say, so don't reach for them. If one is truly needed, or the user asks for it, run it once anyway and don't work around the refusal: Cannu refuses it and shows the user an Allow once button for that exact call, and you'll be told when to run it again. Each time the user asks again, run it once again; that's how they get a new button:\n${RULES.map((x) => "- " + x.say).join("\n")}`,
   ].filter(Boolean).join("\n");
 }
 

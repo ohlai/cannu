@@ -130,8 +130,8 @@ function describe(t, since) {
   const status = t.status === "building" ? `not merged yet, on ${t.branch}` : t.merged ? `merged ${day(t.merged)}` : t.status;
   return `- "${t.title}" (${status}): read ${notesRef(t, since)} (prompts.md, log.md, decisions.md)`;
 }
-// Text added after Oli's own words, clearly marked, so prompts.md keeps
-// exactly what Oli wrote. Only the starting prompt passes a title.
+// Text added after the user's own words, clearly marked, so prompts.md keeps
+// exactly what the user wrote. Only the starting prompt passes a title.
 function contextBlock({ title, continues, refs }, since) {
   const all = loadFeatures();
   const lines = title ? [`Feature: ${title}`] : [];
@@ -203,7 +203,7 @@ function writeSettings(f) {
   const events = ["SessionStart", "UserPromptSubmit", "PreToolUse", "Notification", "Stop", "StopFailure", "SessionEnd"];
   fs.writeFileSync(path.join(f.dir, ".claude", "settings.local.json"), JSON.stringify({
     env: {
-      ...defaults().env, // Oli's extra variables; the ones below win, the dashboard relies on them
+      ...defaults().env, // the user's extra variables; the ones below win, the dashboard relies on them
       FEATURE_SLUG: f.slug, PORT: String(f.port), DATA_DIR: path.join(f.dir, "data"), APP_URL: `http://localhost:${f.port}`, CANNU_URL: `http://127.0.0.1:${config.port}`,
       // So hook.js and launch.js, run by the agent, know which repo they belong to.
       CANNU_REPO: config.name, ...(process.env.CANNU_CONFIG ? { CANNU_CONFIG: process.env.CANNU_CONFIG } : {}),
@@ -286,7 +286,7 @@ async function setup(f) {
 
 // ---------- talking to the agent ----------
 
-// @slug in what Oli writes tags a related feature: the agent reads its notes.
+// @slug in what the user writes tags a related feature: the agent reads its notes.
 function mentions(text, self) {
   const all = loadFeatures();
   return [...new Set([...String(text || "").matchAll(/@([a-z0-9][a-z0-9-]*)/g)].map((m) => m[1]))].filter((s) => s !== self && all.some((x) => x.slug === s));
@@ -367,12 +367,12 @@ function allow(f, i, addRule) {
   const rule = addRule && !d.hard && d.rule;
   if (rule && !defaults().allowedTools.includes(rule)) saveDefaults({ ...defaults(), allowedTools: [...defaults().allowedTools, rule] });
   const what = d.tool === "Bash" ? d.key : `${d.tool} ${d.key}`;
-  feedback(f, `${AUTO} Oli ${rule ? `allowed ${rule} from now on` : "allowed this once"}: ${what}\nRun it again exactly as before, then carry on.`);
+  feedback(f, `${AUTO} The user ${rule ? `allowed ${rule} from now on` : "allowed this once"}: ${what}\nRun it again exactly as before, then carry on.`);
   return { ok: true, msg: rule ? `Allowed, and added ${rule} to Agent defaults. Asked the agent to try again.` : "Allowed once. Asked the agent to try again." };
 }
 // Agent defaults are saved in cannu.json on main, keeping only what differs
 // from the built-in value, so improvements to the built-in text reach
-// anything Oli hasn't changed.
+// anything the user hasn't changed.
 function saveDefaults(b) {
   const keep = {};
   for (const k of Object.keys(BUILT_IN)) if (k in b && JSON.stringify(b[k]) !== JSON.stringify(BUILT_IN[k])) keep[k] = b[k];
