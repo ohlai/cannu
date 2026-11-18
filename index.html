@@ -258,20 +258,20 @@
   .dotbox { position:relative; flex:none; width:16px; height:16px; }
   .dotbox .pix { --s:16px; position:absolute; inset:0; transition:opacity .35s; } .dotbox .pix.out { opacity:0; }
   .typing { align-self:flex-start; display:flex; align-items:center; gap:4px; max-width:100%; padding:4px 2px; } .typing .activity { margin-left:6px; }
-  .stopbtn { position:absolute; right:124px; bottom:4px; width:28px; height:28px; padding:0; display:flex; align-items:center; justify-content:center; border:0; border-radius:8px; background:transparent; } .stopbtn:hover { background:var(--line); }
+  .stopbtn { position:absolute; right:80px; bottom:4px; width:28px; height:28px; padding:0; display:flex; align-items:center; justify-content:center; border:0; border-radius:8px; background:transparent; } .stopbtn:hover { background:var(--line); }
   .stopbtn::before { content:""; width:11px; height:11px; border-radius:3px; background:var(--fg); }
   .inwrap { position:relative; } .inwrap input { width:100%; box-sizing:border-box; padding-right:40px; }
   .inbtn { position:absolute; right:4px; top:50%; transform:translateY(-50%); width:28px; height:28px; padding:0; display:flex; align-items:center; justify-content:center; border:0; border-radius:6px; background:transparent; color:var(--mute); } .inbtn:hover, .inbtn:focus-visible { color:var(--fg); background:var(--line); outline:none; }
-  .compose.multi .stopbtn { right:116px; bottom:4px; } .compose:has(.stopbtn):not(.multi) textarea { padding-right:40px; }
+  .compose.multi .stopbtn { right:72px; bottom:4px; } .compose:has(.stopbtn):not(.multi) textarea { padding-right:40px; }
   .bubble .who { font-size:11px; opacity:.65; margin-top:4px; }
   /* Message box: its own rounded box with Send on its right. Once the text
      wraps, the box widens into Send's place and Send drops below it. */
   .compose::before { content:""; position:absolute; z-index:-1; left:-10px; right:-10px; top:0; bottom:-300px; background:linear-gradient(transparent, var(--card) 25px); pointer-events:none; }
   .chat { overflow:hidden; } .chat .hint { position:relative; z-index:2; }
   .compose { position:relative; z-index:1; margin:-42px 10px 0; transition:padding-bottom .28s cubic-bezier(.16,1,.3,1) .08s; }
-  .compose textarea { display:block; min-height:0; resize:none; line-height:20px; padding:7px 12px; border-radius:10px; width:calc(100% - 118px); max-height:262px; overflow-y:auto;
+  .compose textarea { display:block; min-height:0; resize:none; line-height:20px; padding:7px 12px; border-radius:10px; width:calc(100% - 74px); max-height:262px; overflow-y:auto;
     transition:width .28s cubic-bezier(.16,1,.3,1), height .18s ease; }
-  .compose .send { position:absolute; right:0; bottom:0; width:108px; height:36px; padding:0; display:flex; align-items:center; justify-content:center; gap:8px; }
+  .compose .send { position:absolute; right:0; bottom:0; width:64px; height:36px; padding:0; display:flex; align-items:center; justify-content:center; gap:8px; }
   .compose.multi { padding-bottom:44px; transition-delay:0s; }
   .compose.multi textarea { width:100%; transition-delay:.08s, 0s; }
   .chat .hint { padding:6px 10px 10px; }
@@ -539,7 +539,7 @@
   .pop .chat { display:flex; flex-direction:column; height:min(58vh, 560px); }
   .pop .thread { flex:1; min-height:0; max-height:none; }
   .pop .compose, .pop .compose.multi { flex:none; padding-bottom:0; }
-  .pop .compose textarea, .pop .compose.multi textarea { width:calc(100% - 118px); }
+  .pop .compose textarea, .pop .compose.multi textarea { width:calc(100% - 74px); }
   .pop .compose { margin:-42px 10px 0; }
   .pop .chev, .pop [data-act="fb"], .pop .title .tag { display:none; }
   .pop footer .actions { margin:0; }
@@ -1454,7 +1454,7 @@ function chatBox(f, s, cls) {
         <div class="atts">${attsHtml(s)}</div>
         <textarea data-field="draft" data-mention rows="1" placeholder="Message the agent">${esc(s.draft)}</textarea>
         ${cls === "working" ? `<button class="stopbtn" data-act="forcestop" title="Stop" aria-label="Stop"></button>` : ""}
-        <button class="primary send" data-act="send" title="${MAC ? "⌘+Enter" : "Ctrl+Enter"} sends">Send</button>
+        <button class="primary send" data-act="send" title="Send [ctrl + enter]">Send</button>
       </div>
       <div class="hint" data-tags>${tagsHtml(s.draft)}</div>
       <div class="hint">${f.live?.open ? "Its terminal is open. Sending closes that terminal session and carries on here (the conversation is kept). " : f.live?.background || cls === "working" ? "It's mid-turn. Your message waits and goes as soon as this turn ends. " : ""}@ to tag a related task. The agent reads their notes first. Paste or drag in images and files to attach them.</div>
@@ -1756,7 +1756,7 @@ function fitCompose(ta, instant) {
   const was = ta.style.height;
   ta.style.transition = c.style.transition = "none";
   const at = (w) => { ta.style.width = w; ta.style.height = "auto"; return ta.scrollHeight; };
-  const narrow = "calc(100% - 118px)";
+  const narrow = "calc(100% - 74px)";
   // In the popup Send stays on the right and the box grows upwards instead.
   s.multi = !ta.closest(".pop") && (ta.value.includes("\n") || at(narrow) > 36);
   const h = Math.min(at(s.multi ? "100%" : narrow), 260) + 2;
@@ -3101,7 +3101,7 @@ setInterval(refresh, 2000);
 // browser's own tooltip never shows; #tip shows it instead. A trailing
 // "[Ctrl+Enter]" in the text becomes key chips; inside [data-tip-below], or a
 // .row holding one, it shows underneath.
-const KEYNAME = { ctrl: MAC ? "⌘" : "Ctrl", shift: "Shift", enter: "Enter", esc: "Esc" };
+const KEYNAME = { ctrl: MAC ? "⌘" : "Ctrl", shift: MAC ? "⇧" : "Shift", enter: "↵", esc: "Esc" };
 const tipParts = (t) => { const m = t.match(/^(.*?)\s*\[([^\]]+)\]$/); return m ? [m[1], m[2].split("+").map((k) => k.trim()).map((k) => KEYNAME[k.toLowerCase()] || k)] : [t, []]; };
 const tip = Object.assign(document.createElement("div"), { id: "tip", popover: "manual" });
 tip.setAttribute("role", "tooltip");
