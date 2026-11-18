@@ -317,12 +317,14 @@ export const RULES = [
   { say: "Run git only in your own folder (no git -C, --git-dir or --work-tree), and don't change git config.", test: (t) => sh(/\bgit\s+(-C\b|--git-dir|--work-tree|config\b(?!.*--(get|list)\b))/)(t) || (t.tool === "Bash" && /\bgit\s/.test(unquote(t.cmd)) && !inside(t.cwd, t.f.dir)) },
   // CANNU_URL is how the agent restarts its app. The rest of the API would let it allow its own blocked actions.
   { say: "From Cannu's API, only use apprestart for your own app.", test: (t) => t.tool === "Bash" && /\/api\//.test(t.cmd) && !/\/api\/features\/[a-z0-9-]+\/apprestart\b/.test(t.cmd) },
-  { say: "Only write files inside your own folder, your notes folder or the temp folder. Never edit prompts.md or your .claude settings.", test: (t) => {
+  { say: "Only write files inside your own folder, your notes folder, the temp folder or your Claude Code memory folder. Never edit prompts.md or your .claude settings.", test: (t) => {
     const p = WRITE_TOOLS.has(t.tool) && (t.input.file_path || t.input.notebook_path);
     if (!p) return false;
     const notes = notesDir(t.f);
     if (inside(p, path.join(t.f.dir, ".claude")) || (inside(p, notes) && path.basename(p) === "prompts.md")) return true;
-    return !(inside(p, t.f.dir) || inside(p, notes) || inside(p, os.tmpdir()));
+    // Claude Code's own memory for the project lives in ~/.claude/projects/<project>/memory.
+    const memory = inside(p, path.join(os.homedir(), ".claude", "projects")) && path.resolve(p).split(path.sep).includes("memory");
+    return !(inside(p, t.f.dir) || inside(p, notes) || inside(p, os.tmpdir()) || memory);
   } },
 ];
 // What a blocked call is matched on for Allow once: the command, the file, or the whole input.

@@ -26,6 +26,8 @@ assert.notEqual(bash("git status", path.dirname(dir)), "", "git outside its fold
 assert.equal(write(path.join(dir, "src", "a.js")), "");
 assert.equal(write(path.join(notesDir(f), "log.md")), "");
 assert.equal(write(path.join(os.tmpdir(), "scratch.txt")), "");
+assert.equal(write(path.join(os.homedir(), ".claude", "projects", "x", "memory", "note.md")), "", "Claude Code memory");
+assert.notEqual(write(path.join(os.homedir(), ".claude", "settings.json")), "", "user Claude settings");
 assert.notEqual(write(path.join(notesDir(f), "prompts.md")), "");
 assert.notEqual(write(path.join(dir, ".claude", "settings.local.json")), "");
 assert.notEqual(write(path.join(path.dirname(dir), "other", "a.js")), "");
