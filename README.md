@@ -140,17 +140,46 @@ Keys inside `agent`:
 | `model` | Claude Code's own default | The model for new features (each can pick its own) |
 | `systemPrompt` | | Added to every agent's system prompt, after Cannu's own short brief |
 | `env` | | Extra environment variables for every agent |
-| `allowedTools` | Reading, editing, and common git (including `git merge`, for fixing conflicts), node and npm commands | What a background turn may do without asking, as Claude Code permission rules. Anything else is refused and listed in red on the card |
-| `disallowedTools` | `git push`, `checkout`, `switch` and `reset` | What a background turn may never do |
+| `permissionMode` | `auto` | How a background turn decides what it may do. `auto`: Claude Code's auto mode judges each action not on `allowedTools`. `acceptEdits`: only edits and `allowedTools`. Terminal sessions use your own Claude Code setting |
+| `allowedTools` | Reading, editing, and common git (including `git merge`, for fixing conflicts), node and npm commands | What a background turn does without asking, as Claude Code permission rules. **Allow and add rule** on a card adds to it |
+| `disallowedTools` | empty | Extra things a background turn is refused. Pushing, switching branches and the like are Cannu's own rules (below), so they don't need to be here |
 | `resumeText`, `freshText`, `conflictText`, `commitText`, `checkText`, `prFixText` | Cannu's built-in wording | Messages Cannu sends for you, or fills in for you to send: after an interrupted turn, when a session can't be reopened, when merging conflicts, when shipping finds uncommitted changes, when Check and merge's check fails, and from Ask the agent to fix on a pull request. `{title}`, `{slug}`, `{notes}`, `{files}`, `{check}`, `{out}`, `{pr}` and `{problems}` are filled in |
 
 ## What every agent is told
 
 Each agent reads the repo's own `CLAUDE.md`, and Cannu also gives it a short
 system prompt. It says which feature and branch the agent is on, to commit as
-it goes and never push or switch branches, to keep `log.md` and
-`decisions.md` in its notes folder, how to restart its app, and which check to
-run. The repo doesn't need to say any of that.
+it goes, to keep `log.md` and `decisions.md` in its notes folder, how to
+restart its app, which check to run, and Cannu's own rules. The repo doesn't
+need to say any of that.
+
+## What agents may do
+
+An agent's own folder and branch are its own: it can change, delete, merge and
+reset there freely, because nothing reaches main until you merge it. What it
+can't touch is what agents share. Cannu's own rules (`RULES` in `lib.js`) say
+what that is:
+
+- no pushing and no `gh` (Cannu pushes and opens pull requests)
+- no checkout or switch, and no creating, moving or deleting branches or refs
+- no `git worktree` or `git stash` (the stash is shared by every worktree)
+- git only in its own folder, and no changing git config
+- of Cannu's API, only restarting its own app
+- writing files only in its own folder, its notes folder and the temp folder,
+  and never `prompts.md` or its `.claude` settings
+
+Cannu's hook checks every action against them, in background turns and
+terminals alike, and the system prompt lists the same lines, so the agent
+knows them and the two can't drift. They read the command text, so they catch
+mistakes, not a determined agent: code run inside `node` gets past them. A
+real wall needs an OS sandbox.
+
+Anything an agent is refused, by these rules or by Claude Code, is listed on
+its card. **Allow once** lets that exact call through once and asks the agent
+to try again. For what isn't one of Cannu's rules, the ▾ next to it has
+**Allow and add rule**, which also adds a permission rule (like
+`Bash(git restore:*)`) to the agent defaults. `node scripts/rules-check.js`
+(part of the check) tests the rules.
 
 ## Where features are recorded
 
@@ -220,7 +249,8 @@ comes from its name.
   as soon as the turn ends. If the session is open and idle in a terminal,
   sending closes that terminal session first, since one session can't run in
   two places. The conversation is kept, so Open session picks it back up.
-  Anything a background turn wasn't allowed to do is listed in red.
+  Anything the agent wasn't allowed to do is listed, with **Allow once**
+  (see What agents may do).
 - **Open session**: the same session in a terminal, for watching it live or
   approving something. On Windows it opens a Windows Terminal tab. On Linux,
   macOS or Docker it gives you the command to run and copies it. Closing the
