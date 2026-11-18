@@ -657,29 +657,43 @@
   .pickfile { color:var(--fg); text-decoration:underline; text-underline-offset:2px; cursor:pointer; }
   /* Words with a shorter version for phones: .wide shows on wider screens, .narrow on phones. */
   .narrow { display:none; }
-  #sortBtn svg.narrow { width:15px; height:15px; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; transform:none; }
+  /* The ⋯ and view menus: phones only. Elsewhere the wrappers vanish from the layout, and order puts the
+     header back as it always was: rings, Agent defaults, bells, New task, repo. */
+  button.morebtn { display:none; } /* button. so it beats button.sq */
+  .more, .morerow { display:contents; }
+  #defaultsOpen { order:1; } #notify { order:2; } #newOpen { order:3; } #repoPick { order:4; }
   /* ---------- phones ---------- */
-  /* Tighter edges. The header is two lines: the logo with the usage rings on its right, then the buttons.
-     The filters are one line: short labels, sort as an icon, the status chips scrolling sideways, and
-     search as a magnifier that opens to a full-width box on its own line. Popups nearly fill the screen. */
+  /* Tighter edges. The header is one line: logo, usage rings, ⋯ (repo, notifications, Agent defaults) and
+     New task. The filters are one line: a button named after the view that opens view, show/hide and sort,
+     the status chips scrolling sideways, and search as a magnifier that opens to a full-width box on its
+     own line. Popups nearly fill the screen. */
   @media (max-width:640px) {
     .wide { display:none; } .narrow { display:inline; }
     main { padding:12px 10px 40px; }
     #top, .filters, #board { padding:0; }
-    #top { margin-bottom:16px !important; gap:8px 6px; }
-    #top > .grow { flex:1 1 calc(100% - 50px); min-width:0; }
-    #top > button { padding:6px 10px; }
-    #repoPick { flex:1 1 0; min-width:0; display:flex; justify-content:flex-end; }
-    #repoPick > button { max-width:100%; padding:6px 8px; gap:4px; }
+    #top { margin-bottom:16px !important; gap:6px; position:relative; flex-wrap:nowrap; }
+    #top > .grow { min-width:0; }
+    #top > :not(.grow, .more) { margin-top:2px; } /* level with the logo, even when the totals line sits under it */
+    #newOpen { padding:6px 10px; }
     .brand { gap:10px; } .brand img { width:36px; height:36px; }
     .brand h1 { font-size:26px; } .brand h1 span { font-size:13px; }
-    .filters { gap:8px 6px; flex-wrap:wrap; }
+    .filters { gap:8px 6px; flex-wrap:wrap; position:relative; }
+    /* The two menus: a card under their button, one labelled row per setting. */
+    button.morebtn { display:inline-flex; align-items:center; justify-content:center; gap:6px; flex:none; }
+    .morebtn svg { width:16px; height:16px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; }
+    .morebtn.sq svg { fill:currentColor; stroke:none; }
+    .morebtn[aria-expanded="true"] { border-color:var(--mute); }
+    .more { display:none; position:absolute; z-index:30; top:calc(100% + 6px); width:max-content; max-width:calc(100vw - 20px);
+      padding:12px; flex-direction:column; gap:12px; background:var(--card); border:1px solid var(--line); border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,.16); }
+    .more.open { display:flex; }
+    #topMore { right:0; } #viewMore { left:0; }
+    .morerow { display:flex; align-items:center; justify-content:space-between; gap:16px; }
+    .morerow > .narrow { color:var(--mute); font-size:12.5px; font-weight:600; }
+    .morerow:has(> [hidden]) { display:none; } /* Show all / Hide completed only exists on the boards */
+    #topMore #defaultsOpen { width:100%; }
     /* The 5H and 7D lines open over the tagline rather than beside the rings, so the rings keep their line. */
     .rings { position:relative; }
     .uin { position:absolute; right:48px; top:50%; translate:0 -50%; z-index:1; padding:4px 8px; border-radius:8px; background:var(--bg); }
-    .seg.text button { padding:0 7px; }
-    #sortBtn { padding:6px 8px; }
-    #sortBtn svg:not(.narrow) { display:none; }
     #chips { flex:1 1 0; min-width:0; flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none; }
     #chips::-webkit-scrollbar { display:none; }
     #chips button { flex:none; }
@@ -702,15 +716,14 @@
     .panel header, .panel .body, .panel footer, .dmsg { padding-left:14px; padding-right:14px; }
     /* Footers that don't fit wrap to the right, so Start agent stays under the hand, not under Close. */
     .panel footer.row { justify-content:flex-end; gap:8px; }
-    .panel footer > .grow:empty { display:none; } .panel footer > [data-close]:first-child { margin-right:auto; } /* the spacer's gap is what made New task's buttons wrap */    /* The sort menu opens leftwards from its button, which sits near the right edge. */
-    #sortMenu { left:auto !important; right:0 !important; }
+    .panel footer > .grow:empty { display:none; } .panel footer > [data-close]:first-child { margin-right:auto; } /* the spacer's gap is what made New task's buttons wrap */
     /* The model picker stays in a planned task's popup; in the list it gives its room to the title. */
     #list .card select.model { display:none; }
     .pop .chat { height:min(52dvh, 560px); }
     /* A card's top row stays one line: the title wraps in what's left, with the status, model and bell on its first line. */
     /* A grid: the title in the first cell, the controls in the cells beside it, and the title's details
        (dates, branch, links) under the whole row rather than squeezed under the title. */
-    #top { align-items:flex-start; } #rings { margin-top:4px; } /* level with the logo, even when the totals line sits under it */
+    #top { align-items:flex-start; }
     /* A button row that wraps keeps its main button at the right. */
     .actions > :last-child { margin-left:auto; }
     /* The popup's buttons join Close in one row that wraps, rather than a block of their own beside it. */
@@ -767,35 +780,53 @@
       <p class="sub" style="margin:12px 0 0" id="totals"></p>
     </div>
     <div class="rings" id="rings" tabindex="0" aria-label="Claude usage"></div>
-    <button id="defaultsOpen" title="Model, system prompt and everything else every agent is given"><span class="wide">Agent defaults</span><span class="narrow">Defaults</span></button>
-    <div class="seg" id="notify">
-      <span class="thumb"></span>
-      <button data-mode="silent" title="No notifications"></button>
-      <button data-mode="select" title="Notify me about tasks with their bell on"></button>
-      <button data-mode="all" title="Notify me about every task"></button>
+    <!-- On phones the repo, notifications and Agent defaults fold into the ⋯ menu. Elsewhere .more and .morerow vanish from the layout. -->
+    <button class="morebtn sq" data-more="topMore" aria-haspopup="true" aria-expanded="false" aria-label="Repo, notifications and agent defaults" title="Repo, notifications and agent defaults"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg></button>
+    <div class="more" id="topMore">
+      <div class="morerow"><span class="narrow">Repo</span>
+        <div class="repopick" id="repoPick">
+          <button id="repoBtn" aria-haspopup="true" aria-expanded="false" title="Which repo this board shows"><span id="repoName">Repo</span><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
+          <div class="repomenu" id="repoMenu" hidden></div>
+        </div>
+      </div>
+      <div class="morerow"><span class="narrow">Notifications</span>
+        <div class="seg" id="notify">
+          <span class="thumb"></span>
+          <button data-mode="silent" title="No notifications"></button>
+          <button data-mode="select" title="Notify me about tasks with their bell on"></button>
+          <button data-mode="all" title="Notify me about every task"></button>
+        </div>
+      </div>
+      <button id="defaultsOpen" title="Model, system prompt and everything else every agent is given">Agent defaults</button>
     </div>
     <button class="primary" id="newOpen">+ New task</button>
-    <div class="repopick" id="repoPick">
-      <button id="repoBtn" aria-haspopup="true" aria-expanded="false" title="Which repo this board shows"><span id="repoName">Repo</span><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
-      <div class="repomenu" id="repoMenu" hidden></div>
-    </div>
   </div>
   <div class="msg bad" id="notifyMsg" hidden style="margin-top:-12px; margin-bottom:12px"></div>
   <div class="banner" id="limitMsg" hidden style="margin:-16px auto 20px"></div>
 
   <div class="filters">
-    <div class="seg text" id="viewSeg"><span class="thumb"></span>
-      <button data-val="list" title="The full list, with a filter per status">List</button>
-      <button data-val="status" title="A board with a column per status. Cards move as their agents change">Status</button>
-      <button data-val="label" title="A board with a column per label. Drag a card to another column to relabel it">Labels</button>
-    </div>
-    <div class="seg text" id="doneSeg"><span class="thumb"></span>
-      <button data-val="show" title="Every task, merged and dropped too"><span class="wide">Show All</span><span class="narrow">All</span></button>
-      <button data-val="hide" title="Hide merged and dropped tasks"><span class="wide">Hide Completed</span><span class="narrow">Hide done</span></button>
-    </div>
-    <div class="repopick" id="sortPick">
-      <button id="sortBtn" aria-haspopup="true" aria-expanded="false" title="How cards are ordered, in every column and the list" aria-label="Sort"><svg class="narrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4v16M3 16l4 4 4-4M17 20V4M13 8l4-4 4 4"/></svg><span id="sortName" class="wide"></span><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
-      <div class="repomenu" id="sortMenu" hidden style="left:0; right:auto"></div>
+    <!-- On phones the view, show/hide and sort fold into this button's menu; it's named after the current view. -->
+    <button class="morebtn" data-more="viewMore" aria-haspopup="true" aria-expanded="false" title="View, completed tasks and sort"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg><span id="viewName"></span></button>
+    <div class="more" id="viewMore">
+      <div class="morerow"><span class="narrow">View</span>
+        <div class="seg text" id="viewSeg"><span class="thumb"></span>
+          <button data-val="list" title="The full list, with a filter per status">List</button>
+          <button data-val="status" title="A board with a column per status. Cards move as their agents change">Status</button>
+          <button data-val="label" title="A board with a column per label. Drag a card to another column to relabel it">Labels</button>
+        </div>
+      </div>
+      <div class="morerow"><span class="narrow">Show</span>
+        <div class="seg text" id="doneSeg"><span class="thumb"></span>
+          <button data-val="show" title="Every task, merged and dropped too">Show All</button>
+          <button data-val="hide" title="Hide merged and dropped tasks">Hide Completed</button>
+        </div>
+      </div>
+      <div class="morerow"><span class="narrow">Sort</span>
+        <div class="repopick" id="sortPick">
+          <button id="sortBtn" aria-haspopup="true" aria-expanded="false" title="How cards are ordered, in every column and the list"><span id="sortName"></span><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
+          <div class="repomenu" id="sortMenu" hidden style="left:0; right:auto"></div>
+        </div>
+      </div>
     </div>
     <div class="chips" id="chips"></div>
     <span class="grow" id="gap" style="min-width:0"></span>
@@ -1983,12 +2014,32 @@ function makeSeg(el, get, set) {
   el.addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) { set(b.dataset.val); render(all); } });
   segs.push(place);
 }
-makeSeg($("#viewSeg"), () => view, (v) => { view = v; store.set("view", v); });
+// The phone's view button is named after the view it's on.
+const nameView = () => { $("#viewName").textContent = { list: "List", status: "Status", label: "Labels" }[view]; };
+nameView();
+makeSeg($("#viewSeg"), () => view, (v) => { view = v; store.set("view", v); nameView(); });
 makeSeg($("#doneSeg"), () => (hideDone ? "hide" : "show"), (v) => { hideDone = v === "hide"; store.set("hideDone", hideDone); });
-addEventListener("resize", () => { for (const place of segs) place(); }); // phones swap in shorter labels, so the square has to resize
+addEventListener("resize", () => { for (const place of segs) place(); }); // the switchers measure their words, which change size with the screen
+// Phones: the ⋯ and view buttons each open a menu of the settings tucked into them (.more). One open at a time;
+// a tap outside or Escape closes it. The switchers inside measure themselves once they're showing.
+function moreMenu(id, open) {
+  for (const b of document.querySelectorAll("[data-more]")) {
+    const on = open && b.dataset.more === id;
+    $("#" + b.dataset.more).classList.toggle("open", on); b.setAttribute("aria-expanded", on);
+  }
+  if (open) for (const place of segs) place();
+}
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-more]");
+  if (b) return moreMenu(b.dataset.more, b.getAttribute("aria-expanded") !== "true");
+  // Picking something (a repo, a sort, Agent defaults) is done with the menu, so it closes too.
+  if (!e.target.closest(".more") || e.target.closest("#defaultsOpen, .repomenu button")) moreMenu(null, false);
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && document.querySelector(".more.open")) moreMenu(null, false); });
 // The sort dropdown, built like the repo one.
 const SORT_NAMES = { status: "Needs you first", active: "Last active", created: "Newest", name: "Name", manual: "Manual" };
-$("#sortName").textContent = "Sort: " + SORT_NAMES[sortBy];
+const nameSort = () => { $("#sortName").innerHTML = `<span class="wide">Sort: </span>${SORT_NAMES[sortBy]}`; }; // the phone menu labels it Sort already
+nameSort();
 function sortMenu(open) {
   $("#sortMenu").hidden = !open; $("#sortBtn").setAttribute("aria-expanded", open);
   if (!open) return;
@@ -1999,7 +2050,7 @@ $("#sortBtn").onclick = () => sortMenu($("#sortMenu").hidden);
 $("#sortMenu").addEventListener("click", (e) => {
   const b = e.target.closest("[data-sort]"); if (!b) return;
   sortMenu(false); $("#sortBtn").focus();
-  sortBy = b.dataset.sort; store.set("sort", sortBy); $("#sortName").textContent = "Sort: " + SORT_NAMES[sortBy]; render(all);
+  sortBy = b.dataset.sort; store.set("sort", sortBy); nameSort(); render(all);
 });
 document.addEventListener("click", (e) => { if (!e.target.closest("#sortPick")) sortMenu(false); });
 $("#sortPick").addEventListener("keydown", (e) => {
