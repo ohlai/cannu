@@ -352,7 +352,7 @@ export function brief(f) {
       : `Keep notes in ${notesDir(f)}: log.md for what you did, decisions.md for each decision and why. That folder is outside git on purpose, so never git add it. prompts.md there is written for you; never edit it.`,
     r.app && `Your own copy of the app runs at http://localhost:${f.port} (PORT, DATA_DIR and APP_URL are set). After changing code the server loads at start, restart it with: curl -s -X POST $CANNU_URL/api/features/${f.slug}/apprestart`,
     r.check && `Before you say you're done, run the check: ${r.check}`,
-    `Cannu blocks these, whatever your permissions say, so don't try them. If you truly need one, say so and stop; Oli can allow it once:\n${RULES.map((x) => "- " + x.say).join("\n")}`,
+    `Cannu blocks these, whatever your permissions say, so don't reach for them. If one is truly needed (or Oli asks for it), run it once anyway and don't retry or work around the refusal: Cannu refuses it and shows Oli an Allow once button for that exact call, and you'll be told when to run it again:\n${RULES.map((x) => "- " + x.say).join("\n")}`,
   ].filter(Boolean).join("\n");
 }
 
