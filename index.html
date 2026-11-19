@@ -3,6 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- iOS zooms in when you tap a text box under 16px. maximum-scale=1 stops that, and iOS still lets you pinch-zoom.
+     iOS only: on Android it would block pinch-zoom. -->
+<script>if (/iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)) document.querySelector("meta[name=viewport]").content += ", maximum-scale=1";</script>
 <title>Cannu</title>
 <link rel="icon" type="image/svg+xml" href="/logo.svg">
 <style>
@@ -661,6 +664,141 @@
   #limitMsg .switch { display:flex; width:fit-content; margin-top:16px; font-size:12px; }
   @media (prefers-reduced-motion: reduce) { .urings, .uin { transition:none; } }
   .limited .dot { background:var(--bad); }
+  /* "choose files" in the attach hints: a link that opens the file picker. */
+  .pickfile { color:var(--fg); text-decoration:underline; text-underline-offset:2px; cursor:pointer; }
+  /* Words with a shorter version for phones: .wide shows on wider screens, .narrow on phones. */
+  .narrow { display:none; }
+  /* The ⋯ and view menus: phones only. Elsewhere the wrappers vanish from the layout, and order puts the
+     header back as it always was: rings, Agent defaults, bells, New task, repo. */
+  button.morebtn { display:none; } /* button. so it beats button.sq */
+  .more, .morerow { display:contents; }
+  #defaultsOpen { order:1; } #notify { order:2; } #newOpen { order:3; } #repoPick { order:4; }
+  /* ---------- phones ---------- */
+  /* Tighter edges. The header is one line: logo, usage rings, ⋯ (repo, notifications, Agent defaults) and
+     New task. The filters are one line: a button named after the view that opens view, show/hide and sort,
+     the status chips scrolling sideways, and search as a magnifier that opens to a full-width box on its
+     own line. Popups nearly fill the screen. */
+  @media (max-width:640px) {
+    .wide { display:none; } .narrow { display:inline; }
+    main { padding:12px 10px 40px; }
+    #top, .filters, #board { padding:0; }
+    #top { margin-bottom:16px !important; gap:6px; position:relative; flex-wrap:nowrap; }
+    #top > .grow { min-width:0; }
+    #top > :not(.grow, .more) { margin-top:2px; } /* level with the logo, even when the totals line sits under it */
+    #newOpen { padding:6px 10px; }
+    .brand { gap:10px; } .brand img { width:36px; height:36px; }
+    .brand h1 { font-size:26px; } .brand h1 span { font-size:13px; }
+    .filters { gap:8px 6px; flex-wrap:wrap; position:relative; }
+    /* The two menus: a card under their button, one labelled row per setting. */
+    button.morebtn { display:inline-flex; align-items:center; justify-content:center; gap:6px; flex:none; }
+    .morebtn svg { width:16px; height:16px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; }
+    .morebtn.sq svg { fill:currentColor; stroke:none; }
+    .morebtn[aria-expanded="true"] { border-color:var(--mute); }
+    /* Opening fades and settles in like the usage card. Closed is display:none, not visibility:hidden: the bells'
+       icons share one SVG mask whose first copy is the notification switch in here, and a hidden copy blanks them all. */
+    .more { display:none; position:absolute; z-index:30; top:calc(100% + 6px); width:max-content; max-width:calc(100vw - 20px);
+      padding:12px; flex-direction:column; gap:12px; background:var(--card); border:1px solid var(--line); border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,.16);
+      opacity:0; transform:translateY(-4px) scale(.97);
+      transition:opacity .18s ease, transform .22s cubic-bezier(.16,1,.3,1), display .18s allow-discrete; }
+    .more.open { display:flex; opacity:1; transform:none; }
+    @starting-style { .more.open { opacity:0; transform:translateY(-4px) scale(.97); } }
+    #topMore { right:0; transform-origin:top right; }
+    #viewMore { left:0; top:37px; transform-origin:top left; } /* under the view button, over List view's chips line rather than below it */
+    @media (prefers-reduced-motion: reduce) { .more { transition:none; } }
+    .morerow { display:flex; align-items:center; justify-content:space-between; gap:16px; }
+    .morerow > .narrow { color:var(--mute); font-size:12.5px; font-weight:600; }
+    .morerow:has(> [hidden]) { display:none; } /* Show all / Hide completed only exists on the boards */
+    #topMore #defaultsOpen { width:100%; }
+    /* Tapping the rings opens the 5H and 7D lines in a small card under them, fading and settling in,
+       instead of sliding out beside them. A tap anywhere else closes it. */
+    .rings { position:static; } /* the card lines up with the header's right edge, not the rings, so it stays on screen */
+    .uin { position:absolute; top:46px; right:0; z-index:30; max-width:none !important; padding:10px 12px;
+      border-radius:10px; background:var(--card); border:1px solid var(--line); box-shadow:0 10px 30px rgba(0,0,0,.16);
+      visibility:hidden; transform:translateY(-4px) scale(.97); transform-origin:top right;
+      transition:opacity .18s ease, transform .22s cubic-bezier(.16,1,.3,1), visibility .18s; }
+    .rings:is(:hover, :focus, :focus-visible) .uin { opacity:1; visibility:visible; transform:none; }
+    #rings:is(:hover, :focus, :focus-visible) .urings { transform:none; } /* #: beats the no-hover rule further down */
+    /* List view: the status chips get their own line under the view button and search. */
+    #chips { flex:1 1 100%; order:1; min-width:0; flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none; }
+    #chips::-webkit-scrollbar { display:none; }
+    #chips button { flex:none; }
+    #gap { display:none; }
+    /* Search: a magnifier at the right that grows leftwards, on its own line, until it meets the view button.
+       flex-grow animates from 0 to 1, and below 1 an item takes only that fraction of the free space, so it grows smoothly. */
+    .searchbox { flex:0 0 34px; min-width:0; margin-left:auto; transition:flex-grow .32s cubic-bezier(.16,1,.3,1); }
+    #search { height:32px; padding:0; color:transparent; cursor:pointer;
+      background:var(--card) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='6'/%3E%3Cpath d='M20 20l-4.5-4.5'/%3E%3C/svg%3E") center / 16px no-repeat; }
+    #search::placeholder { color:transparent; }
+    .searchbox:is(:focus-within, :has(#search:not(:placeholder-shown))) { flex-grow:1; }
+    #search { width:100%; }
+    @media (prefers-reduced-motion: reduce) { .searchbox, .uin { transition:none; } }
+    .searchbox:is(:focus-within, :has(#search:not(:placeholder-shown))) #search { padding:8px 30px 8px 10px; color:var(--fg); cursor:text; background-image:none; }
+    .searchbox:focus-within #search::placeholder { color:var(--mute); }
+    .board { grid-auto-columns:calc(100vw - 56px); scroll-snap-type:x mandatory; scroll-padding:0 10px; padding:16px 10px 24px; margin:-8px -10px -16px; }
+    .board > .col { scroll-snap-align:start; }
+    .card { padding:12px; } .card.past { padding:10px 12px; }
+    .bubble { max-width:92%; }
+    .md table { display:block; overflow-x:auto; }
+    #mention { min-width:0; max-width:calc(100vw - 16px); }
+    dialog.modal, dialog.modal.popdlg, #askDlg { max-width:calc(100vw - 16px); }
+    .panel { max-height:calc(100dvh - 16px); }
+    .panel header, .panel .body, .panel footer, .dmsg { padding-left:14px; padding-right:14px; }
+    /* Footers that don't fit wrap to the right, so Start agent stays under the hand, not under Close. */
+    .panel footer.row { justify-content:flex-end; gap:8px; }
+    .panel footer > .grow:empty { display:none; } .panel footer > [data-close]:first-child { margin-right:auto; } /* the spacer's gap is what made New task's buttons wrap */
+    /* The model picker stays in a planned task's popup; in the list it gives its room to the title. */
+    #list .card select.model { display:none; }
+    .pop .chat { height:min(52dvh, 560px); }
+    /* A card's top row stays one line: the title wraps in what's left, with the status, model and bell on its first line. */
+    /* A grid: the title in the first cell, the controls in the cells beside it, and the title's details
+       (dates, branch, links) under the whole row rather than squeezed under the title. */
+    #top { align-items:flex-start; }
+    /* A button row that wraps keeps its main button at the right. */
+    .actions > :last-child { margin-left:auto; }
+    /* The popup's buttons join Close in one row that wraps, rather than a block of their own beside it. */
+    #popActs, #popActs > .actions { display:contents; }
+    #popActs .actions > .grow { display:none; }
+    #popActs .actions > :last-child { margin-left:0; } /* Close's margin does the pushing; two would leave Drop mid-row */
+    .card > .row:first-child { display:grid; grid-template-columns:minmax(0,1fr) repeat(5, auto); align-items:start; gap:0; }
+    .card > .row:first-child > .grow { display:contents; }
+    .card > .row:first-child > .grow > * { grid-column:1 / -1; }
+    .card > .row:first-child > .grow > :first-child { grid-column:1; grid-row:1; }
+    .card > .row:first-child > :not(.grow) { grid-row:1; margin-left:6px; }
+    .card > .row:first-child .pill { padding:3px 7px; gap:5px; }
+    .card > .row:first-child > .meta:empty { display:none; }
+    .card > .row:first-child .title { line-height:26px; overflow-wrap:break-word; } /* a word too long for the cell breaks rather than running under the pill */
+    .card > .row:first-child .right { gap:8px; }
+    .card > .row:first-child select.model { height:26px; max-width:min(110px, 28vw); padding:0 2px; }
+  }
+  /* A phone turned sideways: wide enough for the desktop layout, but short, so tighten the header and
+     filters and keep search on the filters' line. */
+  @media (max-height:500px) and (orientation:landscape) {
+    main { padding:10px 16px 24px; }
+    #top { margin-bottom:12px !important; }
+    .brand img { width:32px; height:32px; } .brand h1 { font-size:24px; } .brand h1 span { display:inline; margin-left:8px; font-size:13px; }
+    .filters { margin-bottom:10px; }
+    .searchbox { width:200px; }
+    .board { padding-top:16px; margin-top:-8px; }
+    .panel { max-height:calc(100dvh - 16px); }
+    .pop .chat { height:calc(100dvh - 130px); min-height:140px; } /* the popup scrolls past the details to a near full-height chat */
+  }
+  /* A phone held upright: status and label columns stack top to bottom. Turned sideways they stay side by side. */
+  @media (max-width:640px) and (orientation:portrait) {
+    .board { grid-auto-flow:row; grid-template-columns:100%; grid-auto-columns:auto; scroll-snap-type:none; overflow-x:visible; }
+  }
+  /* Touch screens: no keyboard-shortcut hints. (Text boxes keep their size: the viewport script up top stops iOS zooming in on them.) */
+  @media (pointer:coarse) {
+    small.keys { display:none !important; }
+    * { -webkit-tap-highlight-color:transparent; } /* no grey flash on tap: buttons show their own states */
+    /* Small icon buttons get a finger-sized tap area around them, without moving anything. */
+    .tbell, .coladd, .colmenu summary, #searchClear { position:relative; }
+    .tbell::after, .coladd::after, .colmenu summary::after, #searchClear::after { content:""; position:absolute; inset:-9px; }
+  }
+  /* No hover: tapping the usage rings opens their 5H and 7D lines instead. */
+  @media (hover:none) {
+    .rings:focus .uin { max-width:var(--uw, 300px); opacity:1; }
+    .rings:focus .urings { transform:scale(1.3); }
+  }
   /* Our own hover tooltip, in place of the browser's. A popover so it sits
      above open dialogs too. --x nudges the arrow back onto the element when
      the bubble is pushed in from the window's edge. */
@@ -684,35 +822,53 @@
       <p class="sub" style="margin:12px 0 0" id="totals"></p>
     </div>
     <div class="rings" id="rings" tabindex="0" aria-label="Claude usage"></div>
-    <button id="defaultsOpen">Agent defaults</button>
-    <div class="seg" id="notify">
-      <span class="thumb"></span>
-      <button data-mode="silent" title="Silence notifications"></button>
-      <button data-mode="select" title="Notify me about tasks with their alerts on"></button>
-      <button data-mode="all" title="Notify me about every task"></button>
+    <!-- On phones the repo, notifications and Agent defaults fold into the ⋯ menu. Elsewhere .more and .morerow vanish from the layout. -->
+    <button class="morebtn sq" data-more="topMore" aria-haspopup="true" aria-expanded="false" aria-label="Repo, notifications and agent defaults"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg></button>
+    <div class="more" id="topMore">
+      <div class="morerow"><span class="narrow">Repo</span>
+        <div class="repopick" id="repoPick">
+          <button id="repoBtn" aria-haspopup="true" aria-expanded="false"><span id="repoName">Repo</span><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
+          <div class="repomenu" id="repoMenu" hidden></div>
+        </div>
+      </div>
+      <div class="morerow"><span class="narrow">Notifications</span>
+        <div class="seg" id="notify">
+          <span class="thumb"></span>
+          <button data-mode="silent" title="Silence notifications"></button>
+          <button data-mode="select" title="Notify me about tasks with their alerts on"></button>
+          <button data-mode="all" title="Notify me about every task"></button>
+        </div>
+      </div>
+      <button id="defaultsOpen">Agent defaults</button>
     </div>
     <button class="primary" id="newOpen" title="Add task [N]">+ New task</button>
-    <div class="repopick" id="repoPick">
-      <button id="repoBtn" aria-haspopup="true" aria-expanded="false"><span id="repoName">Repo</span><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
-      <div class="repomenu" id="repoMenu" hidden></div>
-    </div>
   </div>
   <div class="msg bad" id="notifyMsg" hidden style="margin-top:-12px; margin-bottom:12px"></div>
   <div class="banner" id="limitMsg" hidden style="margin:-16px auto 20px"></div>
 
   <div class="filters" data-tip-below>
-    <div class="seg text" id="viewSeg"><span class="thumb"></span>
-      <button data-val="list" title="List view">List</button>
-      <button data-val="status" title="Status view">Status</button>
-      <button data-val="label" title="Label view">Label</button>
-    </div>
-    <div class="seg text" id="doneSeg"><span class="thumb"></span>
-      <button data-val="show">Show All</button>
-      <button data-val="hide">Hide Completed</button>
-    </div>
-    <div class="repopick" id="sortPick">
-      <button id="sortBtn" aria-haspopup="true" aria-expanded="false"><span id="sortName"></span><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
-      <div class="repomenu" id="sortMenu" hidden style="left:0; right:auto"></div>
+    <!-- On phones the view, show/hide and sort fold into this button's menu; it's named after the current view. -->
+    <button class="morebtn" data-more="viewMore" aria-haspopup="true" aria-expanded="false" aria-label="View, completed tasks and sort"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg><span id="viewName"></span></button>
+    <div class="more" id="viewMore">
+      <div class="morerow"><span class="narrow">View</span>
+        <div class="seg text" id="viewSeg"><span class="thumb"></span>
+          <button data-val="list" title="List view">List</button>
+          <button data-val="status" title="Status view">Status</button>
+          <button data-val="label" title="Label view">Label</button>
+        </div>
+      </div>
+      <div class="morerow"><span class="narrow">Show</span>
+        <div class="seg text" id="doneSeg"><span class="thumb"></span>
+          <button data-val="show">Show All</button>
+          <button data-val="hide">Hide Completed</button>
+        </div>
+      </div>
+      <div class="morerow"><span class="narrow">Sort</span>
+        <div class="repopick" id="sortPick">
+          <button id="sortBtn" aria-haspopup="true" aria-expanded="false"><span id="sortName"></span><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
+          <div class="repomenu" id="sortMenu" hidden style="left:0; right:auto"></div>
+        </div>
+      </div>
     </div>
     <div class="chips" id="chips"></div>
     <span class="grow" id="gap" style="min-width:0"></span>
@@ -767,7 +923,7 @@
       <div class="labels" id="newLabels" style="margin-top:0"></div>
       <div id="newForm" style="display:contents"></div>
       <div class="atts" id="newAtts"></div>
-      <div class="hint">Paste or drag in images and files to attach them.</div>
+      <div class="hint"><span class="wide">Paste or drag in images and files to attach them, or </span><span class="narrow">Attach images and files: </span><label class="pickfile">choose files<input type="file" multiple hidden id="newPick"></label>.</div>
       <div class="banner" id="limitNew" hidden></div>
     </div>
     <div class="dmsg" id="addMsg"></div>
@@ -1483,7 +1639,7 @@ function chatBox(f, s, cls) {
         <button class="primary send" data-act="send" title="Send [ctrl + enter]">Send</button>
       </div>
       <div class="hint" data-tags>${tagsHtml(s.draft)}</div>
-      <div class="hint">${f.live?.open ? "Its terminal is open. Sending closes that terminal session and carries on here (the conversation is kept). " : f.live?.background || cls === "working" ? "It's mid-turn. Your message waits and goes as soon as this turn ends. " : ""}@ to tag a related task. The agent reads their notes first. Paste or drag in images and files to attach them.</div>
+      <div class="hint">${f.live?.open ? "Its terminal is open. Sending closes that terminal session and carries on here (the conversation is kept). " : f.live?.background || cls === "working" ? "It's mid-turn. Your message waits and goes as soon as this turn ends. " : ""}@ to tag a related task. The agent reads their notes first. <span class="wide">Paste or drag in images and files to attach them, or </span><span class="narrow">Attach images and files: </span><label class="pickfile">choose files<input type="file" multiple hidden data-pickfile></label>.</div>
     </div>`;
 }
 
@@ -1559,7 +1715,7 @@ function taskForm(at, { title = "", prompt = "", self = "" } = {}) {
   return `<input type="text" ${at("title")} placeholder="Task name" value="${esc(title)}">
     <textarea ${at("prompt")} data-mention${self ? ` data-self="${self}"` : ""} placeholder="What needs doing?">${esc(bareText(prompt))}</textarea>
     <div class="atts" data-pics data-paths="${esc(pathsOf(prompt).join("\n"))}">${descPics(prompt, true)}</div>
-    ${mentionHint(prompt, self)}`;
+    ${mentionHint(prompt, self)}${self ? `<div class="hint">Paste images and files to attach them, or <label class="pickfile">choose files<input type="file" multiple hidden data-pickfile="desc"></label>.</div>` : ""}`;
 }
 const modelPick = (attr, sel, title) => `<select class="model" ${attr} title="${title}" aria-label="Model">${modelOptions(sel, true)}</select>`;
 // A feature with no branch or agent: planned, dropped, imported from the old
@@ -1881,11 +2037,32 @@ function makeSeg(el, get, set) {
   el.addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) { set(b.dataset.val); render(all); } });
   segs.push(place);
 }
-makeSeg($("#viewSeg"), () => view, (v) => { view = v; store.set("view", v); });
+// The phone's view button is named after the view it's on.
+const nameView = () => { $("#viewName").textContent = { list: "List", status: "Status", label: "Label" }[view]; };
+nameView();
+makeSeg($("#viewSeg"), () => view, (v) => { view = v; store.set("view", v); nameView(); });
 makeSeg($("#doneSeg"), () => (hideDone ? "hide" : "show"), (v) => { hideDone = v === "hide"; store.set("hideDone", hideDone); });
+addEventListener("resize", () => { for (const place of segs) place(); }); // the switchers measure their words, which change size with the screen
+// Phones: the ⋯ and view buttons each open a menu of the settings tucked into them (.more). One open at a time;
+// a tap outside or Escape closes it. The switchers inside measure themselves once they're showing.
+function moreMenu(id, open) {
+  for (const b of document.querySelectorAll("[data-more]")) {
+    const on = open && b.dataset.more === id;
+    $("#" + b.dataset.more).classList.toggle("open", on); b.setAttribute("aria-expanded", on);
+  }
+  if (open) for (const place of segs) place();
+}
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-more]");
+  if (b) return moreMenu(b.dataset.more, b.getAttribute("aria-expanded") !== "true");
+  // Picking something (a repo, a sort, Agent defaults) is done with the menu, so it closes too.
+  if (!e.target.closest(".more") || e.target.closest("#defaultsOpen, .repomenu button")) moreMenu(null, false);
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && document.querySelector(".more.open")) moreMenu(null, false); });
 // The sort dropdown, built like the repo one.
 const SORT_NAMES = { status: "Needs you first", active: "Last active", created: "Newest", name: "Name", manual: "Manual" };
-$("#sortName").textContent = "Sort: " + SORT_NAMES[sortBy];
+const nameSort = () => { $("#sortName").innerHTML = `<span class="wide">Sort: </span>${SORT_NAMES[sortBy]}`; }; // the phone menu labels it Sort already
+nameSort();
 function sortMenu(open) {
   $("#sortMenu").hidden = !open; $("#sortBtn").setAttribute("aria-expanded", open);
   if (!open) return;
@@ -1896,7 +2073,7 @@ $("#sortBtn").onclick = () => sortMenu($("#sortMenu").hidden);
 $("#sortMenu").addEventListener("click", (e) => {
   const b = e.target.closest("[data-sort]"); if (!b) return;
   sortMenu(false); $("#sortBtn").focus();
-  sortBy = b.dataset.sort; store.set("sort", sortBy); $("#sortName").textContent = "Sort: " + SORT_NAMES[sortBy]; render(all);
+  sortBy = b.dataset.sort; store.set("sort", sortBy); nameSort(); render(all);
 });
 document.addEventListener("click", (e) => { if (!e.target.closest("#sortPick")) sortMenu(false); });
 $("#sortPick").addEventListener("keydown", (e) => {
@@ -1951,8 +2128,10 @@ function renderBoard(features) {
   const cols = view === "status"
     ? CHIPS.filter((k) => !(hide && ["merged", "dropped"].includes(k)) && shown.some((f) => kind(f)[0] === k)).map((k) => ({ key: k, head: `<span class="pill ${k}"><span class="dot"></span></span>${cap(k)}`, items: shown.filter((f) => kind(f)[0] === k) }))
     : [...labels(), ""].map((l) => ({ key: l, head: l ? `<span class="editcol" data-editcol tabindex="0" title="Click to change name, description or colour">${tagHtml(l)}</span>` : "Unlabelled", menu: l ? colMenu(l) : "", desc: LABELS[l]?.description || "", items: shown.filter((f) => (f.label || "") === l) }));
-  const empty = view === "label" ? "Drag a card here to label it" : "Nothing here";
-  const add = view === "label" ? `<div class="col newcol" data-newcol tabindex="0" title="Click to make an empty label, or drop a task here to give it a new one"><div class="colhead">+ New label</div><div class="none">Click to name it, or drag a task here.</div></div>` : "";
+  // No dragging on touch or with stacked columns, so don't offer it there; a card's label buttons do it instead.
+  const drag = !STACKED.matches && !matchMedia("(pointer:coarse)").matches;
+  const empty = view === "label" ? (drag ? "Drag a card here to label it" : "Open a card to label it") : "Nothing here";
+  const add = view === "label" ? `<div class="col newcol" data-newcol tabindex="0" title="Click to make an empty label, or drop a task here to give it a new one"><div class="colhead">+ New label</div><div class="none">${drag ? "Click to name it, or drag a task here." : "Tap to name it."}</div></div>` : "";
   const plus = (l) => view === "label" ? `<button class="coladd" data-addcol title="${l ? `New task labelled ${esc(l)}` : "New task without a label"}" aria-label="New task"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M5 1v8M1 5h8"/></svg></button>` : "";
   const html = `<div class="board">${cols.map((c) => `<div class="col" data-col="${esc(c.key)}"><div class="colhead"${view === "label" && c.key ? ' data-dragcol title="Drag to move this column"' : ""}>${c.head}<span class="n">${c.items.length}</span>${plus(c.key)}${c.menu || ""}</div>${c.desc ? `<div class="desc">${esc(c.desc)}</div>` : ""}${c.items.map(tile).join("") || `<div class="none">${empty}</div>`}</div>`).join("")}${add}</div>`;
   const host = $("#board");
@@ -2099,8 +2278,11 @@ function follow() {
     : [lean(dx, 8, 0.12), sortBy === "manual" ? dy * PULL : lean(dy, 8, 0.15)];
   el.style.transform = `translate(${x}px, ${y}px)`;
 }
+const STACKED = matchMedia("(max-width:640px) and (orientation:portrait)"); // must match the CSS that stacks the columns
 $("#board").addEventListener("pointerdown", (e) => {
-  if (e.button !== 0 || naming || !board()) return;
+  // ponytail: no dragging by touch, as a swipe has to scroll the board, nor when the columns are stacked,
+  // as the drag assumes they sit side by side. Long-press to drag if phones need it.
+  if (e.button !== 0 || e.pointerType === "touch" || STACKED.matches || naming || !board()) return;
   const h = view === "label" && !e.target.closest(".colmenu, .coladd") && e.target.closest("[data-dragcol]");
   const el = h ? h.closest(".col") : (view === "label" || sortBy === "manual") && !e.target.closest("[data-bell]") && e.target.closest(".tile");
   if (el) held = { el, id: e.pointerId, x0: e.clientX, y0: e.clientY, on: false };
@@ -2531,6 +2713,9 @@ host.addEventListener("drop", (e) => {
 });
 // A planned feature's model, saved as soon as it's picked.
 host.addEventListener("change", async (e) => {
+  // "choose files" under a chat: the only way to attach on a phone, which can't drag and rarely pastes files.
+  // ponytail: if the card re-renders while the picker is open, the pick is lost; pick again.
+  if (e.target.matches("[data-pickfile]")) { const files = [...e.target.files]; e.target.value = ""; return attach(e.target.closest("[data-slug]").querySelector(e.target.dataset.pickfile === "desc" ? 'textarea[data-field$="prompt"]' : ".compose textarea"), files); }
   if (!e.target.matches("[data-model]")) return;
   const slug = e.target.closest("[data-slug]").dataset.slug, s = u(slug);
   const r = await api(`/api/features/${slug}/model`, { model: e.target.value });
@@ -2821,6 +3006,7 @@ async function attachNew(files) {
 $("#newDlg").addEventListener("paste", (e) => { if (e.clipboardData.files.length) { e.preventDefault(); attachNew(e.clipboardData.files); } });
 $("#newDlg").addEventListener("dragover", (e) => { if (e.dataTransfer.types.includes("Files")) e.preventDefault(); });
 $("#newDlg").addEventListener("drop", (e) => { if (e.dataTransfer.files.length) { e.preventDefault(); attachNew(e.dataTransfer.files); } });
+$("#newPick").addEventListener("change", (e) => { const files = [...e.target.files]; e.target.value = ""; attachNew(files); });
 $("#newAtts").addEventListener("click", (e) => { const b = e.target.closest("[data-act=unattach]"); if (b) { newFiles.splice(+b.dataset.i, 1); showNewAtts(); } });
 $("#title").value = newDraft.title || ""; $("#prompt").value = newDraft.prompt || ""; newLabel = newDraft.label || "";
 for (const id of ["#title", "#prompt", "#newModel"]) $(id).addEventListener("input", saveNew);
