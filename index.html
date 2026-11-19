@@ -48,6 +48,9 @@
   [hidden] { display: none !important; }
   .reply.full { max-height:none; }
   .banner { margin-top:10px; padding:10px 12px; border-radius:7px; border:1px solid var(--you); font-size:13px; }
+  .banner.denied .row { margin-top:8px; align-items:center; gap:8px; }
+  .banner.denied code { overflow-wrap:anywhere; }
+  .banner.denied .startmenu { width:auto; min-width:260px; }
   button { font:inherit; font-size:13px; padding:6px 12px; border-radius:7px; border:1px solid var(--line); background:var(--card); color:var(--fg); cursor:pointer; }
   button:hover { border-color: var(--mute); }
   button.primary { background:var(--fg); color:var(--bg); border-color:var(--fg); }
@@ -916,6 +919,22 @@ function msgBlock(s) {
   return errBlock(s, "msg", s.msg);
 }
 // Click the box to make it up to 2x taller, fitting the error (it still scrolls past that); click again to shrink it.
+// What the agent was refused this turn. Allow once lets that exact call
+// through and asks it to try again. Always allow (not for Cannu's hard
+// rules, which no rule can lift) also saves a rule in Agent defaults. Built
+// like Start agent ▾: the same black split button, and the same menu (opened
+// through menuOpen, keyed per blocked call).
+function deniedBlock(slug, denied) {
+  const once = (i) => `<button class="primary" data-act="allow" data-i="${i}" title="Let this exact call through once, and ask the agent to try again">Allow once</button>`;
+  return `<div class="banner denied">Blocked this turn:${denied.map((d, i) => {
+    if (typeof d === "string") return `<div class="row"><code>${esc(d)}</code></div>`;
+    const key = `${slug}:allow:${i}`;
+    const btn = d.hard || !d.rule ? once(i)
+      : `<span class="startsplit">${once(i)}<button class="primary startchev" data-chev="${key}" aria-label="More ways to allow" aria-expanded="${menuOpen === key}" title="Allow once or always">${CHEV}</button>${menuOpen === key
+        ? `<div class="repomenu startmenu allowmenu"><button data-act="allow" data-i="${i}" title="Let this exact call through once, and ask the agent to try again">${TICK}Allow once</button><button data-act="allow" data-i="${i}" data-rule="1" title="Add this rule to Agent defaults, so calls like it go through from now on"><span class="tick"></span>Always allow<small>${esc(d.rule)}</small></button></div>` : ""}</span>`;
+    return `<div class="row"><div class="grow"><code>${esc((d.tool === "Bash" ? d.key : `${d.tool} ${d.key}`).slice(0, 200))}</code>${d.why ? `<div class="meta">Cannu's rule: ${esc(d.why)}</div>` : ""}</div>${btn}</div>`;
+  }).join("")}</div>`;
+}
 function errBlock(s, key, text) {
   return `<div class="err ${s.errFull?.[key] ? "full" : ""}" data-act="errexpand" data-key="${key}" title="Click to show more"><pre>${esc(text)}</pre><button type="button" class="inbtn" data-act="copy" title="Copy the error" aria-label="Copy the error">${COPY_ICON}</button></div>`;
 }
@@ -1502,7 +1521,7 @@ function card(f, inPop) {
   const body = `${st.activity && cls === "working" && !(s.fb || inPop) ? `<div class="activity" style="margin-top:6px">${esc(st.activity)}</div>` : ""}
     ${banner}
     ${st.lastReply && !(s.fb || inPop) ? `<div class="reply md ${s.full ? "full" : ""}" data-act="expand" title="Click to show more">${md(st.lastReply)}</div>` : ""}
-    ${st.denied?.length ? errBlock(s, "denied", "Blocked in the background run (open the session to allow):\n" + st.denied.join("\n")) : ""}`;
+    ${st.denied?.length ? deniedBlock(f.slug, st.denied) : ""}`;
   return `<div class="card" data-slug="${f.slug}">
     <div class="row top">
       <div class="grow"><div class="head" ${inPop ? "" : 'data-act="collapse"'}>
@@ -1523,6 +1542,14 @@ function card(f, inPop) {
   </div>`;
 }
 
+// Something went wrong that the agent can fix: put the server's message for
+// it in its chat box, for the user to check and send. Returns the line
+// saying so, or "".
+function drafted(s, r) {
+  if (!r.draft) return "";
+  s.draft = r.draft; s.fb = true;
+  return "\n\nI've filled in a message asking the agent to fix it. Check it and press Send.";
+}
 
 // The same name and description boxes in New task, a planned task and Reopen.
 // The name and description boxes: one form for New task, a planned task and
@@ -2591,6 +2618,11 @@ async function onClick(e) {
     if (r.cmd) { try { await navigator.clipboard.writeText(r.cmd); r.msg += "\n(Copied.)"; } catch {} }
     return say(r.msg || "Opened a new terminal tab.", r.ok === false ? "bad" : "");
   }
+  if (act === "allow") {
+    menuOpen = null;
+    const r = await api(`${base}/allow`, { i: Number(b.dataset.i), rule: !!b.dataset.rule });
+    return say(r.msg, r.ok ? "good" : "bad");
+  }
   if (act === "retry") { await api(`${base}/retry`, {}); return say("Retrying setup."); }
   if (act === "unstick" || act === "stopturn") { const r = await api(`${base}/${act}`, { pid: b.dataset.pid }); return say(r.msg, r.ok ? "good" : "bad"); }
   if (act === "forcestop") { const r = await api(`${base}/forcestop`, {}); if (!r.ok) say(r.msg, "bad"); return refresh(); }
@@ -2638,7 +2670,7 @@ async function onClick(e) {
     return true;
   };
   if (act === "unschedule") { whenSel.delete(slug); const r = await api(`${base}/schedule`, { schedule: null }); return say(r.ok ? "Not scheduled any more." : r.msg, r.ok ? "" : "bad"); }
-  if (act === "chev") { menuOpen = menuOpen === slug ? null : slug; render(all); return turnChev(slug, !!menuOpen); }
+  if (act === "chev") { const k = b.dataset.chev; menuOpen = menuOpen === k ? null : k; render(all); return turnChev(k, !!menuOpen); }
   if (act === "menu") return menuPick(b, slug, () => render(all));
   // The black button does what ▾ has chosen.
   const v = act === "start" ? whenBody(whenOf(slug)) : null;
@@ -2679,9 +2711,8 @@ async function onClick(e) {
     say(REPO.check ? `Checking (${REPO.check})…` : "Merging…");
     const r = await api(`${base}/merge`, {});
     if (r.ok) { if (popSlug === slug) closeModal($("#popDlg")); return say(r.msg, "good"); }
-    let m = r.msg; if (r.files) m += "\nConflicting files:\n  " + r.files.join("\n  ") + "\n\nI've filled in a message asking the agent to fix it. Check it and press Send."; if (r.out) m += "\n\n" + r.out;
-    if (r.files) { s.draft = r.draft; s.fb = true; }
-    return say(m, "bad");
+    let m = r.msg; if (r.files) m += "\nConflicting files:\n  " + r.files.join("\n  "); if (r.out) m += "\n\n" + r.out;
+    return say(m + drafted(s, r), "bad");
   }
   if (act === "remove") {
     const f = all.find((x) => x.slug === slug);
@@ -2874,8 +2905,10 @@ const TEXTS = [
   ["resumeText", "Carry on message", "Sent when you press Carry on after an agent was cut off mid-turn."],
   ["freshText", "New session message", "Sent when a task's saved conversation is gone and a new session starts. {title} and {slug} are filled in."],
   ["conflictText", "Merge conflict message", "Filled into the chat box when Check and merge hits a conflict, for you to check and send. {files} is filled in."],
+  ["commitText", "Uncommitted changes message", "Filled into the chat box when Check and merge finds uncommitted changes, for you to check and send."],
+  ["checkText", "Failed check message", "Filled into the chat box when Check and merge's check fails, for you to check and send. {check} and {out} are filled in."],
 ];
-const FIELD_EL = { systemPrompt: "#dSystem", env: "#dEnv", allowedTools: "#dAllow", disallowedTools: "#dDeny" };
+const FIELD_EL = { permissionMode: "#dMode", systemPrompt: "#dSystem", env: "#dEnv", allowedTools: "#dAllow", disallowedTools: "#dDeny" };
 function defaultsForm(r) {
   const v = r.values, b = r.builtIn;
   const reset = (k) => (JSON.stringify(v[k]) !== JSON.stringify(b[k]) ? ` <button class="reset" data-reset="${k}">reset to built-in</button>` : "");
@@ -2895,17 +2928,23 @@ function defaultsForm(r) {
     <div class="field"><label for="dEnv">Environment variables${reset("env")}</label>
       <textarea id="dEnv" placeholder="NAME=value, one per line">${esc(env)}</textarea></div>
     ${TEXTS.map(([k, name, hint]) => `<div class="field"><label for="d_${k}">${name}${reset(k)}</label><textarea id="d_${k}">${esc(v[k])}</textarea><div class="hint">${hint}</div></div>`).join("")}
+    <div class="field"><label for="dMode">Background turns decide what they may do with${reset("permissionMode")}</label>
+      <select id="dMode"><option value="auto" ${v.permissionMode === "auto" ? "selected" : ""}>Auto mode: Claude Code judges each action</option><option value="acceptEdits" ${v.permissionMode === "acceptEdits" ? "selected" : ""}>Only edits and the list below</option></select>
+      <div class="hint">Terminal sessions use your own Claude Code setting. Whatever's refused is listed on the card with Allow once.</div></div>
     <div class="field"><label for="dAllow">Background turns can, without asking${reset("allowedTools")}</label>
       <textarea id="dAllow" class="tall">${esc(v.allowedTools.join("\n"))}</textarea>
-      <div class="hint">One Claude Code permission rule per line. Anything else a background turn tries is refused and listed in red on its card, and you can approve it with Open session.</div></div>
-    <div class="field"><label for="dDeny">Background turns can never${reset("disallowedTools")}</label>
-      <textarea id="dDeny">${esc(v.disallowedTools.join("\n"))}</textarea></div>
+      <div class="hint">One Claude Code permission rule per line. Always allow on a card adds here.</div></div>
+    <div class="field"><label for="dDeny">Background turns are also refused${reset("disallowedTools")}</label>
+      <textarea id="dDeny" placeholder="Empty: only Cannu's own rules, below">${esc(v.disallowedTools.join("\n"))}</textarea></div>
+    <div class="field"><label>Cannu's own rules, for every agent and session</label>
+      <ul class="hint">${r.rules.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>
+      <div class="hint">Checked by Cannu's hook before every action and listed in every agent's system prompt. They guard what agents share: main, other branches and worktrees, the stash, git config, GitHub and the rest of the machine. Only Allow once on a card gets past one.</div></div>
     <details class="fixed"><summary>Also sent, and fixed because the dashboard relies on it</summary><ul>
       <li>The first message: your words, then a marked block naming the task and where to find the notes of continued and @tagged tasks.</li>
-      <li>A short system prompt saying how Cannu works: its branch, never push, where its notes go, how to restart its app and which check to run.</li>
+      <li>A short system prompt saying how Cannu works: its branch, where its notes go, how to restart its app, which check to run, and Cannu's own rules above.</li>
       <li>Environment: <code>FEATURE_SLUG</code>, <code>PORT</code>, <code>DATA_DIR</code>, <code>APP_URL</code>, <code>CANNU_URL</code> and the git author. These win over yours if the names clash.</li>
       <li>Hooks that report what the agent is doing and write <code>prompts.md</code>.</li>
-      <li>Background turns run with edits allowed (<code>--permission-mode acceptEdits</code>), resume the task's own session, and are named after the task.</li>
+      <li>Background turns resume the task's own session and are named after the task.</li>
       <li>The credentials file from Cannu's <code>config.json</code> (<code>--settings</code>), if set, so the dashboard never reads the key.</li>
     </ul></details>`;
 }
@@ -2925,7 +2964,7 @@ $("#defaultsBody").addEventListener("click", (e) => {
 $("#defaultsSave").onclick = async () => {
   const list = (id) => $(id).value.split("\n").map((x) => x.trim()).filter(Boolean);
   const env = Object.fromEntries(list("#dEnv").filter((l) => l.includes("=")).map((l) => [l.slice(0, l.indexOf("=")).trim(), l.slice(l.indexOf("=") + 1).trim()]));
-  const body = { model: $("#dModel").value, autoContinue: $("#dAuto").checked, systemPrompt: $("#dSystem").value.trim(), env, allowedTools: list("#dAllow"), disallowedTools: list("#dDeny") };
+  const body = { model: $("#dModel").value, autoContinue: $("#dAuto").checked, permissionMode: $("#dMode").value, systemPrompt: $("#dSystem").value.trim(), env, allowedTools: list("#dAllow"), disallowedTools: list("#dDeny") };
   for (const [k] of TEXTS) body[k] = $("#d_" + k).value.trim();
   const r = await api("/api/defaults", body);
   if (r.msg) { dlgMsg("#defaultsMsg", r.msg, "bad"); return; }
