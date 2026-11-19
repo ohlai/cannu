@@ -47,7 +47,8 @@ function proxy(req, res, r, rest) {
 const isRepo = (dir) => { try { return fs.existsSync(path.join(dir, ".git")); } catch { return false; } };
 const same = (a, b) => path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase();
 // Repos the page can offer in Add repo: git folders next to the ones already
-// listed (their parent folders, one level down), that aren't listed yet.
+// listed (their parent folders, one level down), that aren't listed yet. With
+// none listed there's nothing to offer: Cannu doesn't go looking around.
 function found() {
   const out = new Map();
   for (const parent of new Set(repos.map((r) => path.dirname(r.dir)))) {
@@ -63,6 +64,26 @@ function found() {
 const cleanDir = (dir) => path.resolve(String(dir || "").trim().replace(/^["']|["']$/g, ""));
 // The name is in addresses and folder names, so keep it plain.
 const plainName = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "");
+// Native folder dialog of the OS the server runs on (it's your own machine). "" = cancelled or none available.
+// Windows: the modern Explorer-style dialog (IFileOpenDialog, pick-folders mode), not the old tree FolderBrowserDialog.
+const WIN_PICK = `
+Add-Type -TypeDefinition @'
+using System; using System.Runtime.InteropServices;
+[ComImport, Guid("DC1C5A9C-E88A-4dde-A5A1-60F82A20AEF7")] class FOD {}
+[ComImport, Guid("43826D1E-E718-42EE-BC55-A1E261C37BFE"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IItem { void B(); void P(); void N(uint s, [MarshalAs(UnmanagedType.LPWStr)] out string n); }
+[ComImport, Guid("42f85136-db7e-439c-85f1-e4075d135fc8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IFD { [PreserveSig] int Show(IntPtr h); void a(); void b(); void c(); void d(); void e(); void SetOptions(uint o); void f(); void g(); void h(); void i(); void j(); void k(); void l(); void SetTitle([MarshalAs(UnmanagedType.LPWStr)] string t); void m(); void n(); void GetResult(out IItem r); }
+public static class Pick { [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow(); public static string Run() { var d = (IFD)new FOD(); d.SetOptions(0x20 | 0x40); d.SetTitle("Choose a folder"); int rc = d.Show(GetForegroundWindow()); if (rc != 0) return ""; IItem r; d.GetResult(out r); string p; r.N(0x80058000, out p); return p; } }
+'@
+[Pick]::Run()`;
+function browseDir() {
+  const [cmd, ...args] = process.platform === "win32"
+    ? ["powershell", "-NoProfile", "-STA", "-EncodedCommand", Buffer.from(WIN_PICK, "utf16le").toString("base64")]
+    : process.platform === "darwin" ? ["osascript", "-e", "POSIX path of (choose folder)"]
+    : ["zenity", "--file-selection", "--directory"];
+  try { return execFileSync(cmd, args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true, timeout: 300000 }).trim().replace(/(.)\/$/, "$1"); } catch { return ""; }
+}
 const gitIn = (dir, ...args) => { try { return execFileSync("git", args, { cwd: dir, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true }).trim(); } catch { return ""; } };
 const readJson = (f) => { try { return JSON.parse(fs.readFileSync(f, "utf8")); } catch { return null; } };
 
@@ -73,7 +94,9 @@ function inspect(dir) {
   if (!isRepo(dir)) return { ok: false, msg: "Not a git repo (no .git folder in it)." };
   const has = (f) => fs.existsSync(path.join(dir, f));
   const own = readJson(path.join(dir, "cannu.json"));
-  const base = { name: plainName(path.basename(dir)) || "repo", dir, listed: repos.some((r) => same(r.dir, dir)), hasConfig: !!own };
+  // Cannu commits on its main branch and puts worktrees next to it, which a live container built from this folder wouldn't want.
+  const warn = ["compose.yml", "compose.yaml", "docker-compose.yml", "docker-compose.yaml", "Dockerfile"].some(has) ? "This folder has a compose file or Dockerfile, so a live container may build from it. Cannu creates worktrees next to it and commits on its main branch." : "";
+  const base = { warn, name: plainName(path.basename(dir)) || "repo", dir, listed: repos.some((r) => same(r.dir, dir)), hasConfig: !!own };
   if (own) return { ok: true, ...base, config: own };
   const pm = has("pnpm-lock.yaml") ? "pnpm" : has("yarn.lock") ? "yarn" : has("bun.lockb") ? "bun" : "npm";
   const runner = has("mise.toml") ? "mise exec -- " : "";
@@ -87,7 +110,6 @@ function inspect(dir) {
     app: scripts.start ? run("start") : scripts.dev ? run("dev") : has("server.js") ? "node server.js" : "",
     seed: [],
     check: scripts.check ? run("check") : scripts.test ? run("test") : "",
-    merge: "local",
     commitNotes: true,
   } };
 }
@@ -95,7 +117,7 @@ function inspect(dir) {
 // Writes the form's settings into the repo's cannu.json, keeping anything
 // else already there (agent defaults, notes folder), and commits just that
 // file if the repo is on its main branch. Says what it did.
-const FORM = ["main", "setup", "copy", "app", "seed", "check", "merge", "commitNotes"];
+const FORM = ["main", "setup", "copy", "app", "seed", "check", "commitNotes"];
 function writeRepoConfig(dir, settings) {
   const file = path.join(dir, "cannu.json");
   const before = readJson(file) || {};
@@ -103,7 +125,7 @@ function writeRepoConfig(dir, settings) {
   for (const k of FORM) if (k in settings) next[k] = settings[k];
   // Leave out what's only the default, so the file says what's special here.
   // check stays even when empty: "" means no check, not the package's script.
-  const DEF = { main: "main", setup: [], copy: [], app: "", seed: [], merge: "local", commitNotes: true };
+  const DEF = { main: "main", setup: [], copy: [], app: "", seed: [], commitNotes: true };
   for (const [k, v] of Object.entries(DEF)) if (JSON.stringify(next[k]) === JSON.stringify(v)) delete next[k];
   if (JSON.stringify(next) === JSON.stringify(before)) return "";
   fs.writeFileSync(file, JSON.stringify(next, null, 2) + "\n");
@@ -125,7 +147,7 @@ function addRepo(dir, wanted, settings) {
   let name = base;
   for (let n = 2; repos.some((r) => r.name === name); n++) name = `${base}-${n}`;
   const note = settings ? writeRepoConfig(dir, settings) : "";
-  const raw = readJson(CONFIG);
+  const raw = readJson(CONFIG) || {};
   raw.repos ||= raw.repo ? [{ repo: raw.repo }] : [];
   delete raw.repo;
   // Ports clear of every running repo, and the feature ports kept in config
@@ -146,7 +168,6 @@ function addRepo(dir, wanted, settings) {
 async function removeRepo(name) {
   const r = repos.find((x) => x.name === name);
   if (!r) return { ok: false, msg: "No repo by that name." };
-  if (repos.length === 1) return { ok: false, msg: "It's the only repo. Add another before removing this one." };
   if (kids.has(name)) {
     const list = await fetch(`http://127.0.0.1:${r.port}/api/features`).then((x) => x.json()).catch(() => []);
     const busy = list.filter((f) => f.settingUp || ["working", "needs-you", "stuck"].includes(f.live?.state));
@@ -157,7 +178,7 @@ async function removeRepo(name) {
     kids.delete(name); // first, so its exit isn't taken as a crash to restart
     k.proc.kill();
   }
-  const raw = readJson(CONFIG);
+  const raw = readJson(CONFIG) || {};
   raw.repos = (raw.repos || []).filter((x) => !same(path.resolve(path.dirname(CONFIG), x.repo), r.dir));
   fs.writeFileSync(CONFIG, JSON.stringify(raw, null, 2) + "\n");
   repos.splice(repos.indexOf(r), 1);
@@ -172,12 +193,17 @@ const handler = async (req, res) => {
     res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
     return res.end(fs.readFileSync(path.join(META, "index.html")));
   }
-  if (url.pathname === "/logo.png") {
+  if (url.pathname === "/logo.svg") {
+    res.writeHead(200, { "content-type": "image/svg+xml", "cache-control": "max-age=3600" });
+    return res.end(fs.readFileSync(path.join(META, "logo.svg")));
+  }
+  if (url.pathname === "/docs/images/logo-metal.png") {
     res.writeHead(200, { "content-type": "image/png", "cache-control": "max-age=3600" });
-    return res.end(fs.readFileSync(path.join(META, "logo.png")));
+    return res.end(fs.readFileSync(path.join(META, "docs/images/logo-metal.png")));
   }
   // Claude plan usage for the rings: one account for every repo, so served here.
   if (url.pathname === "/api/usage") return json(res, planUsage());
+  if (url.pathname === "/api/repos/browse" && req.method === "POST") return json(res, { dir: browseDir() });
   if (url.pathname === "/api/repos/found") return json(res, found());
   if (url.pathname === "/api/repos/inspect") return json(res, inspect(url.searchParams.get("dir")));
   if (url.pathname === "/api/repos/remove" && req.method === "POST") return json(res, await removeRepo((await readBody(req)).name));
@@ -201,6 +227,6 @@ const handler = async (req, res) => {
 // as localhost plus a Tailscale address. By default it listens on IPv6
 // localhost too: browsers try "localhost" as ::1 first, and on Windows a
 // refused ::1 cost every new connection about 200ms before falling back.
-const hosts = all.host ? [all.host].flat() : ["127.0.0.1", "::1"];
+const hosts = process.env.CANNU_BIND_ADDRESS ? process.env.CANNU_BIND_ADDRESS.split(",").map((s) => s.trim()) : all.host ? [all.host].flat() : ["127.0.0.1", "::1"];
 for (const h of hosts) http.createServer(handler).on("error", (e) => console.log(`Couldn't listen on ${h}: ${e.code}`)).listen(PORT, h);
 console.log(`Cannu on http://localhost:${PORT} for ${repos.map((r) => r.name).join(", ")}`);

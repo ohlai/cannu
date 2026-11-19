@@ -7,7 +7,6 @@
   "app": "node server.js",
   "seed": ["node scripts/seed.js"],
   "check": "pnpm check",
-  "merge": "local",
   "agent": {
     "model": "claude-opus-5-5",
     "systemPrompt": "Prefer small commits with clear messages.",

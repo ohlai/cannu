@@ -9,7 +9,7 @@ import crypto from "node:crypto";
 import os from "node:os";
 import { spawn, execFile, execFileSync } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
-import { CLAUDE_SETTINGS, META, APP, WORKTREES, STATE, FEATURES_DIR, REPO_FILE, MAIN, NOTES, COMMIT_NOTES, notesDir, repo, repoRaw, BUILT_IN, MODELS, defaults, fill, MD_KEYS, config, loadFeatures, saveRuntime, featureMd, readState, writeState, stamp, claudeBaseArgs, liveStatus, killTree, AUTO, resumeText, FEEDBACK, forget, watchUsage, fullLimit, refreshUsage, callKey, ruleFor, RULES } from "./lib.js";
+import { CLAUDE_SETTINGS, META, APP, WORKTREES, STATE, FEATURES_DIR, REPO_FILE, MAIN, NOTES, COMMIT_NOTES, notesDir, repo, repoRaw, BUILT_IN, MODELS, defaults, fill, MD_KEYS, config, loadFeatures, saveRuntime, featureMd, readState, writeState, stamp, claudeBaseArgs, liveStatus, killTree, AUTO, resumeText, FEEDBACK, ATTACH, forget, watchUsage, fullLimit, refreshUsage, planUsage, callKey, ruleFor, RULES } from "./lib.js";
 watchUsage();
 
 const WIN = process.platform === "win32";
@@ -131,7 +131,7 @@ function describe(t, since) {
   return `- "${t.title}" (${status}): read ${notesRef(t, since)} (prompts.md, log.md, decisions.md)`;
 }
 // Text added after the user's own words, clearly marked, so prompts.md keeps
-// exactly what the user wrote. Only the starting prompt passes a title.
+// exactly what they wrote. Only the starting prompt passes a title.
 function contextBlock({ title, continues, refs }, since) {
   const all = loadFeatures();
   const lines = title ? [`Feature: ${title}`] : [];
@@ -147,15 +147,21 @@ function contextBlock({ title, continues, refs }, since) {
 // A new feature is a feature.md committed on main. Planned ones stop there.
 // Started ones get a branch made from main after that commit, so the branch
 // has its feature.md, and only main ever changes it.
-function createFeature(title, prompt, { continues = null, refs = [], plan = false, model = "", label = "" } = {}) {
+function createFeature(title, prompt, { continues = null, refs = [], plan = false, model = "", label = "", files = [] } = {}) {
   const list = loadFeatures();
-  if (list.some((f) => f.title.toLowerCase() === title.toLowerCase())) throw new Error("A feature already has that name. Pick another.");
+  if (list.some((f) => f.title.toLowerCase() === title.toLowerCase())) throw new Error("A task already has that name. Pick another.");
   const base = slugify(title);
   let slug = base;
   for (let n = 2; list.some((f) => f.slug === slug) || fs.existsSync(path.join(FEATURES_DIR, slug)) || fs.existsSync(path.join(WORKTREES, slug)) || branchExists(`feat/${slug}`); n++) slug = `${base}-${n}`;
+  // Files attached in New task waited in a holding folder; they move to this task's own, and their paths go after the prompt.
+  const moved = files.map((n) => path.basename(String(n))).filter((n) => fs.existsSync(path.join(ATTACH, "_new", n))).map((n) => {
+    const dir = path.join(ATTACH, slug); fs.mkdirSync(dir, { recursive: true });
+    fs.renameSync(path.join(ATTACH, "_new", n), path.join(dir, n)); return path.join(dir, n);
+  });
+  if (moved.length) prompt = [prompt, ...moved].join("\n");
   const f = { slug, title, prompt, status: "planned", label, created: stamp(), continues, refs, model: model in MODELS ? model : "" };
-  if (plan) { writeFeature(f, `Plan feature: ${title}`); return f; }
-  return startFeature(f, `Start feature: ${title}`);
+  if (plan) { writeFeature(f, `Plan task: ${title}`); return f; }
+  return startFeature(f, `Start task: ${title}`);
 }
 
 // Gives a feature its port, folder, branch and session, records it as
@@ -166,11 +172,59 @@ function startFeature(f, message) {
   const port = Math.max(config.firstFeaturePort - 1, ...list.map((x) => x.port || 0)) + 1;
   const started = stamp();
   Object.assign(f, { status: "building", started, branch: `feat/${f.slug}` });
-  saveRuntime(f.slug, { port, dir: path.join(WORKTREES, f.slug), sessionId: crypto.randomUUID(), setup: "starting", launchPrompt: f.prompt + contextBlock(f, started), removed: null });
+  saveRuntime(f.slug, { port, dir: path.join(WORKTREES, f.slug), sessionId: crypto.randomUUID(), setup: "starting", launchPrompt: f.prompt + contextBlock(f, started), removed: null, schedule: null });
   writeFeature(f, message);
   const full = loadFeatures().find((x) => x.slug === f.slug);
   startSetup(full);
   return full;
+}
+
+// ---------- scheduled starts ----------
+//
+// A planned feature can start by itself at a time ({ at }), or some minutes
+// before the 5-hour or weekly limit resets ({ before, mins }), to use up what
+// would otherwise go to waste. It's this machine's, so it's in the runtime,
+// with `due` (when it will start, once known) and `missed`. The 3s tick below
+// starts it. A due time over 2 minutes gone means Cannu wasn't running then
+// (the computer was off or asleep): that start is marked missed and doesn't
+// run late by itself, since it would land at a time nobody picked.
+const LATE = 2 * 60e3;
+function dueAt(s) {
+  if (s.at) return s.at;
+  const l = planUsage()?.[s.before];
+  if (!l) return null; // no usage reading, so the reset time isn't known
+  if (!l.resets) return new Date().toISOString(); // no window running: nothing to use up, so now
+  if (Date.parse(l.resets) <= Date.now()) return null; // just reset: wait for the next reading
+  return new Date(Math.max(Date.now(), Date.parse(l.resets) - s.mins * 60e3)).toISOString();
+}
+// { at } or { before, mins } from the page, checked. Throws what's wrong.
+function parseSchedule(b) {
+  if (b.before) {
+    if (!["session", "weekly"].includes(b.before)) throw new Error("Unknown limit.");
+    // Up to a week: "2d before the weekly reset" is a fair thing to ask.
+    return { before: b.before, mins: Math.max(0, Math.min(7 * 24 * 60, Math.round(Number(b.mins) || 0))) };
+  }
+  const t = Date.parse(b.at);
+  if (!t) throw new Error("Pick a time to start it.");
+  if (t <= Date.now()) throw new Error("That time has already passed.");
+  return { at: new Date(t).toISOString() };
+}
+function setSchedule(f, b) {
+  if (!b) { saveRuntime(f.slug, { schedule: null }); return { ok: true, msg: "Not scheduled any more." }; }
+  if (!f.prompt?.trim()) return { ok: false, msg: "It needs a prompt saying what you want before it can be scheduled." };
+  const s = parseSchedule(b);
+  saveRuntime(f.slug, { schedule: { ...s, due: dueAt(s) } });
+  return { ok: true, msg: "Scheduled." };
+}
+function scheduleTick(f) {
+  const s = f.schedule;
+  if (f.status !== "planned" || !s || s.missed) return;
+  if (s.due && Date.now() - Date.parse(s.due) > LATE) return saveRuntime(f.slug, { schedule: { ...s, missed: s.due } });
+  const due = dueAt(s);
+  if (due !== s.due) saveRuntime(f.slug, { schedule: { ...s, due } });
+  if (!due || Date.parse(due) > Date.now()) return;
+  try { startFeature(f, `Start task (scheduled): ${f.title}`); }
+  catch (e) { saveRuntime(f.slug, { schedule: { ...s, due, missed: due, why: e.message } }); }
 }
 
 // Every step checks whether it's already done, so setup can be re-run after
@@ -312,7 +366,9 @@ function headless(f, text, label, first = false) {
   if (full) return hold(f, { text, label, first }, full.resets);
   running.add(f.slug);
   const st = readState(f.slug);
-  writeState(f.slug, { state: "working", activity: label, denied: [], held: null });
+  // Stopped last turn: tell the agent, or it carries on as if nothing happened.
+  if (st.stopped) text += `\n\n---\n${AUTO}\nI stopped your previous turn before it finished.`;
+  writeState(f.slug, { state: "working", activity: "starting up", denied: [], held: null, stopped: null }); // label: kept for a held turn, not shown
   const session = first ? ["--session-id", f.sessionId] : ["--resume", st.session_id || f.sessionId];
   const d = defaults();
   const args = ["-p", ...session, "-n", f.slug, ...claudeBaseArgs(f),
@@ -340,6 +396,8 @@ function headless(f, text, label, first = false) {
       refreshUsage().then(() => { if (fullLimit()) writeState(f.slug, { limitResets: fullLimit().resets }); });
       return;
     }
+    // Killed by Stop: that's not an error, and forceStop already set the state.
+    if (readState(f.slug).stopped) { writeState(f.slug, { headlessPid: null }); return pump(f.slug); }
     writeState(f.slug, { state: code === 0 ? "idle" : "error", activity: "", headlessPid: null, lastReply: reply, denied });
     pump(f.slug); // send the next waiting message straight away
   });
@@ -416,6 +474,7 @@ function heldTick(f, st) {
 }
 setInterval(() => {
   for (const f of loadFeatures()) {
+    scheduleTick(f);
     const st = readState(f.slug);
     heldTick(f, st);
     if (st.queue?.length) pump(f.slug);
@@ -442,11 +501,18 @@ function chat(f) {
   const landed = s && c.messages.some((m) => m.who !== "agent" && Date.parse(m.at) >= Date.parse(s.at));
   const sending = s && !landed ? [{ who: s.text.startsWith(AUTO) ? "dashboard" : "me", text: s.text, sending: true }] : [];
   const queued = (st.queue || []).map((q) => ({ who: "me", text: q, queued: true }));
-  return { messages: [...c.messages, ...sending, ...queued].slice(-80), saved: c.saved };
+  // Each Stop, placed before the first message that came after it.
+  const msgs = [...c.messages];
+  for (const at of st.stops || []) {
+    const i = msgs.findIndex((m) => m.at && Date.parse(m.at) > Date.parse(at));
+    msgs.splice(i < 0 ? msgs.length : i, 0, { who: "stopped", text: "Stopped by you", at });
+  }
+  return { messages: [...msgs, ...sending, ...queued].slice(-80), saved: c.saved };
 }
 function readChat(file) {
   const out = []; let reply = null;
-  const flush = () => { if (reply) out.push(reply); reply = null; };
+  let steps = []; // tool use and thinking of the turn in progress; only the latest turn keeps them
+  const flush = (last) => { if (last) out.push(...steps); steps = []; if (reply) out.push(reply); reply = null; };
   let lines = [];
   try { lines = fs.readFileSync(file, "utf8").split("\n"); } catch {}
   for (const line of lines) {
@@ -461,9 +527,13 @@ function readChat(file) {
     } else if (e.type === "assistant" && Array.isArray(c)) {
       const text = c.filter((x) => x.type === "text").map((x) => x.text).join("\n").trim();
       if (text) reply = { who: "agent", text, at: e.timestamp };
+      for (const x of c) {
+        if (x.type === "tool_use") { const i = x.input || {}; steps.push({ who: "tool", text: x.name + ": " + String(i.command || i.file_path || i.pattern || i.path || i.description || i.url || "").split("\n")[0].slice(0, 160) }); }
+        else if (x.type === "thinking" && x.thinking?.trim()) steps.push({ who: "think", text: x.thinking.trim().slice(0, 600) });
+      }
     }
   }
-  flush();
+  flush(true);
   return { messages: out.slice(-80), saved: lines.length > 1 };
 }
 
@@ -563,7 +633,7 @@ function readTranscript(file) {
     if (t) prev = t;
     // A reply is saved as several lines with the same id. The last has the totals.
     if (e.type === "assistant" && e.message?.id && e.message.usage) msgs.set(e.message.id, e.message);
-    if (e.type === "assistant" && e.message?.model?.startsWith("claude")) last = { model: e.message.model, at: t };
+    if (e.type === "assistant" && e.message?.model?.startsWith("claude")) { const u = e.message.usage || {}; if (!e.isSidechain) last = { model: e.message.model, at: t, ctx: (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0) }; }
   }
   let cost = 0; for (const m of msgs.values()) cost += price(m.model, m.usage);
   return { ms, cost, last };
@@ -627,7 +697,7 @@ function claudeDefault() {
 function readyToShip(f) {
   const pf = `${NOTES}/${f.slug}/prompts.md`;
   if (tryGit(f.dir, "status", "--porcelain", "--", pf).out) { git(f.dir, "add", pf); git(f.dir, "commit", "-q", "-m", `${f.title}: record prompts`); }
-  if (tryGit(f.dir, "status", "--porcelain").out) return { msg: "The feature has uncommitted changes.", draft: defaults().commitText };
+  if (tryGit(f.dir, "status", "--porcelain").out) return { msg: "The task has uncommitted changes.", draft: defaults().commitText };
   if (git(APP, "rev-list", "--count", `${MAIN}..${f.branch}`) === "0") return { msg: `Nothing to ship: the branch has no commits ${MAIN} doesn't have.` };
   return null;
 }
@@ -653,7 +723,7 @@ async function merge(f) {
   if (git(APP, "branch", "--show-current") !== MAIN) return { ok: false, step: "main", msg: `The repo folder isn't on ${MAIN}.` };
 
   const check = await runCheck(f);
-  if (check.code !== 0) return { ok: false, step: "check", msg: `The check (${repo().check}) failed on the feature branch.`, out: tail(check.out), draft: fill(defaults().checkText, { check: repo().check, out: tail(check.out) }) };
+  if (check.code !== 0) return { ok: false, step: "check", msg: `The check (${repo().check}) failed on the task's branch.`, out: tail(check.out), draft: fill(defaults().checkText, { check: repo().check, out: tail(check.out) }) };
 
   const m = tryGit(APP, "merge", "--no-ff", "-q", f.branch, "-m", `Merge ${f.branch}: ${f.title}`);
   if (!m.ok) {
@@ -667,82 +737,11 @@ async function merge(f) {
   return { ok: true, msg: `Merged into ${MAIN} and stopped its preview. Not pushed.` };
 }
 
-// ---------- pull requests ----------
-//
-// The other way to ship: Cannu pushes the branch and opens a pull request
-// with the GitHub CLI, the repo's CI runs the checks, and the card shows
-// their result. Merge PR merges it on GitHub and pulls main back down. The
-// agent never pushes; only these do.
-
-const gh = (...args) => run("gh", args, { cwd: APP, timeout: 60000 });
-
-async function openPR(f) {
-  const why = readyToShip(f);
-  if (why) return { ok: false, ...why };
-  const push = await run("git", ["push", "-u", "origin", f.branch], { cwd: APP, timeout: 120000 });
-  if (push.code !== 0) return { ok: false, msg: "git push failed.", out: tail(push.out) };
-  if (f.pr) { prPoll(f, true); return { ok: true, msg: `Pushed. Pull request #${f.pr} is updated.` }; }
-  const body = `${f.prompt || ""}\n\n---\nOpened by Cannu. The agent's notes are in \`${NOTES}/${f.slug}/\`.`;
-  const c = await gh("pr", "create", "--head", f.branch, "--base", MAIN, "--title", f.title, "--body", body);
-  // Already open (made by hand, or by an earlier Cannu): adopt it.
-  const url = (c.out.match(/https:\/\/\S+\/pull\/\d+/) || [])[0];
-  if (!url) return { ok: false, msg: "gh pr create failed. Is gh logged in (gh auth status) and does the repo have a GitHub remote?", out: tail(c.out) };
-  update(f.slug, { pr: Number(url.split("/").pop()), prUrl: url });
-  prPoll(loadFeatures().find((x) => x.slug === f.slug), true);
-  return { ok: true, msg: `Opened pull request #${url.split("/").pop()}.` };
-}
-
-// What GitHub says about each open PR, refreshed in the background so a
-// slow or offline GitHub never holds up the board.
-const prInfo = new Map();
-async function prPoll(f, force = false) {
-  const old = prInfo.get(f.slug);
-  if (!f.pr || old?.busy || (!force && old && Date.now() - old.at < 30e3)) return;
-  prInfo.set(f.slug, { ...old, busy: true });
-  const r = await gh("pr", "view", String(f.pr), "--json", "state,url,mergeable,reviewDecision,statusCheckRollup");
-  let info = { at: Date.now(), error: "couldn't reach GitHub" };
-  try {
-    const j = JSON.parse(r.out);
-    const runs = j.statusCheckRollup || [];
-    const res = runs.map((c) => (c.conclusion || c.state || c.status || "").toUpperCase());
-    const checks = !runs.length ? "none"
-      : res.some((x) => ["FAILURE", "ERROR", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED"].includes(x)) ? "failing"
-      : res.every((x) => ["SUCCESS", "NEUTRAL", "SKIPPED"].includes(x)) ? "passing" : "running";
-    info = { at: Date.now(), state: j.state, url: j.url, mergeable: j.mergeable, review: j.reviewDecision || "", checks, failed: runs.filter((c) => ["FAILURE", "ERROR", "TIMED_OUT"].includes((c.conclusion || c.state || "").toUpperCase())).map((c) => c.name || c.context) };
-  } catch {}
-  prInfo.set(f.slug, info);
-  // Merged on GitHub (from here or not): record it. A feature only has a pr
-  // while that PR is open, so this also catches a merged feature's second PR.
-  if (info.state === "MERGED") await afterPRMerged(f).catch(() => {});
-}
-setInterval(() => { for (const f of loadFeatures()) if (f.pr) prPoll(f); }, 10e3);
-
-async function mergePR(f) {
-  const m = await gh("pr", "merge", String(f.pr), "--merge");
-  if (m.code !== 0) { prPoll(f, true); return { ok: false, msg: "GitHub refused the merge.", out: tail(m.out) }; }
-  return afterPRMerged(f);
-}
-// main gets the merge from GitHub, then the feature is recorded as merged,
-// and that record is pushed so main on GitHub has it too.
-async function afterPRMerged(f) {
-  if (git(APP, "branch", "--show-current") !== MAIN || tryGit(APP, "status", "--porcelain").out) {
-    return { ok: false, msg: `Merged on GitHub, but the repo folder isn't a clean ${MAIN}, so Cannu didn't pull it. Clean it up and the card catches up within a minute.` };
-  }
-  const pull = await run("git", ["pull", "--no-rebase", "--no-edit", "origin", MAIN], { cwd: APP, timeout: 120000 });
-  if (pull.code !== 0) return { ok: false, msg: `Merged on GitHub, but pulling ${MAIN} failed.`, out: tail(pull.out) };
-  // pr cleared: new commits after this get a new pull request, not this one.
-  update(f.slug, { status: "merged", merged: stamp(), pr: null, prUrl: null }, `Merged: ${f.title} (#${f.pr})`);
-  await stopApp(f);
-  const push = await run("git", ["push", "origin", MAIN], { cwd: APP, timeout: 120000 });
-  prInfo.delete(f.slug);
-  return { ok: true, msg: `Merged #${f.pr} and pulled it into ${MAIN}.` + (push.code !== 0 ? ` Pushing the "Merged" record to ${MAIN} failed, so push it yourself.` : "") };
-}
-
 // A bad idea, planned or part built. A built one's app stops, but its folder
 // and branch stay (Remove worktree deletes the folder; an unmerged branch is
 // kept), so the work isn't lost.
 async function dropFeature(f) {
-  if (!["planned", "building"].includes(f.status)) return { ok: false, msg: "Only planned or building features can be dropped." };
+  if (!["planned", "building"].includes(f.status)) return { ok: false, msg: "Only planned or building tasks can be dropped." };
   if (f.dir && !f.removed) {
     const live = liveStatus(readState(f.slug));
     if (live.open || live.background || running.has(f.slug) || settingUp.has(f.slug)) return { ok: false, msg: "The agent is still running. Let it finish or close its session first." };
@@ -762,7 +761,7 @@ async function removeFeature(f) {
     // A dropped feature's half-done work is committed to its branch, which is
     // kept, so deleting the folder loses nothing.
     if (f.status === "dropped" && tryGit(f.dir, "status", "--porcelain").out) { git(f.dir, "add", "-A"); git(f.dir, "commit", "-q", "-m", `${f.title}: dropped, work in progress kept`); }
-    if (tryGit(f.dir, "status", "--porcelain").out) return { ok: false, msg: "The feature has uncommitted changes. Not removing." };
+    if (tryGit(f.dir, "status", "--porcelain").out) return { ok: false, msg: "The task has uncommitted changes. Not removing." };
     await stopApp(f); // a running app holds files in the folder
     // Windows chokes on pnpm's linked node_modules inside git's delete, so clear it first.
     fs.rmSync(path.join(f.dir, "node_modules"), { recursive: true, force: true });
@@ -776,7 +775,7 @@ async function removeFeature(f) {
   // -d refuses an unmerged branch, so a dropped feature's work stays in git.
   const b = tryGit(APP, "branch", "-d", f.branch);
   update(f.slug, { removed: stamp() });
-  return { ok: true, msg: (b.ok ? "Removed the worktree and branch. The feature and its notes stay in the list." : `Removed the worktree. The branch ${f.branch} is kept because it isn't merged, so its work and notes are still in git.`) + leftover };
+  return { ok: true, msg: (b.ok ? "Removed the worktree and branch. The task and its notes stay in the list." : `Removed the worktree. The branch ${f.branch} is kept because it isn't merged, so its work and notes are still in git.`) + leftover };
 }
 
 // ---------- labels ----------
@@ -866,7 +865,7 @@ async function deleteLabel(name) {
   for (const f of feats) { fs.rmSync(path.join(FEATURES_DIR, f.slug), { recursive: true, force: true }); forget(f.slug); }
   delete l[name];
   saveLabels(l, [], `Delete label ${name} and its ${feats.length} features`, feats.map((f) => f.slug));
-  return { ok: true, msg: `Deleted ${name} and ${feats.length} ${feats.length === 1 ? "feature" : "features"}.` };
+  return { ok: true, msg: `Deleted ${name} and ${feats.length} ${feats.length === 1 ? "task" : "tasks"}.` };
 }
 
 // ---------- overview ----------
@@ -892,8 +891,37 @@ function gitInfo(f, st) {
   return p;
 }
 
+// The line under a card's title: its description, minus attached file paths.
+// A long one gets a one-sentence Haiku summary, made once per text and kept
+// by its hash. One at a time, and none while the usage limit is full.
+const BLURBS = path.join(STATE, "_blurbs.json");
+let blurbs = (() => { try { return JSON.parse(fs.readFileSync(BLURBS, "utf8")); } catch { return {}; } })();
+let summarising = false;
+const LONG = 160;
+function blurb(prompt) {
+  const text = String(prompt || "").split("\n").filter((l) => !/[\\/]attachments[\\/][a-z0-9-]+[\\/]\d+-/.test(l.trim())).join("\n").trim();
+  if (text.length <= LONG) return text;
+  const key = crypto.createHash("sha1").update(text).digest("hex").slice(0, 16);
+  if (blurbs[key]) return blurbs[key];
+  if (!summarising && !fullLimit()) {
+    summarising = true;
+    // A temp folder as cwd, so no repo CLAUDE.md or worktree hooks apply.
+    run("claude", ["-p", "--model", "claude-haiku-5-5", "--output-format", "json"], { cwd: os.tmpdir(), timeout: 60e3,
+      input: `Summarise this task description for a small card on a kanban board: one plain sentence, at most 110 characters, no preamble, no quotes, no trailing full stop.\n\n${text}` })
+      .then(({ code, out }) => {
+        let s = ""; try { const j = JSON.parse(out.slice(out.indexOf("{"))); if (!j.is_error) s = String(j.result || "").trim(); } catch {}
+        // Failed: fall back to the text for good, rather than retrying every poll.
+        blurbs[key] = code === 0 && s ? s.slice(0, 160) : text.slice(0, LONG) + "…";
+        fs.writeFileSync(BLURBS, JSON.stringify(blurbs));
+        fresh();
+      }).finally(() => { summarising = false; });
+  }
+  return text.slice(0, LONG) + "…";
+}
+
 async function buildOverview() {
   return Promise.all(loadFeatures().map(async (f) => {
+    f.blurb = blurb(f.prompt);
     const st = readState(f.slug);
     // No worktree: planned, imported, dropped, or removed after merging.
     if (!hasWorktree(f)) return { ...f, st, worktree: false, live: { state: f.status }, usage: f.dir ? usage(f) : null };
@@ -904,8 +932,7 @@ async function buildOverview() {
     let live = liveStatus(st, running.has(f.slug));
     const stuckInfo = stuck(f, st, live);
     if (stuckInfo) live = { ...live, state: "stuck" };
-    if (f.pr) prPoll(f);
-    return { ...f, st, live, stuck: stuckInfo, settingUp: settingUp.has(f.slug), ahead: ahead || 0, behind: behind || 0, dirty, lastCommit, worktree: true, appUp, usage: usage(f), prInfo: prInfo.get(f.slug) || null };
+    return { ...f, st, live, stuck: stuckInfo, settingUp: settingUp.has(f.slug), ahead: ahead || 0, behind: behind || 0, dirty, lastCommit, worktree: true, appUp, usage: usage(f) };
   }));
 }
 // Every open page polls every 2s. They share one build at a time, and a
@@ -981,6 +1008,20 @@ function stopTurn(f) {
   return { ok: true, msg: "Stopped the turn. Carry on picks it back up." };
 }
 
+// Force stop: end the agent's turn whatever it is running in (background turn,
+// open terminal, or a step under either). The conversation is saved, so it can carry on later.
+function forceStop(f) {
+  const st = readState(f.slug);
+  const pids = [st.headlessPid, st.pid].filter(Boolean);
+  if (!pids.length) return { ok: false, msg: "Nothing is running." };
+  for (const p of pids) killTree(p);
+  childCache.clear();
+  const at = new Date().toISOString();
+  // stops: shown in the chat; stopped: told to the agent with its next message.
+  writeState(f.slug, { pid: null, headlessPid: null, state: "idle", activity: "", lastReply: "Stopped by you.", stopped: at, stops: [...(st.stops || []), at].slice(-50) }); // ponytail: queued messages still go out next, via pump
+  return { ok: true, msg: "Force stopped. Send a message or Carry on to continue." };
+}
+
 function notes(f) {
   // A removed feature's folder is gone, but its notes were merged into main.
   // A dropped feature that was built still has its notes in its folder.
@@ -1019,7 +1060,7 @@ const server = http.createServer(async (req, res) => {
     // A short list for scripts and other agents (Hermes): what each feature
     // is, where it's at, and the start of its agent's last reply.
     if (req.method === "GET" && url.pathname === "/api/status") {
-      const brief = (await overview()).map((f) => ({ slug: f.slug, title: f.title, status: f.status, label: f.label || "", agent: f.worktree ? f.live?.state || "" : "", activity: f.st?.activity || "", lastReply: String(f.st?.lastReply || "").slice(0, 600), queued: f.st?.queue?.length || 0, ahead: f.ahead || 0, pr: f.prInfo ? { number: f.pr, url: f.prUrl, state: f.prInfo.state, checks: f.prInfo.checks } : null, previewPort: f.worktree ? f.port : null }));
+      const brief = (await overview()).map((f) => ({ slug: f.slug, title: f.title, status: f.status, label: f.label || "", agent: f.worktree ? f.live?.state || "" : "", activity: f.st?.activity || "", lastReply: String(f.st?.lastReply || "").slice(0, 600), queued: f.st?.queue?.length || 0, ahead: f.ahead || 0, previewPort: f.worktree ? f.port : null, schedule: f.status === "planned" ? f.schedule || null : null }));
       return send(res, 200, brief);
     }
     if (req.method === "GET" && url.pathname === "/api/repo") return send(res, 200, { name: config.name, repo: APP, main: MAIN, ...repo(), agent: undefined, hasConfig: fs.existsSync(REPO_FILE), platform: process.platform });
@@ -1029,21 +1070,35 @@ const server = http.createServer(async (req, res) => {
       }
       return send(res, 200, { values: defaults(), builtIn: BUILT_IN, rules: RULES.map((x) => x.say), models: MODELS, claudeDefault: claudeDefault(), plugins: userPlugins(), ponytailLevel: ponytailLevel() });
     }
+    // A file pasted or dropped into New task, held until the task exists.
+    if (req.method === "POST" && url.pathname === "/api/attach") {
+      const dir = path.join(ATTACH, "_new"); fs.mkdirSync(dir, { recursive: true });
+      const name = `${Date.now()}-${(url.searchParams.get("name") || "file").replace(/[^\w.-]+/g, "_").slice(-80)}`;
+      const chunks = []; for await (const c of req) chunks.push(c);
+      fs.writeFileSync(path.join(dir, name), Buffer.concat(chunks));
+      return send(res, 200, { file: name });
+    }
     if (req.method === "POST" && url.pathname === "/api/features") {
       fresh();
-      const { title, prompt, plan, model, label } = await body(req);
+      const { title, prompt, plan, model, label, schedule, files } = await body(req);
       if (!title?.trim()) return send(res, 400, { msg: "Needs a name." });
+      if (schedule && !prompt?.trim()) return send(res, 400, { msg: "Needs a starting prompt to schedule an agent." });
       if (!plan && !prompt?.trim()) return send(res, 400, { msg: "Needs a starting prompt to start an agent. Or save it as planned." });
+      let sched = null;
+      if (schedule) try { sched = parseSchedule(schedule); } catch (e) { return send(res, 400, { msg: e.message }); }
       const lab = cleanLabel(label), l = readLabels();
       if (lab && !(lab in l)) newLabel(lab); // saved like any other, so its column stays if the feature leaves it
-      return send(res, 200, createFeature(title.trim(), String(prompt || "").trim(), { refs: mentions(prompt), plan: !!plan, model, label: lab }));
+      // Scheduled: saved as planned, and the tick starts it when it's due.
+      const made = createFeature(title.trim(), String(prompt || "").trim(), { refs: mentions(prompt), plan: !!plan || !!sched, model, label: lab, files: Array.isArray(files) ? files : [] });
+      if (sched) saveRuntime(made.slug, { schedule: { ...sched, due: dueAt(sched) } });
+      return send(res, 200, made);
     }
     // Continue every feature a usage limit held back.
     if (req.method === "POST" && url.pathname === "/api/continue") {
       fresh();
       const held = loadFeatures().filter((f) => hasWorktree(f) && readState(f.slug).state === "limited");
       const r = held.map((f) => continueHeld(f));
-      return send(res, 200, { ok: r.every((x) => x.ok), msg: r.find((x) => !x.ok)?.msg || `Carrying on with ${held.length} ${held.length === 1 ? "feature" : "features"}.` });
+      return send(res, 200, { ok: r.every((x) => x.ok), msg: r.find((x) => !x.ok)?.msg || `Carrying on with ${held.length} ${held.length === 1 ? "task" : "tasks"}.` });
     }
     if (req.method === "GET" && url.pathname === "/api/labels") return send(res, 200, readLabels());
     // { name } plus, for edit, { to, description }. Errors come back as { msg }.
@@ -1064,7 +1119,26 @@ const server = http.createServer(async (req, res) => {
     const action = m[2];
     if (req.method === "GET" && action === "notes") return send(res, 200, notes(f));
     if (req.method === "GET" && action === "chat") return send(res, 200, f.dir ? chat(f) : { messages: [] });
+    // An attached file, for the chat to show. Only images get their own type;
+    // anything else (svg included, which could carry script) downloads.
+    if (req.method === "GET" && action === "file") {
+      const file = path.join(ATTACH, f.slug, path.basename(url.searchParams.get("name") || ""));
+      if (!fs.existsSync(file)) return send(res, 404, {});
+      const type = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp" }[path.extname(file).slice(1).toLowerCase()];
+      res.writeHead(200, { "content-type": type || "application/octet-stream", "cache-control": "max-age=86400", ...(type ? {} : { "content-disposition": "attachment" }) });
+      return fs.createReadStream(file).pipe(res);
+    }
     if (req.method !== "POST") return send(res, 405, {});
+    // A file pasted or dropped into the chat: the raw bytes, saved outside the
+    // worktree so it never lands in git. The page puts its path in the message.
+    if (action === "attach") {
+      const dir = path.join(ATTACH, f.slug); fs.mkdirSync(dir, { recursive: true });
+      const name = (url.searchParams.get("name") || "file").replace(/[^\w.-]+/g, "_").slice(-80);
+      const file = path.join(dir, `${Date.now()}-${name}`);
+      const chunks = []; for await (const c of req) chunks.push(c);
+      fs.writeFileSync(file, Buffer.concat(chunks));
+      return send(res, 200, { path: file });
+    }
     const b = await body(req);
     // Whatever this does, the next board shows it: cleared now, and again once
     // it finishes, since a long action (the check in Check and merge) lets
@@ -1074,22 +1148,25 @@ const server = http.createServer(async (req, res) => {
       if (!b.title?.trim()) return send(res, 400, { msg: "Needs a title." });
       if (!b.plan && !b.prompt?.trim()) return send(res, 400, { msg: "Needs a prompt to start an agent. Or save it as planned." });
       const prompt = String(b.prompt || "").trim();
-      return send(res, 200, createFeature(b.title.trim(), prompt, { continues: f.slug, refs: mentions(prompt, f.slug), plan: !!b.plan }));
+      return send(res, 200, createFeature(b.title.trim(), prompt, { continues: f.slug, refs: mentions(prompt, f.slug), plan: !!b.plan, model: b.model || "" }));
     }
     // One label per feature, any text. Empty clears it.
     if (action === "label") { setLabel(f, cleanLabel(b.label)); return send(res, 200, loadFeatures().find((x) => x.slug === f.slug)); }
     if (action === "drop") return send(res, 200, await dropFeature(f));
     if (action === "remove" && f.status === "dropped" && f.dir && !f.removed) return send(res, 200, await removeFeature(f));
     if (f.status === "planned") {
-      if (action === "start") return send(res, 200, startFeature(f, `Start feature: ${f.title}`));
+      if (action === "start") return send(res, 200, startFeature(f, `Start task: ${f.title}`));
+      if (action === "model") return send(res, 200, update(f.slug, { model: b.model in MODELS ? b.model : "" }, `Set model: ${f.title}`));
+      // { schedule: { at } or { before, mins } }, or { schedule: null } to clear it.
+      if (action === "schedule") { try { return send(res, 200, setSchedule(f, b.schedule)); } catch (e) { return send(res, 200, { ok: false, msg: e.message }); } }
       if (action === "edit") {
         const title = String(b.title || "").trim() || f.title;
-        if (title !== f.title && loadFeatures().some((x) => x.slug !== f.slug && x.title.toLowerCase() === title.toLowerCase())) return send(res, 400, { msg: "A feature already has that name." });
+        if (title !== f.title && loadFeatures().some((x) => x.slug !== f.slug && x.title.toLowerCase() === title.toLowerCase())) return send(res, 400, { msg: "A task already has that name." });
         const prompt = String(b.prompt ?? "").trim();
-        return send(res, 200, update(f.slug, { title, prompt, refs: mentions(prompt, f.slug) }, `Edit planned feature: ${title}`));
+        return send(res, 200, update(f.slug, { title, prompt, refs: mentions(prompt, f.slug) }, `Edit planned task: ${title}`));
       }
     }
-    if (!hasWorktree(f)) return send(res, 400, { msg: "This feature has no branch or agent. Start it, or Reopen it." });
+    if (!hasWorktree(f)) return send(res, 400, { msg: "This task has no branch or agent. Start it, or Reopen it." });
     if (action === "open") {
       const live = liveStatus(readState(f.slug));
       // Two copies of one session would both write to it, so never open a second.
@@ -1107,10 +1184,9 @@ const server = http.createServer(async (req, res) => {
     if (action === "continue") return send(res, 200, continueHeld(f));
     if (action === "retry") { startSetup(f); return send(res, 200, { ok: true }); }
     if (action === "unstick") return send(res, 200, unstick(f, b.pid));
+    if (action === "forcestop") return send(res, 200, forceStop(f));
     if (action === "stopturn") return send(res, 200, stopTurn(f));
     if (action === "merge") return send(res, 200, await merge(f));
-    if (action === "pr") return send(res, 200, await openPR(f));
-    if (action === "prmerge") return send(res, 200, f.pr ? await mergePR(f) : { ok: false, msg: "No pull request yet." });
     if (action === "remove") return send(res, 200, await removeFeature(f));
     send(res, 404, {});
   } catch (e) {

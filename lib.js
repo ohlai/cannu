@@ -14,16 +14,17 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
-import { execFileSync } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 
 export const META = path.dirname(fileURLToPath(import.meta.url));
 // config.json lists every repo. server.js starts one repo.js per repo and
 // hands it CANNU_REPO (which one) and CANNU_PORT (its own internal port).
 // Run by hand with neither set, the first repo is used.
 export const CONFIG = path.resolve(process.env.CANNU_CONFIG || path.join(META, "config.json"));
-if (!fs.existsSync(CONFIG)) { console.error(`No config at ${CONFIG}. Copy config.example.json to config.json and list your repos.`); process.exit(1); }
 const abs = (p) => (p ? path.resolve(path.dirname(CONFIG), p) : "");
-export const all = JSON.parse(fs.readFileSync(CONFIG, "utf8"));
+// No config yet is fine: Cannu starts with no repos and writes the file when
+// the first one is added from the page.
+export const all = fs.existsSync(CONFIG) ? JSON.parse(fs.readFileSync(CONFIG, "utf8")) : {};
 // Every repo, with its name and its own ports. Feature ports go up in blocks
 // of 100 per repo so two repos never hand out the same one. server.js uses
 // repoEntry for a repo added from the page.
@@ -36,8 +37,9 @@ export const repoEntry = (r, i) => ({
   port: (all.internalPort || (all.port || 4000) + 1) + i,
   firstFeaturePort: r.firstFeaturePort || (all.firstFeaturePort || 8100) + i * 100,
 });
-export const repos = (all.repos || [{ repo: all.repo }]).map(repoEntry);
-const me = repos.find((r) => r.name === process.env.CANNU_REPO) || repos[0];
+export const repos = (all.repos || (all.repo ? [{ repo: all.repo }] : [])).map(repoEntry);
+// With no repos only server.js runs, and it needs none of what follows.
+const me = repos.find((r) => r.name === process.env.CANNU_REPO) || repos[0] || { name: "", dir: META, worktrees: META, port: 0, firstFeaturePort: 0 };
 export const config = { host: "127.0.0.1", ...all, name: me.name, firstFeaturePort: me.firstFeaturePort, port: Number(process.env.CANNU_PORT) || me.port };
 export const APP = me.dir;
 export const WORKTREES = me.worktrees;
@@ -46,8 +48,9 @@ export const CLAUDE_SETTINGS = all.claudeSettings && fs.existsSync(abs(all.claud
 const HOME = path.join(abs(all.stateDir || path.join(META, "local")), me.name);
 export const STATE = path.join(HOME, "state");
 export const FEEDBACK = path.join(HOME, "feedback");
+export const ATTACH = path.join(HOME, "attachments"); // files pasted or dropped into a chat
 const RUNTIME = path.join(HOME, "features.json");
-fs.mkdirSync(STATE, { recursive: true });
+if (me.name) fs.mkdirSync(STATE, { recursive: true });
 
 // ---------- cannu.json ----------
 
@@ -66,7 +69,7 @@ function packageCheck() {
 // main and notes, which are read once below).
 export function repo() {
   const r = repoRaw();
-  return { main: "main", notes: "notes/features", setup: [], copy: [], app: "", seed: [], merge: "local", agent: {}, ...r, check: r.check ?? packageCheck() };
+  return { main: "main", notes: "notes/features", setup: [], copy: [], app: "", seed: [], agent: {}, ...r, check: r.check ?? packageCheck() };
 }
 export const MAIN = repo().main;
 export const NOTES = repo().notes;
@@ -166,11 +169,9 @@ export const BUILT_IN = {
   // Filled into the chat box when Check and merge hits a conflict. {files} is filled in.
   conflictText: "Main has moved on and merging your branch conflicts in: {files}. Merge main into your branch, resolve the conflicts keeping both sides' intent, run the check, log what you did, and commit.",
   // Filled into the chat box when shipping is blocked by uncommitted changes.
-  commitText: "I tried to ship this feature but your folder has uncommitted changes. Commit what belongs to the feature, delete anything that doesn't (scratch files, stray output), log it, and leave git status clean.",
+  commitText: "I tried to merge this task but your folder has uncommitted changes. Commit what belongs to the task, delete anything that doesn't (scratch files, stray output), log it, and leave git status clean.",
   // Filled into the chat box when Check and merge's check fails. {check} and {out} are filled in.
   checkText: "Check and merge ran the check ({check}) on your branch and it failed. The end of its output:\n\n{out}\n\nFix what fails, run the check again, log what you did, and commit.",
-  // Filled into the chat box from a pull request with failing checks or a conflict. {pr} and {problems} are filled in.
-  prFixText: "Pull request #{pr} has problems: {problems}. If it conflicts, merge main into your branch and resolve it keeping both sides' intent. Fix what fails, run the check, log what you did, and commit. Don't push: the user presses Push in Cannu once you're done.",
   // How a background turn decides what it may do. "auto": Claude Code's own
   // classifier judges each action not on allowedTools. "acceptEdits": only
   // edits and allowedTools, everything else refused. Either way the hard
@@ -193,16 +194,24 @@ export const resumeText = () => `${AUTO} ${defaults().resumeText}`;
 // Whether a recorded claude PID is still a running claude. Hooks only say
 // what an agent last reported; this says whether it's still alive. The name
 // is checked too, since after a restart the PID can belong to anything.
-let pidCache = { at: 0, pids: new Set() };
+// tasklist takes ~0.4s and every poll asks, so after the first (blocking)
+// read it refreshes in the background and callers get the last list at once.
+const TL = ["tasklist", ["/FO", "CSV", "/NH", "/FI", "IMAGENAME eq claude.exe"]];
+const parsePids = (out) => new Set([...out.matchAll(/^"claude\.exe","(\d+)"/gim)].map((m) => Number(m[1])));
+let pidCache = null, pidBusy = false;
 function winClaudePids() {
-  if (Date.now() - pidCache.at < 1500) return pidCache.pids;
-  let pids = new Set();
-  try {
-    const out = execFileSync("tasklist", ["/FO", "CSV", "/NH", "/FI", "IMAGENAME eq claude.exe"], { encoding: "utf8", windowsHide: true });
-    pids = new Set([...out.matchAll(/^"claude\.exe","(\d+)"/gim)].map((m) => Number(m[1])));
-  } catch {}
-  pidCache = { at: Date.now(), pids };
-  return pids;
+  if (!pidCache) {
+    let pids = new Set();
+    try { pids = parsePids(execFileSync(...TL, { encoding: "utf8", windowsHide: true })); } catch {}
+    pidCache = { at: Date.now(), pids };
+  } else if (!pidBusy && Date.now() - pidCache.at > 1500) {
+    pidBusy = true;
+    execFile(...TL, { encoding: "utf8", windowsHide: true }, (err, out) => {
+      pidBusy = false;
+      pidCache = { at: Date.now(), pids: err ? pidCache.pids : parsePids(out) };
+    });
+  }
+  return pidCache.pids;
 }
 export function claudeAlive(pid) {
   if (!pid) return false;
@@ -232,7 +241,9 @@ export function liveStatus(st, running = false) {
   // not from the dashboard) fall back to "a hook fired in the last 90s".
   const recent = !st.pid && !st.headlessPid && st.at && Date.now() - new Date(st.at) < 90e3;
   let state = st.state || "";
-  if ((state === "working" || state === "needs-you") && !term && !bg && !recent) state = "interrupted";
+  // Stopped by you (Stop button): a hook from the dying turn can still land
+  // after the stop and say "working". That's not an interruption, it's idle.
+  if ((state === "working" || state === "needs-you") && !term && !bg && !recent) state = st.stopped ? "idle" : "interrupted";
   if (state === "starting" && !term && !recent) state = st.started ? "interrupted" : "not-started";
   if (state === "idle" && !term && !bg) state = "closed";
   return { state, open: term, background: bg };
@@ -246,26 +257,35 @@ export function liveStatus(st, running = false) {
 // usage is just unknown and nothing is held. Refreshed every minute.
 // Every Cannu process on this machine (the dashboard, each repo, each feature's
 // own copy) shares one reading through USAGE_FILE: one fetch a minute between
-// them all, a rate limit backs them all off (retry-after, at least 1 min), and a restart shows
+// them all, a rate limit backs them all off (retry-after, 1 to 5 min), and a restart shows
 // the last reading straight away. Polling separately got the endpoint to
 // refuse them all, and a restarted one then had nothing.
+// Processes outlive merges (nothing restarts them, feature apps are detached),
+// so the file also gets written by older code: never wait more than 5 min past
+// the last write, whatever wait it asks for. Feature app copies only read it:
+// the endpoint's limit is shared with Claude Code itself, so fewer callers.
 const USAGE_FILE = path.join(os.tmpdir(), "cannu-usage.json");
 let usageNow = null;
 async function readUsage(force = false) {
-  let c = {};
-  try { c = JSON.parse(fs.readFileSync(USAGE_FILE, "utf8")); } catch {}
+  let c = {}, wrote = 0;
+  try { c = JSON.parse(fs.readFileSync(USAGE_FILE, "utf8")); wrote = fs.statSync(USAGE_FILE).mtimeMs; } catch {}
   if (c.usage) usageNow = c.usage;
-  if (Date.now() < (force ? c.backoff || 0 : c.next || 0)) return;
+  if (process.env.FEATURE_SLUG) return;
+  if (Date.now() < Math.min(force ? c.backoff || 0 : c.next || 0, wrote + 5 * 60e3)) return;
   const save = (o) => { try { fs.writeFileSync(USAGE_FILE, JSON.stringify({ usage: usageNow, ...o })); } catch {} };
   save({ next: Date.now() + 55e3 }); // claimed: the others wait for this fetch
   try {
     const tok = JSON.parse(fs.readFileSync(path.join(os.homedir(), ".claude", ".credentials.json"), "utf8")).claudeAiOauth?.accessToken;
     if (!tok) return;
     const r = await fetch("https://api.anthropic.com/api/oauth/usage", { headers: { authorization: `Bearer ${tok}`, "anthropic-beta": "oauth-2025-04-20" }, signal: AbortSignal.timeout(10e3) });
-    // Back off as long as it asks, at least a minute. A flat 5 minutes lost
-    // every slot to anything polling the same login each minute (it sends retry-after: 0).
-    if (r.status === 429) { const t = Date.now() + Math.max(60e3, (+r.headers.get("retry-after") || 0) * 1e3); return save({ next: t, backoff: t }); }
-    if (!r.ok) return;
+    // Back off as long as it asks, between 1 and 5 minutes. A flat 5 minutes lost
+    // every slot to anything polling each minute (it often sends retry-after: 0);
+    // honouring a long one uncapped left the rings stale for hours.
+    if (r.status === 429) {
+      const ra = r.headers.get("retry-after"), t = Date.now() + Math.min(5 * 60e3, Math.max(60e3, (+ra || 0) * 1e3));
+      return save({ next: t, backoff: t, last: `429 retry-after ${ra} at ${new Date().toISOString()}` });
+    }
+    if (!r.ok) return save({ next: Date.now() + 55e3, last: `${r.status} at ${new Date().toISOString()}` });
     const j = await r.json();
     // limits[] carries the severity the apps colour by; five_hour and seven_day are the fallback.
     const pick = (kind, old) => {
@@ -311,7 +331,7 @@ export const inside = (p, dir) => { const a = path.resolve(p).toLowerCase(), d =
 const sh = (re) => (t) => t.tool === "Bash" && re.test(unquote(t.cmd));
 const WRITE_TOOLS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
 export const RULES = [
-  { say: "Don't push or use gh. Cannu pushes and opens pull requests when you ship.", test: sh(/\bgit\s+push\b|(^|[\s;&|(])gh\s/) },
+  { say: "Don't push or use gh. The user merges your branch with Cannu's Check and merge.", test: sh(/\bgit\s+push\b|(^|[\s;&|(])gh\s/) },
   { say: "Stay on your branch: no git checkout or switch (git restore puts files back), and no creating, moving or deleting branches (git branch -d/-D/-f/-m/-c, update-ref, symbolic-ref).", test: sh(/\bgit\s+(checkout|switch|update-ref|symbolic-ref)\b|\bgit\s+branch\b.*\s(-[dDfmMcC]\b|--(delete|force|move|copy)\b)/) },
   { say: "Leave other worktrees and the stash alone: no git worktree or git stash. Every agent shares the stash, so make a work-in-progress commit instead.", test: sh(/\bgit\s+(worktree|stash)\b/) },
   { say: "Run git only in your own folder (no git -C, --git-dir or --work-tree), and don't change git config.", test: (t) => sh(/\bgit\s+(-C\b|--git-dir|--work-tree|config\b(?!.*--(get|list)\b))/)(t) || (t.tool === "Bash" && /\bgit\s/.test(unquote(t.cmd)) && !inside(t.cwd, t.f.dir)) },
@@ -348,7 +368,7 @@ export function brief(f) {
   const r = repo();
   return [
     `You are a feature agent started by Cannu, a dashboard that runs one agent per feature, each on its own branch and git worktree. Yours is "${f.title}" on branch ${f.branch}.`,
-    `Commit your work on this branch as you go. Your folder and branch are yours to change freely: Cannu merges your branch or opens its pull request, and the user checks it first.`,
+    `Commit your work on this branch as you go. Your folder and branch are yours to change freely: Cannu merges your branch, and the user checks it first.`,
     COMMIT_NOTES
       ? `Keep notes in ${NOTES}/${f.slug}/: log.md for what you did, decisions.md for each decision and why. prompts.md there is written for you; never edit it.`
       : `Keep notes in ${notesDir(f)}: log.md for what you did, decisions.md for each decision and why. That folder is outside git on purpose, so never git add it. prompts.md there is written for you; never edit it.`,

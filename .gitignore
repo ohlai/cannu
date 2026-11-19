@@ -4,3 +4,4 @@ state/
 data/
 .env
 *.bak
+notes/

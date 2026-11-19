@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cannu (new)</title>
-<link rel="icon" type="image/png" href="/logo.png?v=2">
+<link rel="icon" type="image/svg+xml" href="/logo.svg">
 <style>
   /* Cannu, redesigned after Apple's design talks (WWDC18 Designing Fluid Interfaces,
      WWDC20 Details of UI Typography). Same markup hooks as ../index.html. */
@@ -208,7 +208,7 @@
   .compose { position:relative; margin:4px 10px 0; transition:padding-bottom .3s var(--ease) .08s; }
   .compose textarea { display:block; min-height:0; resize:none; line-height:20px; padding:7px 14px; border-radius:18px; width:calc(100% - 72px); max-height:262px; overflow-y:auto; background:var(--card);
     transition:width .3s var(--ease), height .18s ease, box-shadow .15s; }
-  .compose .send { position:absolute; right:0; bottom:0; width:62px; height:36px; padding:0; }
+  .compose .send { position:absolute; right:0; bottom:0; width:62px; height:10px; padding:0; }
   .compose.multi { padding-bottom:44px; transition-delay:0s; }
   .compose.multi textarea { width:100%; transition-delay:.08s, 0s, 0s; }
   .chat .hint { padding:7px 12px 12px; }
@@ -315,7 +315,7 @@
 <main>
   <div class="hero"><div class="row">
     <div class="grow">
-      <div class="brand"><img src="/logo.png?v=2" alt=""><h1>Cannu <span>Parallel agent management</span></h1></div>
+      <div class="brand"><img src="/logo.svg" alt=""><h1>Cannu <span>Parallel agent management</span></h1></div>
       <p class="sub" style="margin:0" id="totals">One branch, folder and Claude session per feature.</p>
     </div>
     <button id="defaultsOpen" title="Model, system prompt and everything else every agent is given">Agent defaults</button>
@@ -357,7 +357,7 @@
   <div class="panel"><div class="grab" aria-hidden="true"></div>
     <header><h2>New feature</h2></header>
     <div class="body">
-      <input type="text" id="title" placeholder="Feature name, e.g. Client can hide Training now">
+      <input type="text" id="title" placeholder="Name">
       <textarea id="prompt" class="tall" data-mention placeholder="What you want and why. Saved word for word in the feature's notes. Optional if you're only planning it."></textarea>
       <div class="hint">@ to tag a related feature. The agent reads their notes first.</div>
       <div class="field"><label for="newModel">Model</label><select id="newModel"></select></div>
