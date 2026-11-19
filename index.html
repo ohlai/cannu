@@ -50,8 +50,7 @@
   .banner { margin-top:10px; padding:10px 12px; border-radius:7px; border:1px solid var(--you); font-size:13px; }
   .banner.denied .row { margin-top:8px; align-items:center; gap:8px; }
   .banner.denied code { overflow-wrap:anywhere; }
-  .banner.denied .colmenu summary { width:26px; height:28px; }
-  .banner.denied .colmenu .menu { min-width:240px; top:30px; }
+  .banner.denied .startmenu { width:auto; min-width:260px; }
   button { font:inherit; font-size:13px; padding:6px 12px; border-radius:7px; border:1px solid var(--line); background:var(--card); color:var(--fg); cursor:pointer; }
   button:hover { border-color: var(--mute); }
   button.primary { background:var(--fg); color:var(--bg); border-color:var(--fg); }
@@ -922,12 +921,19 @@ function msgBlock(s) {
 // Click the box to make it up to 2x taller, fitting the error (it still scrolls past that); click again to shrink it.
 // What the agent was refused this turn. Allow once lets that exact call
 // through and asks it to try again. Always allow (not for Cannu's hard
-// rules, which no rule can lift) also saves a rule in Agent defaults.
-function deniedBlock(denied) {
-  return `<div class="banner denied">Blocked this turn:${denied.map((d, i) => typeof d === "string" ? `<div class="row"><code>${esc(d)}</code></div>` : `<div class="row">
-      <div class="grow"><code>${esc((d.tool === "Bash" ? d.key : `${d.tool} ${d.key}`).slice(0, 200))}</code>${d.why ? `<div class="meta">Cannu's rule: ${esc(d.why)}</div>` : ""}</div>
-      <span class="split"><button data-act="allow" data-i="${i}" title="Let this exact call through once, and ask the agent to try again">Allow once</button>${d.hard || !d.rule ? ""
-        : `<details class="colmenu"><summary aria-label="More ways to allow">▾</summary><div class="menu"><button data-act="allow" data-i="${i}" data-rule="1">Always allow <code>${esc(d.rule)}</code></button></div></details>`}</span></div>`).join("")}</div>`;
+// rules, which no rule can lift) also saves a rule in Agent defaults. Built
+// like Start agent ▾: the same black split button, and the same menu (opened
+// through menuOpen, keyed per blocked call).
+function deniedBlock(slug, denied) {
+  const once = (i) => `<button class="primary" data-act="allow" data-i="${i}" title="Let this exact call through once, and ask the agent to try again">Allow once</button>`;
+  return `<div class="banner denied">Blocked this turn:${denied.map((d, i) => {
+    if (typeof d === "string") return `<div class="row"><code>${esc(d)}</code></div>`;
+    const key = `${slug}:allow:${i}`;
+    const btn = d.hard || !d.rule ? once(i)
+      : `<span class="startsplit">${once(i)}<button class="primary startchev" data-chev="${key}" aria-label="More ways to allow" aria-expanded="${menuOpen === key}" title="Allow once or always">${CHEV}</button>${menuOpen === key
+        ? `<div class="repomenu startmenu allowmenu"><button data-act="allow" data-i="${i}" title="Let this exact call through once, and ask the agent to try again">${TICK}Allow once</button><button data-act="allow" data-i="${i}" data-rule="1" title="Add this rule to Agent defaults, so calls like it go through from now on"><span class="tick"></span>Always allow<small>${esc(d.rule)}</small></button></div>` : ""}</span>`;
+    return `<div class="row"><div class="grow"><code>${esc((d.tool === "Bash" ? d.key : `${d.tool} ${d.key}`).slice(0, 200))}</code>${d.why ? `<div class="meta">Cannu's rule: ${esc(d.why)}</div>` : ""}</div>${btn}</div>`;
+  }).join("")}</div>`;
 }
 function errBlock(s, key, text) {
   return `<div class="err ${s.errFull?.[key] ? "full" : ""}" data-act="errexpand" data-key="${key}" title="Click to show more"><pre>${esc(text)}</pre><button type="button" class="inbtn" data-act="copy" title="Copy the error" aria-label="Copy the error">${COPY_ICON}</button></div>`;
@@ -1515,7 +1521,7 @@ function card(f, inPop) {
   const body = `${st.activity && cls === "working" && !(s.fb || inPop) ? `<div class="activity" style="margin-top:6px">${esc(st.activity)}</div>` : ""}
     ${banner}
     ${st.lastReply && !(s.fb || inPop) ? `<div class="reply md ${s.full ? "full" : ""}" data-act="expand" title="Click to show more">${md(st.lastReply)}</div>` : ""}
-    ${st.denied?.length ? deniedBlock(st.denied) : ""}`;
+    ${st.denied?.length ? deniedBlock(f.slug, st.denied) : ""}`;
   return `<div class="card" data-slug="${f.slug}">
     <div class="row top">
       <div class="grow"><div class="head" ${inPop ? "" : 'data-act="collapse"'}>
@@ -2613,7 +2619,7 @@ async function onClick(e) {
     return say(r.msg || "Opened a new terminal tab.", r.ok === false ? "bad" : "");
   }
   if (act === "allow") {
-    b.closest("details")?.removeAttribute("open");
+    menuOpen = null;
     const r = await api(`${base}/allow`, { i: Number(b.dataset.i), rule: !!b.dataset.rule });
     return say(r.msg, r.ok ? "good" : "bad");
   }
@@ -2664,7 +2670,7 @@ async function onClick(e) {
     return true;
   };
   if (act === "unschedule") { whenSel.delete(slug); const r = await api(`${base}/schedule`, { schedule: null }); return say(r.ok ? "Not scheduled any more." : r.msg, r.ok ? "" : "bad"); }
-  if (act === "chev") { menuOpen = menuOpen === slug ? null : slug; render(all); return turnChev(slug, !!menuOpen); }
+  if (act === "chev") { const k = b.dataset.chev; menuOpen = menuOpen === k ? null : k; render(all); return turnChev(k, !!menuOpen); }
   if (act === "menu") return menuPick(b, slug, () => render(all));
   // The black button does what ▾ has chosen.
   const v = act === "start" ? whenBody(whenOf(slug)) : null;
