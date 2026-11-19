@@ -14,7 +14,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
-import { execFileSync } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 
 export const META = path.dirname(fileURLToPath(import.meta.url));
 // config.json lists every repo. server.js starts one repo.js per repo and
@@ -168,9 +168,20 @@ export const BUILT_IN = {
   freshText: "Feature: {title}. The previous Claude session for this feature can't be reopened, so this is a new one. Read {notes}/{slug}/prompts.md, log.md and decisions.md, and git log on this branch, then tell me in a few lines where the feature is up to and what's left, and wait for me.",
   // Filled into the chat box when Check and merge hits a conflict. {files} is filled in.
   conflictText: "Main has moved on and merging your branch conflicts in: {files}. Merge main into your branch, resolve the conflicts keeping both sides' intent, run the check, log what you did, and commit.",
-  // What a background turn may do without asking. Anything else is refused and listed on the card.
-  allowedTools: ["Read", "Edit", "Write", "Glob", "Grep", "Bash(git status:*)", "Bash(git diff:*)", "Bash(git log:*)", "Bash(git add:*)", "Bash(git commit:*)", "Bash(ls:*)", "Bash(cat:*)", "Bash(grep:*)", "Bash(head:*)", "Bash(tail:*)", "Bash(wc:*)", "Bash(echo:*)", "Bash(curl:*)", "Bash(node:*)", "Bash(npm:*)", "Bash(pnpm:*)"],
-  disallowedTools: ["Bash(git push:*)", "Bash(git checkout:*)", "Bash(git switch:*)", "Bash(git reset:*)"],
+  // Filled into the chat box when shipping is blocked by uncommitted changes.
+  commitText: "I tried to merge this task but your folder has uncommitted changes. Commit what belongs to the task, delete anything that doesn't (scratch files, stray output), log it, and leave git status clean.",
+  // Filled into the chat box when Check and merge's check fails. {check} and {out} are filled in.
+  checkText: "Check and merge ran the check ({check}) on your branch and it failed. The end of its output:\n\n{out}\n\nFix what fails, run the check again, log what you did, and commit.",
+  // How a background turn decides what it may do. "auto": Claude Code's own
+  // classifier judges each action not on allowedTools. "acceptEdits": only
+  // edits and allowedTools, everything else refused. Either way the hard
+  // RULES below apply, and what's refused is listed on the card to allow.
+  permissionMode: "auto",
+  // Done without asking, before the classifier. The messages above must never
+  // ask for what RULES forbid; anything in the agent's own folder and branch is fine.
+  allowedTools: ["Read", "Edit", "Write", "Glob", "Grep", "Bash(git status:*)", "Bash(git diff:*)", "Bash(git log:*)", "Bash(git add:*)", "Bash(git commit:*)", "Bash(git merge:*)", "Bash(ls:*)", "Bash(cat:*)", "Bash(grep:*)", "Bash(head:*)", "Bash(tail:*)", "Bash(wc:*)", "Bash(echo:*)", "Bash(curl:*)", "Bash(node:*)", "Bash(npm:*)", "Bash(pnpm:*)"],
+  // Extra things to refuse. Pushing, switching branches and the like are hard RULES, so this starts empty.
+  disallowedTools: [],
   // Extra environment variables for every agent, e.g. PONYTAIL_DEFAULT_MODE=off.
   env: {},
 };
@@ -183,16 +194,24 @@ export const resumeText = () => `${AUTO} ${defaults().resumeText}`;
 // Whether a recorded claude PID is still a running claude. Hooks only say
 // what an agent last reported; this says whether it's still alive. The name
 // is checked too, since after a restart the PID can belong to anything.
-let pidCache = { at: 0, pids: new Set() };
+// tasklist takes ~0.4s and every poll asks, so after the first (blocking)
+// read it refreshes in the background and callers get the last list at once.
+const TL = ["tasklist", ["/FO", "CSV", "/NH", "/FI", "IMAGENAME eq claude.exe"]];
+const parsePids = (out) => new Set([...out.matchAll(/^"claude\.exe","(\d+)"/gim)].map((m) => Number(m[1])));
+let pidCache = null, pidBusy = false;
 function winClaudePids() {
-  if (Date.now() - pidCache.at < 1500) return pidCache.pids;
-  let pids = new Set();
-  try {
-    const out = execFileSync("tasklist", ["/FO", "CSV", "/NH", "/FI", "IMAGENAME eq claude.exe"], { encoding: "utf8", windowsHide: true });
-    pids = new Set([...out.matchAll(/^"claude\.exe","(\d+)"/gim)].map((m) => Number(m[1])));
-  } catch {}
-  pidCache = { at: Date.now(), pids };
-  return pids;
+  if (!pidCache) {
+    let pids = new Set();
+    try { pids = parsePids(execFileSync(...TL, { encoding: "utf8", windowsHide: true })); } catch {}
+    pidCache = { at: Date.now(), pids };
+  } else if (!pidBusy && Date.now() - pidCache.at > 1500) {
+    pidBusy = true;
+    execFile(...TL, { encoding: "utf8", windowsHide: true }, (err, out) => {
+      pidBusy = false;
+      pidCache = { at: Date.now(), pids: err ? pidCache.pids : parsePids(out) };
+    });
+  }
+  return pidCache.pids;
 }
 export function claudeAlive(pid) {
   if (!pid) return false;
@@ -297,18 +316,65 @@ export function fullLimit() {
   return null;
 }
 
+// ---------- what agents may never do ----------
+//
+// The hard rules. hook.js checks every tool call against them, background or
+// terminal, and every agent's system prompt lists them from the same `say`
+// lines, so the two can't drift. Add a rule here, never as a one-off check
+// in hook.js. They protect what agents share: main, other branches and
+// worktrees, the stash, git config, GitHub and the rest of the machine.
+// Everything inside an agent's own folder and branch is its own business.
+// ponytail: they read the command text, so code run inside node or a script
+// gets past them. They catch mistakes; a real wall needs an OS sandbox.
+const unquote = (c) => String(c || "").replace(/"(?:\\.|[^"\\])*"|'[^']*'/g, '""');
+export const inside = (p, dir) => { const a = path.resolve(p).toLowerCase(), d = path.resolve(dir).toLowerCase(); return a === d || a.startsWith(d + path.sep); };
+const sh = (re) => (t) => t.tool === "Bash" && re.test(unquote(t.cmd));
+const WRITE_TOOLS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
+export const RULES = [
+  { say: "Don't push or use gh. The user merges your branch with Cannu's Check and merge.", test: sh(/\bgit\s+push\b|(^|[\s;&|(])gh\s/) },
+  { say: "Stay on your branch: no git checkout or switch (git restore puts files back), and no creating, moving or deleting branches (git branch -d/-D/-f/-m/-c, update-ref, symbolic-ref).", test: sh(/\bgit\s+(checkout|switch|update-ref|symbolic-ref)\b|\bgit\s+branch\b.*\s(-[dDfmMcC]\b|--(delete|force|move|copy)\b)/) },
+  { say: "Leave other worktrees and the stash alone: no git worktree or git stash. Every agent shares the stash, so make a work-in-progress commit instead.", test: sh(/\bgit\s+(worktree|stash)\b/) },
+  { say: "Run git only in your own folder (no git -C, --git-dir or --work-tree), and don't change git config.", test: (t) => sh(/\bgit\s+(-C\b|--git-dir|--work-tree|config\b(?!.*--(get|list)\b))/)(t) || (t.tool === "Bash" && /\bgit\s/.test(unquote(t.cmd)) && !inside(t.cwd, t.f.dir)) },
+  // CANNU_URL is how the agent restarts its app. The rest of the API would let it allow its own blocked actions.
+  { say: "From Cannu's API, only use apprestart for your own app.", test: (t) => t.tool === "Bash" && /\/api\//.test(t.cmd) && !/\/api\/features\/[a-z0-9-]+\/apprestart\b/.test(t.cmd) },
+  { say: "Only write files inside your own folder, your notes folder, the temp folder or your Claude Code memory folder. Never edit prompts.md or your .claude settings.", test: (t) => {
+    const p = WRITE_TOOLS.has(t.tool) && (t.input.file_path || t.input.notebook_path);
+    if (!p) return false;
+    const notes = notesDir(t.f);
+    if (inside(p, path.join(t.f.dir, ".claude")) || (inside(p, notes) && path.basename(p) === "prompts.md")) return true;
+    // Claude Code's own memory for the project lives in ~/.claude/projects/<project>/memory.
+    const memory = inside(p, path.join(os.homedir(), ".claude", "projects")) && path.resolve(p).split(path.sep).includes("memory");
+    return !(inside(p, t.f.dir) || inside(p, notes) || inside(p, os.tmpdir()) || memory);
+  } },
+];
+// What a blocked call is matched on for Allow once: the command, the file, or the whole input.
+export const callKey = (tool, input = {}) => input.command ?? input.file_path ?? input.notebook_path ?? JSON.stringify(input);
+// The rule a tool call breaks, as its `say` line, or "".
+export function broken(f, tool, input = {}, cwd = f.dir) {
+  const t = { f, tool, input, cmd: input.command, cwd };
+  return RULES.find((r) => { try { return r.test(t); } catch { return false; } })?.say || "";
+}
+// The permission rule Always allow saves: a Bash command's first word or
+// two (git restore → Bash(git restore:*)), or the whole tool.
+export function ruleFor(tool, input = {}) {
+  if (tool !== "Bash") return tool;
+  const w = unquote(input.command).trim().split(/\s+/);
+  return `Bash(${w[1] && !w[1].startsWith("-") && /^(git|npm|pnpm|npx|node)$/.test(w[0]) ? w[0] + " " + w[1] : w[0]}:*)`;
+}
+
 // What every agent is told about how Cannu works, whatever the repo's own
 // CLAUDE.md says. Fixed, because the dashboard relies on it.
 export function brief(f) {
   const r = repo();
   return [
     `You are a feature agent started by Cannu, a dashboard that runs one agent per feature, each on its own branch and git worktree. Yours is "${f.title}" on branch ${f.branch}.`,
-    `Commit your work on this branch as you go. Never push, switch branches or touch other worktrees: Cannu merges your branch.`,
+    `Commit your work on this branch as you go. Your folder and branch are yours to change freely: Cannu merges your branch, and the user checks it first.`,
     COMMIT_NOTES
       ? `Keep notes in ${NOTES}/${f.slug}/: log.md for what you did, decisions.md for each decision and why. prompts.md there is written for you; never edit it.`
       : `Keep notes in ${notesDir(f)}: log.md for what you did, decisions.md for each decision and why. That folder is outside git on purpose, so never git add it. prompts.md there is written for you; never edit it.`,
     r.app && `Your own copy of the app runs at http://localhost:${f.port} (PORT, DATA_DIR and APP_URL are set). After changing code the server loads at start, restart it with: curl -s -X POST $CANNU_URL/api/features/${f.slug}/apprestart`,
     r.check && `Before you say you're done, run the check: ${r.check}`,
+    `Cannu blocks the actions below for every agent, whatever your permissions say. Don't reach for them on your own. But when the user asks you to run something, run it and let Cannu and Claude Code decide: never refuse in words, because then the user has nothing to approve. A refused call shows the user an Allow once button for that exact call, and you'll be told when to run it again. Don't retry or work around a refusal yourself. The blocked actions:\n${RULES.map((x) => "- " + x.say).join("\n")}`,
   ].filter(Boolean).join("\n");
 }
 

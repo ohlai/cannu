@@ -11,8 +11,9 @@
     "model": "claude-opus-5-5",
     "systemPrompt": "Prefer small commits with clear messages.",
     "env": { "PONYTAIL_DEFAULT_MODE": "full" },
-    "allowedTools": ["Read", "Edit", "Write", "Glob", "Grep", "Bash(git status:*)", "Bash(git diff:*)", "Bash(git add:*)", "Bash(git commit:*)", "Bash(pnpm:*)"],
-    "disallowedTools": ["Bash(git push:*)", "Bash(git checkout:*)", "Bash(git switch:*)", "Bash(git reset:*)"],
+    "permissionMode": "auto",
+    "allowedTools": ["Read", "Edit", "Write", "Glob", "Grep", "Bash(git status:*)", "Bash(git diff:*)", "Bash(git add:*)", "Bash(git commit:*)", "Bash(git merge:*)", "Bash(pnpm:*)"],
+    "disallowedTools": ["Bash(rm -rf /:*)"],
     "resumeText": "You were interrupted mid-turn. Check git status and your log.md, then carry on.",
     "freshText": "Feature: {title}. Your previous session can't be reopened. Read {notes}/{slug}/ and git log, say where it's up to, and wait for me.",
     "conflictText": "Main has moved on and merging your branch conflicts in: {files}. Merge main in, keep both sides' intent, run the check and commit."

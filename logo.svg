@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- The header's 3x3 pixel C (.pix.logo): 29-unit cells, 6.5 gaps, lit cells solid, the rest at .12. -->
+  <style>rect { fill:#111 } .off { opacity:.12 } @media (prefers-color-scheme: dark) { rect { fill:#eee } }</style>
+  <rect class="off" x="0" y="0" width="29" height="29" rx="7.25"/>
+  <rect x="35.5" y="0" width="29" height="29" rx="7.25"/>
+  <rect x="71" y="0" width="29" height="29" rx="7.25"/>
+  <rect x="0" y="35.5" width="29" height="29" rx="7.25"/>
+  <rect class="off" x="35.5" y="35.5" width="29" height="29" rx="7.25"/>
+  <rect class="off" x="71" y="35.5" width="29" height="29" rx="7.25"/>
+  <rect class="off" x="0" y="71" width="29" height="29" rx="7.25"/>
+  <rect x="35.5" y="71" width="29" height="29" rx="7.25"/>
+  <rect x="71" y="71" width="29" height="29" rx="7.25"/>
+</svg>

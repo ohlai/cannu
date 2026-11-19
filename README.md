@@ -1,4 +1,4 @@
-<img src="logo.png" alt="Cannu's logo, a silk moth" width="96">
+<img src="logo.svg" alt="Cannu's logo, a C made of pixels" width="96">
 
 # Cannu: agent board
 
@@ -152,17 +152,50 @@ Keys inside `agent`:
 | `model` | Claude Code's own default | The model for new tasks (each can pick its own) |
 | `systemPrompt` | | Added to every agent's system prompt, after Cannu's own short brief |
 | `env` | | Extra environment variables for every agent |
-| `allowedTools` | Reading, editing, and common git, node and npm commands | What a background turn may do without asking, as Claude Code permission rules. Anything else is refused and listed in red on the card |
-| `disallowedTools` | `git push`, `checkout`, `switch` and `reset` | What a background turn may never do |
-| `resumeText`, `freshText`, `conflictText` | Cannu's built-in wording | Messages Cannu sends for you: after an interrupted turn, when a session can't be reopened, and when merging conflicts. `{title}`, `{slug}`, `{notes}` and `{files}` are filled in |
+| `permissionMode` | `auto` | How a background turn decides what it may do. `auto`: Claude Code's auto mode judges each action not on `allowedTools`. `acceptEdits`: only edits and `allowedTools`. Terminal sessions use your own Claude Code setting |
+| `allowedTools` | Reading, editing, and common git (including `git merge`, for fixing conflicts), node and npm commands | What a background turn does without asking, as Claude Code permission rules. **Always allow** on a card adds to it |
+| `disallowedTools` | empty | Extra things a background turn is refused. Pushing, switching branches and the like are Cannu's own rules (below), so they don't need to be here |
+| `resumeText`, `freshText`, `conflictText`, `commitText`, `checkText` | Cannu's built-in wording | Messages Cannu sends for you, or fills in for you to send: after an interrupted turn, when a session can't be reopened, when merging conflicts, when Check and merge finds uncommitted changes, and when its check fails. `{title}`, `{slug}`, `{notes}`, `{files}`, `{check}` and `{out}` are filled in |
 
 ## What every agent is told
 
 Each agent reads the repo's own `CLAUDE.md`, and Cannu also gives it a short
 system prompt. It says which task and branch the agent is on, to commit as
-it goes and never push or switch branches, to keep `log.md` and
-`decisions.md` in its notes folder, how to restart its app, and which check to
-run. The repo doesn't need to say any of that.
+it goes, to keep `log.md` and `decisions.md` in its notes folder, how to
+restart its app, which check to run, and Cannu's own rules. The repo doesn't
+need to say any of that.
+
+## What agents may do
+
+An agent's own folder and branch are its own: it can change, delete, merge and
+reset there freely, because nothing reaches main until you merge it. What it
+can't touch is what agents share. Cannu's own rules (`RULES` in `lib.js`) say
+what that is:
+
+- no pushing and no `gh`
+- no checkout or switch, and no creating, moving or deleting branches
+- no `git worktree` or `git stash` (the stash is shared by every worktree)
+- git only in its own folder, and no changing git config
+- of Cannu's API, only restarting its own app
+- writing files only in its own folder, its notes folder, the temp folder and
+  its Claude Code memory folder, and never `prompts.md` or its `.claude`
+  settings
+
+When you ask an agent for something, it runs it and lets Cannu decide, rather
+than refusing in words, so a blocked call always reaches you as a button.
+
+Cannu's hook checks every action against them, in background turns and
+terminals alike, and the system prompt lists the same lines, so the agent
+knows them and the two can't drift. They read the command text, so they catch
+mistakes, not a determined agent: code run inside `node` gets past them. A
+real wall needs an OS sandbox.
+
+Anything an agent is refused, by these rules or by Claude Code, is listed on
+its card. **Allow once** lets that exact call through once and asks the agent
+to try again. For what isn't one of Cannu's rules, the ▾ next to it has
+**Always allow**, which also adds a permission rule (like
+`Bash(git restore:*)`) to the agent defaults. `node scripts/rules-check.js`
+(part of the check) tests the rules.
 
 ## Where tasks are recorded
 
@@ -234,7 +267,8 @@ comes from its name.
   as soon as the turn ends. If the session is open and idle in a terminal,
   sending closes that terminal session first, since one session can't run in
   two places. The conversation is kept, so Open session picks it back up.
-  Anything a background turn wasn't allowed to do is listed in red. Paste or
+  Anything the agent wasn't allowed to do is listed, with **Allow once**
+  (see What agents may do). Paste or
   drag images and files into the chat: each is saved under the state folder's
   `attachments/<slug>/` (outside git) and its path goes into the message for
   the agent to read.
@@ -248,8 +282,10 @@ comes from its name.
 - **Check and merge**: commits the hook's `prompts.md` and refuses if the
   task or main has uncommitted changes. Then it starts the branch's own app
   on port + 1000, runs the `check` against it, and runs
-  `git merge --no-ff` into main. On a conflict it aborts and fills in a
-  message asking the agent to merge main in. It never pushes.
+  `git merge --no-ff` into main. It never pushes. When the agent can fix
+  what stopped it (uncommitted changes in the task, a failed check, a
+  conflict), it fills in a message asking the agent to, for you to check and
+  send.
 - **After merging**, the task's agent and folder stay until you remove
   them, so you can keep chatting with it. While it works its card shows
   working, and once it has committed something main doesn't have, it goes back
@@ -276,8 +312,9 @@ comes from its name.
   only when there are any.
 - **Agent defaults** (a popup): everything the dashboard sends an agent. That
   covers the default model, the repo's own system prompt, extra environment variables,
-  the carry on, new session and merge conflict messages, and what background
-  turns may and may never do. Only what differs from the built-in values is
+  the carry on, new session, uncommitted changes, failed check and merge
+  conflict messages, how background turns decide what they may do, and
+  Cannu's own rules. Only what differs from the built-in values is
   saved, under `agent` in `cannu.json`, and committed on main.
 - **Bells**: notifications when an agent needs me, finishes, fails or is
   interrupted, only while the page is open. The options are silent, only

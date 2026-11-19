@@ -9,7 +9,7 @@ import crypto from "node:crypto";
 import os from "node:os";
 import { spawn, execFile, execFileSync } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
-import { CLAUDE_SETTINGS, META, APP, WORKTREES, STATE, FEATURES_DIR, REPO_FILE, MAIN, NOTES, COMMIT_NOTES, notesDir, repo, repoRaw, BUILT_IN, MODELS, defaults, fill, MD_KEYS, config, loadFeatures, saveRuntime, featureMd, readState, writeState, stamp, claudeBaseArgs, liveStatus, killTree, AUTO, resumeText, FEEDBACK, ATTACH, forget, watchUsage, fullLimit, refreshUsage, planUsage } from "./lib.js";
+import { CLAUDE_SETTINGS, META, APP, WORKTREES, STATE, FEATURES_DIR, REPO_FILE, MAIN, NOTES, COMMIT_NOTES, notesDir, repo, repoRaw, BUILT_IN, MODELS, defaults, fill, MD_KEYS, config, loadFeatures, saveRuntime, featureMd, readState, writeState, stamp, claudeBaseArgs, liveStatus, killTree, AUTO, resumeText, FEEDBACK, ATTACH, forget, watchUsage, fullLimit, refreshUsage, planUsage, callKey, ruleFor, RULES } from "./lib.js";
 watchUsage();
 
 const WIN = process.platform === "win32";
@@ -372,7 +372,7 @@ function headless(f, text, label, first = false) {
   const session = first ? ["--session-id", f.sessionId] : ["--resume", st.session_id || f.sessionId];
   const d = defaults();
   const args = ["-p", ...session, "-n", f.slug, ...claudeBaseArgs(f),
-    "--permission-mode", "acceptEdits",
+    "--permission-mode", d.permissionMode || "auto",
     ...(d.allowedTools.length ? ["--allowedTools", ...d.allowedTools] : []),
     ...(d.disallowedTools.length ? ["--disallowedTools", ...d.disallowedTools] : []),
     "--output-format", "json"];
@@ -382,7 +382,10 @@ function headless(f, text, label, first = false) {
   }).then(({ code, out }) => {
     let reply = tail(out), denied = [];
     let failed = code !== 0;
-    try { const j = JSON.parse(out.slice(out.indexOf("{"))); reply = j.result ?? reply; failed ||= !!j.is_error; denied = (j.permission_denials || []).map((d) => `${d.tool_name} ${JSON.stringify(d.tool_input).slice(0, 120)}`); } catch {}
+    try { const j = JSON.parse(out.slice(out.indexOf("{"))); reply = j.result ?? reply; failed ||= !!j.is_error; denied = (j.permission_denials || []).map((d) => ({ tool: d.tool_name, key: callKey(d.tool_name, d.tool_input), rule: ruleFor(d.tool_name, d.tool_input), hard: false })); } catch {}
+    // The hook's refusals (hard rules) are already listed, with their reason; add Claude Code's own.
+    const hooked = readState(f.slug).denied || [];
+    denied = [...hooked, ...denied.filter((d) => !hooked.some((x) => x.tool === d.tool && x.key === d.key))];
     running.delete(f.slug);
     if (failed && LIMIT_HIT.test(String(reply).slice(0, 400))) {
       // If the session never got saved, start it again; otherwise carry it on.
@@ -410,6 +413,32 @@ function feedback(f, raw) {
   writeState(f.slug, { queue: [...(readState(f.slug).queue || []), withMentions(f, raw)] });
   const r = pump(f.slug);
   return { sent: r === "sent", why: r };
+}
+// Allow once (and, for what isn't a hard rule, Always allow) on
+// something the agent was refused, then ask it to try again. The pass lets
+// that exact call through once (hook.js); one left unused ends with the turn
+// after this one.
+function allow(f, i, addRule) {
+  const st = readState(f.slug), d = st.denied?.[i];
+  if (!d) return { ok: false, msg: "That's no longer blocked." };
+  writeState(f.slug, { passes: [...(st.passes || []), { tool: d.tool, key: d.key, at: Date.now() }], denied: st.denied.filter((_, n) => n !== i) });
+  const rule = addRule && !d.hard && d.rule;
+  if (rule && !defaults().allowedTools.includes(rule)) saveDefaults({ ...defaults(), allowedTools: [...defaults().allowedTools, rule] });
+  const what = d.tool === "Bash" ? d.key : `${d.tool} ${d.key}`;
+  feedback(f, `${AUTO} The user ${rule ? `allowed ${rule} from now on` : "allowed this once"}: ${what}\nRun it again exactly as before, then carry on.`);
+  return { ok: true, msg: rule ? `Allowed, and added ${rule} to Agent defaults. Asked the agent to try again.` : "Allowed once. Asked the agent to try again." };
+}
+// Agent defaults are saved in cannu.json on main, keeping only what differs
+// from the built-in value, so improvements to the built-in text reach
+// anything the user hasn't changed.
+function saveDefaults(b) {
+  const keep = {};
+  for (const k of Object.keys(BUILT_IN)) if (k in b && JSON.stringify(b[k]) !== JSON.stringify(BUILT_IN[k])) keep[k] = b[k];
+  const raw = repoRaw();
+  if (Object.keys(keep).length) raw.agent = keep; else delete raw.agent;
+  fs.writeFileSync(REPO_FILE, JSON.stringify(raw, null, 2) + "\n");
+  commitMain("Cannu: update the agent defaults", "cannu.json");
+  for (const f of loadFeatures().filter(hasWorktree)) if (fs.existsSync(f.dir)) writeSettings(f); // new env
 }
 function pump(slug) {
   const st = readState(slug);
@@ -663,13 +692,14 @@ function claudeDefault() {
 // ---------- merge, done, remove ----------
 
 // Commits the hook's prompts.md (it's written after the agent's last
-// commit), then says why the branch can't go anywhere yet, or "".
+// commit), then says why the branch can't go anywhere yet (with a message
+// for the agent when it can fix it), or null.
 function readyToShip(f) {
   const pf = `${NOTES}/${f.slug}/prompts.md`;
   if (tryGit(f.dir, "status", "--porcelain", "--", pf).out) { git(f.dir, "add", pf); git(f.dir, "commit", "-q", "-m", `${f.title}: record prompts`); }
-  if (tryGit(f.dir, "status", "--porcelain").out) return "The task has uncommitted changes. Ask the agent to commit first.";
-  if (git(APP, "rev-list", "--count", `${MAIN}..${f.branch}`) === "0") return `Nothing to ship: the branch has no commits ${MAIN} doesn't have.`;
-  return "";
+  if (tryGit(f.dir, "status", "--porcelain").out) return { msg: "The task has uncommitted changes.", draft: defaults().commitText };
+  if (git(APP, "rev-list", "--count", `${MAIN}..${f.branch}`) === "0") return { msg: `Nothing to ship: the branch has no commits ${MAIN} doesn't have.` };
+  return null;
 }
 
 // cannu.json "check", against a fresh copy of the app started from the
@@ -688,12 +718,12 @@ async function runCheck(f) {
 
 async function merge(f) {
   const why = readyToShip(f);
-  if (why) return { ok: false, step: "feature", msg: why };
+  if (why) return { ok: false, step: "feature", ...why };
   if (tryGit(APP, "status", "--porcelain").out) return { ok: false, step: "main", msg: `${MAIN} has uncommitted changes in the repo folder. Commit or stash them first.` };
   if (git(APP, "branch", "--show-current") !== MAIN) return { ok: false, step: "main", msg: `The repo folder isn't on ${MAIN}.` };
 
   const check = await runCheck(f);
-  if (check.code !== 0) return { ok: false, step: "check", msg: `The check (${repo().check}) failed on the task's branch.`, out: tail(check.out) };
+  if (check.code !== 0) return { ok: false, step: "check", msg: `The check (${repo().check}) failed on the task's branch.`, out: tail(check.out), draft: fill(defaults().checkText, { check: repo().check, out: tail(check.out) }) };
 
   const m = tryGit(APP, "merge", "--no-ff", "-q", f.branch, "-m", `Merge ${f.branch}: ${f.title}`);
   if (!m.ok) {
@@ -1036,18 +1066,9 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "GET" && url.pathname === "/api/repo") return send(res, 200, { name: config.name, repo: APP, main: MAIN, ...repo(), agent: undefined, hasConfig: fs.existsSync(REPO_FILE), platform: process.platform });
     if (url.pathname === "/api/defaults") {
       if (req.method === "POST") {
-        const b = await body(req);
-        // Store only what differs from the built-in value, so improvements to
-        // the built-in text reach anything the user hasn't changed.
-        const keep = {};
-        for (const k of Object.keys(BUILT_IN)) if (k in b && JSON.stringify(b[k]) !== JSON.stringify(BUILT_IN[k])) keep[k] = b[k];
-        const raw = repoRaw();
-        if (Object.keys(keep).length) raw.agent = keep; else delete raw.agent;
-        fs.writeFileSync(REPO_FILE, JSON.stringify(raw, null, 2) + "\n");
-        commitMain("Cannu: update the agent defaults", "cannu.json");
-        for (const f of loadFeatures().filter(hasWorktree)) if (fs.existsSync(f.dir)) writeSettings(f); // new env
+        saveDefaults(await body(req));
       }
-      return send(res, 200, { values: defaults(), builtIn: BUILT_IN, models: MODELS, claudeDefault: claudeDefault(), plugins: userPlugins(), ponytailLevel: ponytailLevel() });
+      return send(res, 200, { values: defaults(), builtIn: BUILT_IN, rules: RULES.map((x) => x.say), models: MODELS, claudeDefault: claudeDefault(), plugins: userPlugins(), ponytailLevel: ponytailLevel() });
     }
     // A file pasted or dropped into New task, held until the task exists.
     if (req.method === "POST" && url.pathname === "/api/attach") {
@@ -1158,6 +1179,7 @@ const server = http.createServer(async (req, res) => {
     // The agent calls this with curl after changing code the server loads at start.
     if (action === "apprestart") { await stopApp(f); await new Promise((r) => setTimeout(r, 300)); return send(res, 200, await startApp(f)); }
     if (action === "feedback") return send(res, 200, feedback(f, String(b.text || "").trim()));
+    if (action === "allow") return send(res, 200, allow(f, Number(b.i), !!b.rule));
     if (action === "resume") return send(res, 200, resume(f, b.where));
     if (action === "continue") return send(res, 200, continueHeld(f));
     if (action === "retry") { startSetup(f); return send(res, 200, { ok: true }); }
